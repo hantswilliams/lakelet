@@ -3,3 +3,7 @@ brand/
 build-sessions/
 deck/
 docs/
+
+## mac 
+.DS_Store
+*.swp
