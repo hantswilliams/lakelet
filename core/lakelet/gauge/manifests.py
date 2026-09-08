@@ -14,7 +14,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pyiceberg.catalog.noop import NoopCatalog
 from pyiceberg.expressions import AlwaysTrue, BooleanExpression
+from pyiceberg.io import FileIO, InputFile, InputStream, OutputFile
 from pyiceberg.manifest import ManifestContent
 from pyiceberg.table import StaticTable
 from pyiceberg.table.metadata import TableMetadata
@@ -43,6 +45,10 @@ class TableStats:
     files: int
     column_bytes: dict[str, int]
     """Compressed bytes per column in one sampled data file, from its Parquet footer."""
+    locality: str = "local"
+    """``local`` or ``remote``, from where the data files live, not the metadata (D26)."""
+    source: str = ""
+    """What the sentence names: the registered prefix, or the data files' common prefix."""
 
     def fraction(self, columns: list[str]) -> float:
         total = sum(self.column_bytes.values())
@@ -62,6 +68,17 @@ class Pruned:
     rows: int
     files: int
     of_files: int
+
+
+def _common_prefix(paths: list[str]) -> str:
+    if not paths:
+        return ""
+    parts = [p.rsplit("/", 1)[0] for p in paths]
+    prefix = parts[0]
+    for p in parts[1:]:
+        while not p.startswith(prefix):
+            prefix = prefix.rsplit("/", 1)[0]
+    return prefix + "/"
 
 
 def file_stats(metadata_io: MetadataIO, table_metadata: TableMetadata) -> list[FileStat]:
@@ -94,10 +111,59 @@ def bytes_per_row(stats: list[FileStat], field_ids: set[int] | None = None) -> f
     return projected / records
 
 
+class _CachedInputFile(InputFile):
+    """An immutable remote object (a manifest, a manifest list, a metadata file) served from
+    a local copy after the first read, so the second estimate needs no network."""
+
+    def __init__(self, inner: InputFile, cache_path: Path) -> None:
+        super().__init__(inner.location)
+        self._inner = inner
+        self._cache_path = cache_path
+
+    def __len__(self) -> int:
+        return self._cache_path.stat().st_size if self._cache_path.exists() else len(self._inner)
+
+    def exists(self) -> bool:
+        return self._cache_path.exists() or self._inner.exists()
+
+    def open(self, seekable: bool = True) -> InputStream:
+        if not self._cache_path.exists():
+            self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._inner.open() as stream:
+                data = stream.read()
+            tmp = self._cache_path.with_suffix(".tmp")
+            tmp.write_bytes(data)
+            tmp.replace(self._cache_path)
+        return self._cache_path.open("rb")
+
+
+class CachingFileIO(FileIO):
+    """Wraps a FileIO; reads of ``.avro`` and ``.metadata.json`` objects that are not local
+    are cached under ``.lakelet/cache/objects/`` (brief §4 step 8)."""
+
+    def __init__(self, inner: FileIO, cache_dir: Path) -> None:
+        super().__init__(inner.properties)
+        self._inner = inner
+        self._dir = cache_dir
+
+    def new_input(self, location: str) -> InputFile:
+        inner = self._inner.new_input(location)
+        if location.startswith("file://") or not location.endswith((".avro", ".metadata.json")):
+            return inner
+        return _CachedInputFile(inner, self._dir / location.replace("://", "/"))
+
+    def new_output(self, location: str) -> OutputFile:
+        return self._inner.new_output(location)
+
+    def delete(self, location: str | InputFile | OutputFile) -> None:
+        self._inner.delete(location)
+
+
 class ManifestCache:
     def __init__(self, project: Project) -> None:
         self.project = project
         self.dir = project.cache_dir / "manifests"
+        self.io = CachingFileIO(project.metadata_io.io, project.cache_dir / "objects")
         self._tables: dict[tuple[str, int | None], tuple[StaticTable, TableStats]] = {}
 
     def get(self, name: str, metadata_location: str) -> tuple[StaticTable, TableStats]:
@@ -106,7 +172,13 @@ class ManifestCache:
         key = (name, snapshot.snapshot_id if snapshot else None)
         if key in self._tables:
             return self._tables[key]
-        table = StaticTable.from_metadata(metadata_location, properties=self.project.io_properties)
+        table = StaticTable(
+            identifier=("static-table", metadata_location),
+            metadata_location=metadata_location,
+            metadata=md,
+            io=self.io,
+            catalog=NoopCatalog("static-table"),
+        )
         stats = self._load(key) or self._compute(name, md, metadata_location)
         self._tables[key] = (table, stats)
         return table, stats
@@ -125,6 +197,11 @@ class ManifestCache:
         files = file_stats(self.project.metadata_io, md)
         snapshot = md.current_snapshot()
         largest = max(files, key=lambda f: f.size, default=None)
+        data_paths = [f.path for f in files]
+        remote = any(not p.startswith("file://") for p in data_paths)
+        source = (
+            md.properties.get("lakelet.source-prefix") or _common_prefix(data_paths) or md.location
+        )
         stats = TableStats(
             name=name,
             snapshot_id=snapshot.snapshot_id if snapshot else None,
@@ -133,6 +210,8 @@ class ManifestCache:
             bytes=sum(f.size for f in files),
             files=len(files),
             column_bytes=self._column_bytes(largest.path) if largest else {},
+            locality="remote" if remote else "local",
+            source=source,
         )
         self.dir.mkdir(parents=True, exist_ok=True)
         tmp = self._cache_path((name, stats.snapshot_id)).with_suffix(".tmp")
@@ -141,11 +220,17 @@ class ManifestCache:
         return stats
 
     def _column_bytes(self, path: str) -> dict[str, int]:
-        local = path.removeprefix("file://")
-        rows = self.project.engine.execute(
-            "select path_in_schema, sum(total_compressed_size) from parquet_metadata(?) group by 1",
-            [local],
-        ).fetchall()
+        """Per-column compressed bytes from one Parquet footer; the engine reads local files
+        directly and remote ones through its S3 secret."""
+        target = path.removeprefix("file://")
+        try:
+            rows = self.project.engine.execute(
+                "select path_in_schema, sum(total_compressed_size) from parquet_metadata(?) "
+                "group by 1",
+                [target],
+            ).fetchall()
+        except Exception:  # noqa: BLE001  a footer the engine cannot reach; whole rows then
+            return {}
         return {name: int(size) for name, size in rows}
 
     def prune(

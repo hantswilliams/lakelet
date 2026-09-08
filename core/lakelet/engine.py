@@ -14,7 +14,7 @@ from pathlib import Path
 
 import duckdb
 
-EXTENSIONS = ("iceberg", "httpfs", "excel")
+EXTENSIONS = ("iceberg", "httpfs", "excel", "aws")
 
 PROFILE_METRICS = (
     "LATENCY",
@@ -84,6 +84,7 @@ class Engine:
         profile_path: Path,
         memory_limit: str = "auto",
         threads: int | str = "auto",
+        s3_secret: str | None = None,
     ) -> None:
         self.con = duckdb.connect()
         self.profile_path = profile_path
@@ -91,9 +92,14 @@ class Engine:
             self.con.execute("; ".join(f"LOAD {name}" for name in EXTENSIONS))
         except duckdb.IOException as e:
             raise ExtensionsMissing(
-                "DuckDB's iceberg, httpfs and excel extensions are not installed on this machine; "
-                "`lakelet init` installs them once"
+                "DuckDB's iceberg, httpfs, excel and aws extensions are not installed on this "
+                "machine; `lakelet init` installs them once"
             ) from e
+        # The user's own credentials (brief D36): explicit keys from the environment, else
+        # the AWS default chain through the aws extension.
+        self.con.execute(
+            s3_secret or "CREATE OR REPLACE SECRET lakelet_s3 (TYPE s3, PROVIDER credential_chain)"
+        )
         if memory_limit != "auto":
             self.con.execute("SET memory_limit = ?", [memory_limit])
         if threads != "auto":

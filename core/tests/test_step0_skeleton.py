@@ -29,12 +29,12 @@ def test_engine_versions_match_the_brief() -> None:
 
 def test_the_three_extensions_load() -> None:
     con = duckdb.connect()
-    con.execute("INSTALL iceberg; INSTALL httpfs; INSTALL excel")
-    con.execute("LOAD iceberg; LOAD httpfs; LOAD excel")
+    con.execute("INSTALL iceberg; INSTALL httpfs; INSTALL excel; INSTALL aws")
+    con.execute("LOAD iceberg; LOAD httpfs; LOAD excel; LOAD aws")
     loaded = {
         name
         for (name,) in con.execute(
             "select extension_name from duckdb_extensions() where loaded"
         ).fetchall()
     }
-    assert {"iceberg", "httpfs", "excel"} <= loaded
+    assert {"iceberg", "httpfs", "excel", "aws"} <= loaded

@@ -253,7 +253,49 @@ class Tables:
 
         return [{col: cut(v) for col, v in zip(names, row, strict=True)} for row in rows]
 
+    # -- remote, read-only (brief D25, D26, D27, M3) ----------------------------------
+
+    def discover(self, prefix: str):
+        from lakelet import register
+
+        return register.discover(self.project, prefix)
+
+    def attach(self, name: str, source: str, metadata_in_bucket: bool = False) -> TableInfo:
+        """A Parquet prefix registered in place, or an existing Iceberg table by its
+        metadata location. Nothing is copied."""
+        from lakelet import register
+
+        if self._exists(name):
+            raise TableExists(name)
+        if source.endswith(".metadata.json"):
+            register.attach_metadata(self.project, name, source)
+        else:
+            register.attach_prefix(
+                self.project, name, source, metadata_in_bucket=metadata_in_bucket
+            )
+        self.refresh_agents_md()
+        return self._info(name)
+
+    def refresh(self, name: str):
+        from lakelet import register
+
+        if not self._exists(name):
+            raise NoSuchTable(name)
+        report = register.refresh(self.project, name)
+        self.refresh_agents_md()
+        return report
+
     # -- AGENTS.md -------------------------------------------------------------------
+
+    def _where(self, name: str) -> str:
+        """``local``, or the remote prefix the data lives under (D25)."""
+        try:
+            _, stats = self.project.manifests.get(
+                name, self.project.store.get_table(NAMESPACE, name)
+            )
+        except Exception:  # noqa: BLE001  stats are a nicety here, never a reason to fail
+            return "local"
+        return "local" if stats.locality == "local" else stats.source
 
     def refresh_agents_md(self) -> None:
         """Regenerate the tables block between the markers (brief D16); leave the file alone
@@ -265,7 +307,8 @@ class Tables:
         if TABLES_START not in text or TABLES_END not in text:
             return
         lines = [
-            f"- `{t.name}` ({_human_bytes(t.bytes)}, {t.rows:,} rows, local)" for t in self.list()
+            f"- `{t.name}` ({_human_bytes(t.bytes)}, {t.rows:,} rows, {self._where(t.name)})"
+            for t in self.list()
         ] or [
             "No tables yet. `lakelet import <file>` adds one; "
             "this block is regenerated on every import."

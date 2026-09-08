@@ -119,7 +119,9 @@ def main() -> int:
         .execute("select extension_name from duckdb_extensions() where installed")
         .fetchall()
     }
-    missing = {"iceberg", "httpfs", "excel"} - installed
+    from lakelet.engine import EXTENSIONS
+
+    missing = set(EXTENSIONS) - installed
     if missing:
         names = ", ".join(sorted(missing))
         print(f"cannot audit: extensions not installed yet ({names}); run `lakelet init` once")

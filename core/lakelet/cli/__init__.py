@@ -278,6 +278,72 @@ def tables_sample(
     )
 
 
+@tables_app.command("attach")
+def tables_attach(
+    name: str,
+    source: Annotated[
+        str, typer.Argument(help="s3://bucket/prefix/ of Parquet, or a …metadata.json")
+    ],
+    metadata_in_bucket: Annotated[
+        bool,
+        typer.Option(
+            "--metadata-in-bucket", help="Keep the Iceberg metadata under s3://bucket/_lakelet/."
+        ),
+    ] = False,
+) -> None:
+    """Register remote data as a read-only Iceberg table without copying it."""
+    from lakelet.register import NotRegistrable
+    from lakelet.tables import TableExists
+
+    with _open() as p:
+        try:
+            info = p.tables.attach(name, source, metadata_in_bucket=metadata_in_bucket)
+        except TableExists:
+            _fail(f"table {name} exists")
+        except NotRegistrable as e:
+            _fail(str(e))
+    placement = "in the bucket" if metadata_in_bucket else "local"
+    out.print(
+        f"{info.name}: {info.rows:,} rows, {_human_bytes(info.bytes)} in place at {source}; "
+        f"metadata {placement}",
+        highlight=False,
+    )
+
+
+@tables_app.command("refresh")
+def tables_refresh(name: str) -> None:
+    """Add the files new under a registered prefix since it was attached."""
+    from lakelet.register import MissingFiles, NotRegistrable
+    from lakelet.tables import NoSuchTable
+
+    with _open() as p:
+        try:
+            report = p.tables.refresh(name)
+        except NoSuchTable:
+            _fail(f"no table named {name}")
+        except (NotRegistrable, MissingFiles) as e:
+            _fail(str(e))
+    out.print(
+        f"{report.name}: {report.added} file(s) added; {report.files} files, {report.rows:,} rows",
+        highlight=False,
+    )
+
+
+@tables_app.command("discover")
+def tables_discover(
+    prefix: Annotated[str, typer.Argument(help="s3://bucket/ or s3://bucket/prefix/")],
+) -> None:
+    """Candidate prefixes under a bucket, with their size and kind."""
+    with _open() as p:
+        found = p.tables.discover(prefix)
+    t = Table()
+    for column in ("prefix", "kind", "files", "size"):
+        t.add_column(column)
+    for d in found:
+        t.add_row(d.prefix, d.kind, str(d.files), _human_bytes(d.bytes))
+    out.print(t)
+
+
 # -- sql and estimate ------------------------------------------------------------
 
 

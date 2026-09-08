@@ -16,6 +16,7 @@ from lakelet.catalog.commit import MetadataIO
 from lakelet.catalog.store import NotFound
 from lakelet.config import Config, render_default
 from lakelet.engine import Engine, install_extensions
+from lakelet.remote import S3Settings
 
 if TYPE_CHECKING:
     from lakelet.gauge.manifests import ManifestCache
@@ -96,7 +97,8 @@ class Project:
         self.catalog_db = self.lakelet_dir / "catalog.db"
         self.history_db = self.lakelet_dir / "history.db"
         self.store: Store = Store(f"sqlite:///{self.catalog_db}")
-        self.io_properties: dict[str, str] = {}
+        self.s3 = S3Settings.from_env()
+        self.io_properties: dict[str, str] = self.s3.io_properties()
         self.metadata_io = MetadataIO(self.io_properties)
         self._manifests: ManifestCache | None = None
         self._catalog: EmbeddedCatalog | None = None
@@ -183,13 +185,16 @@ class Project:
         self.lakelet_dir.mkdir(exist_ok=True)
         self.cache_dir.mkdir(exist_ok=True)
         self._ensure_namespace(self.store)
-        self._catalog = EmbeddedCatalog(create_app(self.store, warehouse=self.warehouse_url))
+        self._catalog = EmbeddedCatalog(
+            create_app(self.store, warehouse=self.warehouse_url, io_properties=self.io_properties)
+        )
         url = self._catalog.start()
         self._engine = Engine(
             url,
             self.lakelet_dir / "last-profile.json",
             memory_limit=self.config.engine.memory_limit,
             threads=self.config.engine.threads,
+            s3_secret=self.s3.duckdb_secret(),
         )
 
     @property

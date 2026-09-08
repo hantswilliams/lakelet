@@ -47,7 +47,8 @@ def reason(numbers: dict[str, Any], remote_source: str | None, bandwidth_mbps: f
         parts.append("fits in memory")
     wall = human_seconds(numbers["wall_local"])
     if remote_source and bandwidth_mbps:
-        wall += f" at your {bandwidth_mbps:.0f} Mbps"
+        shown = f"{bandwidth_mbps:.1f}" if bandwidth_mbps < 10 else f"{bandwidth_mbps:.0f}"
+        wall += f" at your {shown} Mbps"
     parts.append(wall)
     if numbers["verdict"] != "green":
         parts.append(
