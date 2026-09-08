@@ -965,6 +965,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pyiceberg", extra = ["pyarrow"] },
+    { name = "pyyaml" },
     { name = "rich" },
     { name = "sqlalchemy" },
     { name = "typer" },
@@ -980,7 +981,6 @@ dev = [
     { name = "moto", extra = ["server"] },
     { name = "psycopg", extra = ["binary"] },
     { name = "pytest" },
-    { name = "pyyaml" },
     { name = "ruff" },
 ]
 
@@ -992,6 +992,7 @@ requires-dist = [
     { name = "pyarrow" },
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pyiceberg", extras = ["pyarrow"], specifier = ">=0.12,<0.13" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "rich" },
     { name = "sqlalchemy", specifier = ">=2,<3" },
     { name = "typer" },
@@ -1007,7 +1008,6 @@ dev = [
     { name = "moto", extras = ["server"], specifier = ">=5,<6" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.5" },
     { name = "pytest", specifier = ">=8" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff" },
 ]
 

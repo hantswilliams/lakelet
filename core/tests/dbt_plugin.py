@@ -20,3 +20,9 @@ class Plugin(BasePlugin):
             f"ATTACH 'lakelet' AS lakelet (TYPE ICEBERG, ENDPOINT '{self.catalog_url}', "
             "AUTHORIZATION_TYPE 'none', DEFAULT_SCHEMA 'main')"
         )
+        conn.execute("USE lakelet.main")  # bare table names, as in the engine (brief D9)
+
+    def configure_cursor(self, cursor: DuckDBPyConnection) -> None:
+        """dbt-duckdb runs each model on a cursor, a new DuckDB connection that shares the
+        attached databases but not the session's search path; set it again."""
+        cursor.execute("USE lakelet.main")

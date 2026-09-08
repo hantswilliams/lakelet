@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from lakelet.gauge.model import Estimate
     from lakelet.history import History
     from lakelet.query import Result
+    from lakelet.questions import Questions
     from lakelet.tables import Tables
 
 NAMESPACE = "main"
@@ -72,6 +73,8 @@ def dbt_project_yml(name: str) -> str:
 version: "1.0.0"
 profile: "lakelet"
 model-paths: ["models"]
+models:
+  +database: lakelet   # models land in the Lakelet catalog, next to the tables they read
 '''
 
 
@@ -100,6 +103,7 @@ class Project:
         self._engine: Engine | None = None
         self._tables: Tables | None = None
         self._history: History | None = None
+        self._questions: Questions | None = None
 
     # -- on disk --------------------------------------------------------------------
 
@@ -224,6 +228,14 @@ class Project:
 
             self._manifests = ManifestCache(self)
         return self._manifests
+
+    @property
+    def questions(self) -> Questions:
+        if self._questions is None:
+            from lakelet.questions import Questions
+
+            self._questions = Questions(self)
+        return self._questions
 
     @property
     def tables(self) -> Tables:

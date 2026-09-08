@@ -40,6 +40,7 @@ def test_init_lays_out_the_project(root) -> None:
         "version": "1.0.0",
         "profile": "lakelet",
         "model-paths": ["models"],
+        "models": {"+database": "lakelet"},
     }
     agents = (root / "AGENTS.md").read_text()
     assert TABLES_START in agents and TABLES_END in agents

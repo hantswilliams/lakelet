@@ -124,6 +124,7 @@ class Result:
         self.estimate: Estimate | None = None
         self.actual: Actual | None = None
         self.run_id: int | None = None
+        self.question_slug: str | None = None
         self._reader: pa.RecordBatchReader | None = None
         self._rows = 0
         self._started = 0.0
@@ -187,6 +188,8 @@ class Result:
         run.actual_peak_mem = self.actual.peak_mem
         run.actual_spill = self.actual.spill
         self.run_id = self.project.history.record(run)
+        if self.question_slug and error is None and complete:
+            self.project.history.record_question_run(self.question_slug, self.run_id)
 
     def _read_profile(self) -> None:
         profile = self.project.engine.last_profile()
