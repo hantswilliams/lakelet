@@ -1,0 +1,189 @@
+# Copyright 2026 Lakelet contributors
+# SPDX-License-Identifier: Apache-2.0
+"""A Lakelet project on disk (brief §3.2) and the process that has it open (brief D3): one
+``Project`` owns the embedded catalog thread and the DuckDB engine for the life of the
+process."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from lakelet.catalog import EmbeddedCatalog, Store, create_app
+from lakelet.catalog.store import NotFound
+from lakelet.config import Config, render_default
+from lakelet.engine import Engine, install_extensions
+
+NAMESPACE = "main"
+GITIGNORE_LINES = ("warehouse/", ".lakelet/", ".DS_Store")
+TABLES_START = "<!-- lakelet:tables:start -->"
+TABLES_END = "<!-- lakelet:tables:end -->"
+
+
+class ProjectExists(Exception):
+    pass
+
+
+class NotAProject(Exception):
+    pass
+
+
+def identifier(name: str) -> str:
+    """Brief D36: lower-case, runs of non-alphanumerics become one underscore, a leading
+    digit gets a ``t_`` prefix. Used for dbt project names now and table names in step 3."""
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "project"
+    return f"t_{slug}" if slug[0].isdigit() else slug
+
+
+def agents_md(name: str) -> str:
+    return f"""# {name} · Lakelet project
+
+This folder is a Lakelet lakehouse: DuckDB + Apache Iceberg + dbt. Local Iceberg tables live in
+`./warehouse`; the catalog is `./.lakelet/catalog.db`; every operation is a `lakelet` verb.
+
+## Tables
+{TABLES_START}
+No tables yet. `lakelet import <file>` adds one; this block is regenerated on every import.
+{TABLES_END}
+
+## Rules
+- Run `lakelet estimate` before `lakelet sql` on anything large. Red means do not run locally.
+- Save reusable questions with `lakelet question save`; they become dbt models with checks.
+- Do not modify `lakelet.toml`, `AGENTS.md`, or anything under `.lakelet/`.
+
+## Conventions
+dbt project at `./` (dbt-duckdb). Models in `models/`; saved questions in `models/questions/`.
+Tests are "checks".
+"""
+
+
+def dbt_project_yml(name: str) -> str:
+    return f'''name: "{identifier(name)}"
+version: "1.0.0"
+profile: "lakelet"
+model-paths: ["models"]
+'''
+
+
+@dataclass
+class InitReport:
+    root: Path
+    created: list[str] = field(default_factory=list)
+    extensions_installed: list[str] = field(default_factory=list)
+    extension_directory: str = ""
+
+
+class Project:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.config = Config.load(root / "lakelet.toml")
+        self.lakelet_dir = root / ".lakelet"
+        self.cache_dir = self.lakelet_dir / "cache"
+        self.catalog_db = self.lakelet_dir / "catalog.db"
+        self.history_db = self.lakelet_dir / "history.db"
+        self.store: Store | None = None
+        self._catalog: EmbeddedCatalog | None = None
+        self._engine: Engine | None = None
+
+    # -- on disk --------------------------------------------------------------------
+
+    @classmethod
+    def init(cls, path: str | Path = ".", name: str | None = None) -> InitReport:
+        root = Path(path).resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        if (root / "lakelet.toml").exists():
+            raise ProjectExists(str(root))
+        name = name or root.name
+        report = InitReport(root=root)
+
+        def write_if_absent(relative: str, content: str) -> None:
+            target = root / relative
+            if target.exists():
+                return
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            report.created.append(relative)
+
+        write_if_absent("lakelet.toml", render_default(name))
+        write_if_absent("AGENTS.md", agents_md(name))
+        write_if_absent("dbt_project.yml", dbt_project_yml(name))
+        write_if_absent("models/.gitkeep", "")
+        gitignore = root / ".gitignore"
+        text = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+        missing = [line for line in GITIGNORE_LINES if line not in text.splitlines()]
+        if missing:
+            with gitignore.open("a", encoding="utf-8") as f:
+                if text and not text.endswith("\n"):
+                    f.write("\n")
+                f.write("\n".join(missing) + "\n")
+            report.created.append(".gitignore")
+        for directory in ("warehouse", ".lakelet/cache"):
+            (root / directory).mkdir(parents=True, exist_ok=True)
+        cls._ensure_namespace(Store(f"sqlite:///{root / '.lakelet' / 'catalog.db'}"))
+        report.created.append(".lakelet/catalog.db")
+        report.extensions_installed, report.extension_directory = install_extensions()
+        return report
+
+    @classmethod
+    def open(cls, path: str | Path = ".") -> Project:
+        root = Path(path).resolve()
+        if not (root / "lakelet.toml").exists():
+            raise NotAProject(str(root))
+        project = cls(root)
+        project._start()
+        return project
+
+    @staticmethod
+    def _ensure_namespace(store: Store) -> None:
+        try:
+            store.get_namespace(NAMESPACE)
+        except NotFound:
+            store.create_namespace(NAMESPACE, {})
+
+    @property
+    def warehouse_url(self) -> str:
+        warehouse = self.config.project.warehouse
+        if "://" in warehouse:
+            return warehouse
+        return f"file://{(self.root / warehouse).resolve()}"
+
+    # -- in process -----------------------------------------------------------------
+
+    def _start(self) -> None:
+        self.lakelet_dir.mkdir(exist_ok=True)
+        self.cache_dir.mkdir(exist_ok=True)
+        self.store = Store(f"sqlite:///{self.catalog_db}")
+        self._ensure_namespace(self.store)
+        self._catalog = EmbeddedCatalog(create_app(self.store, warehouse=self.warehouse_url))
+        url = self._catalog.start()
+        self._engine = Engine(
+            url,
+            self.lakelet_dir / "last-profile.json",
+            memory_limit=self.config.engine.memory_limit,
+            threads=self.config.engine.threads,
+        )
+
+    @property
+    def catalog_url(self) -> str:
+        assert self._catalog is not None, "the project is not open"
+        return self._catalog.url
+
+    @property
+    def engine(self) -> Engine:
+        assert self._engine is not None, "the project is not open"
+        return self._engine
+
+    def close(self) -> None:
+        if self._engine is not None:
+            self._engine.close()
+            self._engine = None
+        if self._catalog is not None:
+            self._catalog.stop()
+            self._catalog = None
+
+    def __enter__(self) -> Project:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
