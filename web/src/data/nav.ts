@@ -4,7 +4,6 @@ export const nav = [
   { href: '/medallion',   label: 'Medallion' },
   { href: '/agents',      label: 'For agents' },
   { href: '/pricing',     label: 'Pricing' },
-  { href: 'https://github.com', label: 'GitHub', external: true },
 ] as const;
 
 export const site = {

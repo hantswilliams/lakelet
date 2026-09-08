@@ -1,6 +1,8 @@
 # Builds web/ and publishes it to GitHub Pages on every push to main that touches the site.
 #
-# One-time setup in the repo: Settings → Pages → Source: "GitHub Actions".
+# One-time setup in the repo: Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# (Without it the deploy step fails with "Creating Pages deployment failed ... 404".)
+# Private repos need a paid plan for Pages; making the repo public also works.
 # Optional repo variables (Settings → Secrets and variables → Actions → Variables):
 #   SITE_URL             e.g. https://lakelet.dev   — set this when a custom domain is configured
 #                        (also add the domain under Settings → Pages). Unset = https://<owner>.github.io/<repo>
@@ -31,6 +33,7 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5     # fails early with a clear message if Pages isn't enabled
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -31,7 +31,7 @@ import { plans, vendors, soloVendor } from '../data/pricing';
 <section id="workers">
     <div class="eyebrow"># burst worker sizes</div>
     <h2 class="sec">What a burst actually costs.</h2>
-    <p class="sub">Workers are AWS Fargate tasks today. Prices below are AWS list, on-demand, us-east-1, before Lakelet's 15%. Spot brings them down further and is the default.</p>
+    <p class="sub">Workers are AWS Fargate tasks today. Prices below are AWS list, on-demand, us-east-1, before Lakelet's 15%. Spot follows the beta and will bring them down further.</p>
     <div class="grid2">
       <div class="panel card">
         <h3>Size ladder</h3>
@@ -77,8 +77,8 @@ import { plans, vendors, soloVendor } from '../data/pricing';
     <div class="faq" style="margin-top:24px">
       <details><summary>Is there a minimum, a commitment, or a per-seat floor on Burst?</summary><p>No. Burst is billed per second of worker time, per run, with no minimum. You can be on the free Local tier and burst once a year.</p></details>
       <details><summary>Can the bill ever exceed the cap?</summary><p>No. The cap is enforced by the worker itself, not by an alert after the fact. When the budget is reached the run is killed and you get a partial-progress error and a bill at or under the cap. Raise the cap and rerun if you want it to finish.</p></details>
-      <details><summary>What happens if a spot worker is reclaimed?</summary><p>The run is retried once on on-demand capacity within the same cap. If it still cannot finish inside the cap, it fails and you are billed only for time used.</p></details>
-      <details><summary>Can I run workers in my own AWS account?</summary><p>Yes. Bring-your-own-account bursts run in your account and appear on your AWS bill; Lakelet charges the 15% on the compute it orchestrated. This keeps data, compute and billing inside your boundary.</p></details>
+      <details><summary>What happens if a spot worker is reclaimed, once spot ships?</summary><p>The run is retried once on on-demand capacity within the same cap. If it still cannot finish inside the cap, it fails and you are billed only for time used.</p></details>
+      <details><summary>Can I run workers in my own AWS account?</summary><p>Not in the beta: workers run on Lakelet's account, in your bucket's region. Bring-your-own-account bursts, which run in your account and appear on your AWS bill with Lakelet's 15% on the compute it orchestrated, come later. That will keep data, compute and billing inside your boundary.</p></details>
       <details><summary>What does Team store on your side?</summary><p>Catalog metadata (table schemas, snapshot pointers, commit history), job specs and metrics. Never data files. Delete your Team workspace and your bucket still contains a complete, readable Iceberg lakehouse.</p></details>
       <details><summary>What changes when the beta ends?</summary><p>Early Team pricing is locked for anyone who joins during the private beta. Local stays free and open source; that is the point of the product, not a promotion.</p></details>
     </div>

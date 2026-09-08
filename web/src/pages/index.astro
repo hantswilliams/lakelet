@@ -29,7 +29,7 @@ import { site } from '../data/nav';
       <Waitlist stack layout="stacked" note="Private beta on macOS and Linux. Free forever on the laptop. No spam." />
       <div class="cta small">
         <code class="install">$ brew install lakelet</code>
-        <a href={site.github}>Read the source</a>
+        <span>Source opens with the Day 1 launch</span>
         <a href={url("/app")}>See the app</a>
       </div>
     </div>
@@ -37,7 +37,7 @@ import { site } from '../data/nav';
   </div>
 
 <div class="statbar">
-    <span>v0.1.0 · private beta</span><span>Apache 2.0</span><span>macOS 13+ · Ubuntu 22.04+</span><span><b>brew</b> · <b>pipx</b> · signed DMG</span><span>DuckDB 1.5.3 · Iceberg V3 · dbt Core 2</span><span><a href="https://github.com">github.com/lakelet</a></span><span><a href="#engineers">docs</a></span><span><a href={url("/agents")}>for agents</a></span>
+    <span>v0.1.0 · private beta</span><span>Apache 2.0</span><span>macOS 13+ · Ubuntu 22.04+</span><span><b>brew</b> · <b>pipx</b> · signed DMG</span><span>DuckDB 1.5 · Apache Iceberg · dbt Core 2</span><span>source at the Day 1 launch</span><span><a href="#engineers">docs</a></span><span><a href={url("/agents")}>for agents</a></span>
   </div>
 
   <svg class="wave" viewBox="0 0 1080 28" preserveAspectRatio="none" aria-hidden="true"><path d="M0 14 C90 4, 180 24, 270 14 S450 4, 540 14 S720 24, 810 14 S990 4, 1080 14" stroke="#7FB3D5" stroke-width="2" fill="none"/></svg>
@@ -50,7 +50,7 @@ import { site } from '../data/nav';
         <div class="sub">
           <p>A cloud warehouse makes sense at a petabyte. Below a terabyte, a laptop with DuckDB is usually faster, and it doesn't tick.</p>
           <p>Lakelet keeps your tables as Apache Iceberg in your own bucket, runs dbt Core against them on your machine, and checks each run before it starts. If it fits, it runs for free. If it doesn't, one click sends that one run to a worker that lives for a few minutes and shuts itself off.</p>
-          <p>Nothing is locked in. Point Snowflake or Spark at the same bucket tomorrow and everything is still there.</p>
+          <p>Nothing is locked in. Point Spark or Trino at the same bucket tomorrow and everything is still there. Snowflake and Athena read it through the Team catalog.</p>
         </div>
       </div>
       <CompareBars note="Same workload, same bucket. Lakelet's number is five Team seats, nine burst runs and S3 storage; 1,231 runs happen on laptops for $0. <a href='/pricing'>Every assumption, and where Lakelet isn't cheaper →</a>" />
@@ -115,7 +115,7 @@ import { site } from '../data/nav';
         <g>
           <path d="M370 80 v110 a110 14 0 0 0 220 0 v-110z" fill="#EAF2F8" stroke="#2E6E9E" stroke-width="1.5"/>
           <ellipse cx="480" cy="80" rx="110" ry="14" fill="#D6E6F2" stroke="#2E6E9E" stroke-width="1.5"/>
-          <text x="480" y="124" text-anchor="middle" font-size="14" font-weight="800" fill="#172029">Your S3 / GCS / R2 bucket</text>
+          <text x="480" y="124" text-anchor="middle" font-size="14" font-weight="800" fill="#172029">Your S3 bucket</text>
           <text class="mono" x="480" y="145" text-anchor="middle" font-size="11" fill="#2E6E9E">s3://your-bucket/warehouse/</text>
           <text x="480" y="168" text-anchor="middle" font-size="12" fill="#5C6B7A">Apache Iceberg on Parquet</text>
           <text x="480" y="186" text-anchor="middle" font-size="12" fill="#5C6B7A">Lakelet never holds your data</text>
@@ -209,13 +209,13 @@ write  import_file · save_question · publish · burst(cap_usd)   <span class="
     <h2 class="sec">For engineers: what changed in 2026, and what Lakelet does with it.</h2>
     <p class="sub">You bring the laptop and the bucket. Lakelet brings the catalog, the estimate, and the worker. Everything underneath is open and versioned.</p>
     <div class="facts tech">
-      <div><b>DuckDB 1.5.3 writes Iceberg</b><span>MERGE INTO, ALTER TABLE, bucket() and truncate() partition transforms, Iceberg V3 deletion vectors and row lineage, from an embedded engine against any REST catalog. Released May 29, 2026.</span></div>
+      <div><b>DuckDB 1.5 writes Iceberg</b><span>MERGE INTO, ALTER TABLE, bucket() and truncate() partition transforms, Iceberg V3 deletion vectors and row lineage, from an embedded engine against any REST catalog. Released May 29, 2026.</span></div>
       <div><b>No Spark cluster to write a table</b><span>Until May, writing Iceberg meant running Spark. A JVM cluster to append rows to a table on your own laptop is the thing this release removed. Lakelet never starts one.</span></div>
-      <div><b>An open catalog, not a Lakelet one</b><span>Lakelet ships its own Iceberg REST catalog: SQLite in the binary, Postgres when hosted. It is Polaris-compatible and you can attach Polaris, Lakekeeper or S3 Tables instead. Spark, Trino, Snowflake and Athena read what Lakelet writes.</span></div>
+      <div><b>An open catalog, not a Lakelet one</b><span>Lakelet ships its own Iceberg REST catalog: SQLite in the binary, Postgres when hosted. It is Polaris-compatible; attaching your own Polaris, Lakekeeper or S3 Tables catalog comes with the Day 1 launch. Spark and Trino read what Lakelet writes through <code>catalog serve</code>; Snowflake and Athena through the Team catalog.</span></div>
       <div><b>The engine stays MIT</b><span>AWS acquired DuckLabs on Aug 26, 2026. The DuckDB project was explicitly not acquired and remains under the independent DuckDB Foundation. Lakelet owns the catalog, the gauge and the burst path, not the engine.</span></div>
     </div>
     <div class="engines">
-      <span>DuckDB 1.5.3</span><span>Apache Iceberg V3</span><span>Iceberg REST catalog</span><span>dbt Core v2 · Rust runtime</span><span>Apache Polaris compatible</span><span>Parquet on your S3 / GCS / R2</span>
+      <span>DuckDB 1.5</span><span>Apache Iceberg</span><span>Iceberg REST catalog</span><span>dbt Core v2 · Rust runtime</span><span>Apache Polaris compatible</span><span>Parquet on your S3; GCS and R2 later</span>
     </div>
     <div class="techgrid">
       <div class="panel ladder">

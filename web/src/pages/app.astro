@@ -29,7 +29,7 @@ import { url } from '../lib/url';
       </div>
     </div>
   </div>
-  <div class="status"><span>Core <b>ready</b></span><span>DuckDB 1.5.3</span><span>Catalog <b>local</b> · SQLite</span><span class="right">16 GB · 10 cores · 190 Mbps ↓</span></div>
+  <div class="status"><span>Core <b>ready</b></span><span>DuckDB 1.5</span><span>Catalog <b>local</b> · SQLite</span><span class="right">16 GB · 10 cores · 190 Mbps ↓</span></div>
 </div>
 </div></div>
   </section>
@@ -462,7 +462,7 @@ agent:claude  10:44  query     top_customers_2026 ● Green · 1.8 s · $0.00
 agent:claude  10:45  save      monthly_revenue    ● a41f2c9 · 2 checks added
 cursor        Tue    query     churn_by_cohort    ● Green · 3.2 s · $0.00
 gh-actions    Mon    query     stg_orders (test)  ● Green · 0.4 s · $0.00</div>
-          <div class="note">Never stored: the SQL an agent ran, unless history sync is on. Always stored: agent, tool, verdict, cost, outcome.</div>
+          <div class="note">Kept on this machine and never shared: the SQL an agent ran, with agent, tool, verdict, cost and outcome. Nothing leaves the laptop unless you turn on history sync.</div>
           <h3 style="margin-top:12px">lakelet.toml</h3>
 <div class="code">[agents]
 allow         = ["save_question", "burst"]

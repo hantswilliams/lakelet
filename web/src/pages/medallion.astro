@@ -95,7 +95,7 @@ import Terminal from '../components/Terminal.astro';
         <!-- storage band -->
         <path d="M200 300 v72 a280 12 0 0 0 560 0 v-72z" fill="#DCE8DF" stroke="#1F8A5B" stroke-width="1.5"/>
         <ellipse cx="480" cy="300" rx="280" ry="12" fill="#CFE0D3" stroke="#1F8A5B" stroke-width="1.5"/>
-        <text x="480" y="332" text-anchor="middle" font-size="13" font-weight="800">Your S3 / GCS / R2 bucket · one Iceberg REST catalog</text>
+        <text x="480" y="332" text-anchor="middle" font-size="13" font-weight="800">Your S3 bucket · one Iceberg REST catalog</text>
         <text class="mono" x="290" y="356" text-anchor="middle" font-size="10.5" fill="#1F5A3C">s3://acme-lake/bronze/</text>
         <text class="mono" x="485" y="356" text-anchor="middle" font-size="10.5" fill="#1F5A3C">s3://acme-lake/silver/</text>
         <text class="mono" x="675" y="356" text-anchor="middle" font-size="10.5" fill="#1F5A3C">s3://acme-lake/gold/</text>
@@ -135,7 +135,7 @@ import Terminal from '../components/Terminal.astro';
         <table>
           <tr><th>Question</th><th>Answer</th></tr>
           <tr><td>How does data get in?</td><td>DuckDB reads Postgres, files and HTTP APIs directly, so a bronze model can be <code>select * from postgres_scan(...)</code>. Loader tools (dlt, Airbyte, Fivetran) that write Parquet or Iceberg to the same bucket work too; Lakelet registers what they write.</td></tr>
-          <tr><td>Materialisation</td><td><b class="d">incremental</b>, <code>MERGE INTO</code> on the source key (DuckDB 1.5.3 Iceberg writes). Append-only tables use plain inserts.</td></tr>
+          <tr><td>Materialisation</td><td><b class="d">incremental</b>, <code>MERGE INTO</code> on the source key (DuckDB 1.5 Iceberg writes). Append-only tables use plain inserts.</td></tr>
           <tr><td>Typical verdict</td><td><b class="n">Red</b> for anything over a few GB or anything remote; <b class="d">green</b> for small reference tables.</td></tr>
           <tr><td>Where it runs</td><td><b class="c">Ephemeral worker</b> on a schedule (Team), or a laptop that happens to be open (Local).</td></tr>
           <tr><td>Partitioning</td><td><code>day(loaded_at)</code> so silver only scans what's new. The gauge reads those partitions to price the next layer.</td></tr>
@@ -176,7 +176,7 @@ import Terminal from '../components/Terminal.astro';
           <tr><td>Materialisation</td><td><b class="d">incremental</b> over bronze's <code>day(loaded_at)</code> partitions; <code>unique_key</code> dedup via <code>MERGE INTO</code>.</td></tr>
           <tr><td>Typical verdict</td><td><b class="d">Green</b> for daily increments and dev iteration; <b class="y">yellow</b> for wide joins that spill; <b class="n">red</b> for full refreshes.</td></tr>
           <tr><td>Where it runs</td><td><b class="d">Laptop</b> for development and small increments; the nightly run rides the same schedule as bronze.</td></tr>
-          <tr><td>Tests</td><td>dbt tests run after every model, locally, for free. A failed test blocks the commit to the catalog, so a bad silver never reaches gold.</td></tr>
+          <tr><td>Tests</td><td>dbt tests run after every model, locally, for free. A failed test stops the run before downstream models, so a bad silver never reaches gold.</td></tr>
           <tr><td>Dev vs prod</td><td>Same files, same format. A dev target writes to <code>silver_ana.*</code> in the same bucket; promoting is a dbt target switch, not a migration.</td></tr>
           <tr><td>Concurrency</td><td>Two laptops writing the same table commit through the catalog optimistically; the second retries on top of the first.</td></tr>
         </table>
@@ -209,10 +209,10 @@ import Terminal from '../components/Terminal.astro';
   starter   $184,220    $201,960    +9.6%
   team      $612,400    $688,310    +12.4%
   company   $890,000    $1,020,500  +14.7%
-  <span class="d">[Save as question]  [Chart]  [Schedule]</span>
+  <span class="d">[Save as question]  [Chart]</span>
 
 <span class="p">$</span> lakelet catalog serve --port 8181
-  <span class="d"># Metabase, Tableau, Spark read gold from here</span></pre>
+  <span class="d"># Spark, Trino, and any tool with a DuckDB or Trino connector read gold from here</span></pre>
       </Terminal>
       <div class="panel where">
         <h3>Gold in practice</h3>
@@ -332,7 +332,7 @@ cap_usd_per_day = 2.00</pre>
     <p class="sub">Five-person team, 38 GB across the three layers, one scheduled run and a working day of humans and one agent. Every line is a real gauge decision; the day's cloud bill is at the bottom.</p>
     <div class="timeline">
       <div class="panel tl"><time>06:00</time><i class="r"></i><div><span class="cost">$0.06</span><h3>Nightly schedule, bronze → silver → gold</h3><p>An M worker in us-east-1 merges the day's Stripe and event data into bronze, then silver and gold run on the same worker while it's up. 9 models, 31 tests, 6 minutes, then it exits. Cap was $2.00.</p></div></div>
-      <div class="panel tl"><time>09:10</time><i class="g"></i><div><span class="cost">$0.00</span><h3>Ana opens her laptop and pulls the catalog</h3><p>Her local cache refreshes the gold tables (1.1 GB). Ten <code>lakelet sql</code> queries while she checks yesterday's numbers, all green, all local.</p></div></div>
+      <div class="panel tl"><time>09:10</time><i class="g"></i><div><span class="cost">$0.00</span><h3>Ana opens her laptop and pulls the catalog</h3><p>Ten <code>lakelet sql</code> queries against gold (1.1 GB in the bucket) while she checks yesterday's numbers, all green, all run on her laptop.</p></div></div>
       <div class="panel tl"><time>10:30</time><i class="g"></i><div><span class="cost">$0.00</span><h3>Ben iterates on <code>silver.charges</code></h3><p>Forty-two runs of one model against one day of bronze over two hours. Each one green, two seconds, tests included. On the old warehouse this was forty-two resumes of a Small warehouse.</p></div></div>
       <div class="panel tl"><time>11:45</time><i class="g"></i><div><span class="cost">$0.00</span><h3>Priya in finance asks a question</h3><p>"Refunds as a share of revenue by month this year." Lakelet writes the SQL against <code>gold.daily_revenue</code>, shows it, runs it locally in 0.3 s, charts it. She saves it; it becomes a gold model in a PR.</p></div></div>
       <div class="panel tl"><time>14:20</time><i class="r"></i><div><span class="cost">$0.19</span><h3>Ben's sessionisation change needs a year of events</h3><p><code>--full-refresh</code> on <code>silver.events</code>: 31 GB across 365 partitions, 22 minutes of download on his laptop or 90 seconds on an L worker. He sees the $0.30 cap, types <code>y</code>, and keeps working.</p></div></div>
@@ -355,7 +355,7 @@ cap_usd_per_day = 2.00</pre>
         <tr><td>Where silver is developed</td><td>The cluster, one resume per iteration</td><td>The engineer's laptop, free, same files as production</td></tr>
         <tr><td>Where gold is read</td><td>The warehouse, through its own connectors</td><td>Anything that speaks Iceberg REST: the app, BI, Spark, notebooks, agents</td></tr>
         <tr><td>Storage</td><td>Vendor-managed, often vendor-format<small>Delta on Databricks, FDN on Snowflake, MotherDuck's own storage</small></td><td>Apache Iceberg on Parquet in your bucket<small>readable by every engine, including theirs</small></td></tr>
-        <tr><td>Catalog</td><td>Unity Catalog / Snowflake's, per vendor</td><td>Iceberg REST: Lakelet's, or your Polaris, Lakekeeper, S3 Tables</td></tr>
+        <tr><td>Catalog</td><td>Unity Catalog / Snowflake's, per vendor</td><td>Iceberg REST: Lakelet's; your own Polaris, Lakekeeper or S3 Tables from Day 1</td></tr>
         <tr><td>Dev / prod</td><td>Separate schemas on the same cluster; dev still bills</td><td>Dev target writes to <code>silver_ana.*</code> in the same bucket; costs nothing</td></tr>
         <tr><td>Backfills</td><td>Size up the cluster, hope, size down later</td><td>Red verdict with a price; a worker sized to that one run</td></tr>
         <tr><td>Cost visibility</td><td>Monthly invoice, per-query attribution is extra work</td><td>Every run prints estimate, actual and cap; agents and schedules carry their own caps</td></tr>

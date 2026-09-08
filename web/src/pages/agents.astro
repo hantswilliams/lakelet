@@ -79,7 +79,7 @@ https://mcp.lakelet.dev/teams/acme      <span class="d">Authorization: Bearer &l
       <Terminal title="lakelet.toml"><pre><span class="b">[agents]</span>
 allow         = [<span class="o">"save_question"</span>, <span class="o">"burst"</span>]   <span class="d"># write tools this project permits</span>
 daily_cap_usd = 2.00                            <span class="d"># per agent, per day; env var overrides down, never up</span>
-history       = false                           <span class="d"># keep SQL text an agent ran? default no</span>
+share_history = false                           <span class="d"># sync agent-run SQL to Lakelet? default no; it is always kept locally</span>
 
 <span class="d"># read tools are always on</span>
 <span class="d"># no tool can edit this file or AGENTS.md</span></pre></Terminal>
@@ -181,7 +181,7 @@ dbt project at ./ (dbt-duckdb). Models in models/. Run with <span class="b">lake
     <div class="eyebrow"># security posture</div>
     <h2 class="sec">Stated once.</h2>
     <div class="grid2">
-      <div class="panel who"><h3>Defaults</h3><p>Read-only by default. Writes and bursts opt-in per project and always capped. SQL text an agent ran is not kept unless history is on. Sample rows are truncated and never executed. No tool can edit <code>lakelet.toml</code>, <code>AGENTS.md</code>, or anything under <code>.lakelet/</code>.</p></div>
+      <div class="panel who"><h3>Defaults</h3><p>Read-only by default. Writes and bursts opt-in per project and always capped. SQL text an agent ran is kept on this machine in <code>.lakelet/history.db</code> and never leaves it unless you turn on history sync. Sample rows are truncated and never executed. No tool can edit <code>lakelet.toml</code>, <code>AGENTS.md</code>, or anything under <code>.lakelet/</code>.</p></div>
       <div class="panel who"><h3>Credentials</h3><p>Agents get the same short-lived, prefix-scoped storage credentials people get, vended per call by the catalog. Workers have no inbound network. Prompt injection through table contents is treated as a first-class threat: model context is data, never instructions.</p></div>
     </div>
   </section>

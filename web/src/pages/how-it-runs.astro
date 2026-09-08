@@ -28,7 +28,7 @@ import { url } from '../lib/url';
           <!-- optional bucket -->
           <g>
             <rect x="350" y="30" width="270" height="110" rx="14" fill="#DCE8DF" stroke="#1F8A5B" stroke-width="1.5"/>
-            <text x="366" y="58" font-size="14" font-weight="800">Your S3 / GCS / R2 bucket</text>
+            <text x="366" y="58" font-size="14" font-weight="800">Your S3 bucket</text>
             <text x="366" y="80" font-size="12" fill="#5C6B7A">optional · Iceberg tables you publish</text>
             <text x="366" y="100" font-size="12" fill="#5C6B7A">readable by Spark, Trino, Snowflake</text>
             <text x="366" y="122" font-size="12" fill="#5C6B7A">results of bursts land here too</text>
@@ -66,7 +66,7 @@ import { url } from '../lib/url';
           <tr><td>Burst job spec + cost</td><td><b class="c">Lakelet control plane</b>, during the job</td></tr>
           <tr><td>Calibration pairs</td><td><b class="d">Laptop</b>; anonymised copy to Lakelet if the toggle is on</td></tr>
         </table>
-        <small>With no bucket and no key configured, Lakelet makes zero network requests. That is checkable, and the beta ships a `lakelet audit network` command that proves it.</small>
+        <small>After install, with no bucket and no key configured, Lakelet makes zero network requests: `lakelet init` downloads the DuckDB extensions once and says so, and the installers bundle them. That is checkable, and the beta ships a `lakelet audit network` command that proves it.</small>
       </div>
     </div>
   </section>
@@ -126,7 +126,7 @@ import { url } from '../lib/url';
         <h3>What changes from solo</h3>
         <table>
           <tr><th>Thing</th><th>Where</th></tr>
-          <tr><td>Data files</td><td><b class="d">Your bucket</b>; laptops keep a local cache</td></tr>
+          <tr><td>Data files</td><td><b class="d">Your bucket</b></td></tr>
           <tr><td>Catalog metadata</td><td><b class="c">Lakelet team catalog</b> (Postgres), or your own Polaris</td></tr>
           <tr><td>Who can read which table</td><td><b class="c">Team catalog</b> roles; credentials vended per request</td></tr>
           <tr><td>SQL, dbt models, questions</td><td><b class="d">Your git repo</b>; Lakelet never stores them</td></tr>

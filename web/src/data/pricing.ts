@@ -3,13 +3,13 @@
 
 export const plans = [
   { id: 'local', name: 'Local', price: '$0', unit: '', tag: 'forever · open source · Apache 2.0',
-    blurb: 'Desktop app and CLI, the gauge, dbt runner, lineage. Your bucket. Forever.',
+    blurb: 'Desktop app and CLI, the gauge, dbt runner, table-level lineage. Your bucket. Forever.',
     features: [
       ['Desktop app and CLI', 'for macOS and Linux'],
-      ['', 'SQL editor, ask-in-English, dbt Core runner, lineage'],
+      ['', 'SQL editor, ask-in-English, dbt Core runner, table-level lineage'],
       ['The gauge', 'on every query and every dbt run'],
       ['', 'Local Iceberg REST catalog (SQLite) and Parquet on disk'],
-      ['', 'Publish to your own S3, GCS or R2 bucket'],
+      ['', 'Publish to your own S3 bucket; GCS and R2 later'],
       ['', 'MCP server for agents, with a per-agent daily cap'],
       ['', 'Unlimited data, unlimited queries, on your machine'],
     ],
@@ -26,13 +26,13 @@ export const plans = [
     ],
     foot: 'Metadata only. Your data files never leave your bucket.' },
   { id: 'burst', name: 'Burst', price: 'cost + 15%', unit: '', tag: 'per run · no minimum · no idle',
-    blurb: 'Spot workers on your cloud account, sized to the run, capped before it starts.',
+    blurb: "Workers in your bucket's region, sized to the run, capped before it starts.",
     features: [
       ['', "Worker sized from the gauge's memory estimate, launched in your bucket's region"],
       ['Hard cap', 'shown before you click; the worker is killed at the cap'],
       ['', 'Billed per second of actual run time; nothing between runs'],
-      ['', 'Spot capacity by default; on-demand if you ask'],
-      ['', 'Runs on your AWS account (bring your own) or ours'],
+      ['', 'On-demand in the beta; spot follows'],
+      ['', "Runs on Lakelet's account in the beta; bring your own account later"],
       ['', 'Every run reports estimate vs. actual, which makes the next estimate better'],
     ],
     foot: 'Typical run: minutes on a worker, cents to a few dollars.' },
@@ -72,13 +72,13 @@ export const vendors: Vendor[] = [
     why: 'On-demand, $6.25 per TiB scanned, first TiB free. There is no warehouse to leave on, which is why BigQuery is the closest competitor at this size. The bill scales with bytes scanned, so it climbs with every dashboard refresh and every un-partitioned model.',
     lines: [['1,240 runs scanning ~38 GB each ≈ 47 TB, minus 1 TiB free', '$288'], ['Storage, 38 GB at $0.02/GB', '$1'], ['Month', '$289']] },
   { id: 'lakelet', name: 'Lakelet', total: 124, us: true,
-    why: '1,231 of the 1,240 runs get a green verdict and run on laptops. Nine get a red one and burst to a 64 GB spot worker for about twenty minutes each. Five Team seats for the shared catalog. Storage is your own S3 bill.',
-    lines: [['1,231 runs on laptops', '$0.00'], ['9 burst runs, L worker (16 vCPU / 64 GB), spot, ~20 min each', '$3.40'], ['Team catalog, 5 × $24', '$120.00'], ['Your S3 bucket, 38 GB × $0.023', '$0.87'], ['Month', '$124.27']] },
+    why: '1,231 of the 1,240 runs get a green verdict and run on laptops. Nine get a red one and burst to a 64 GB worker for about twenty minutes each. Five Team seats for the shared catalog. Storage is your own S3 bill.',
+    lines: [['1,231 runs on laptops', '$0.00'], ['9 burst runs, L worker (16 vCPU / 64 GB), on-demand, ~20 min each', '$3.17'], ['Team catalog, 5 × $24', '$120.00'], ['Your S3 bucket, 38 GB × $0.023', '$0.87'], ['Month', '$124.04']] },
 ];
 
 export const soloVendor: Vendor = { id: 'solo', name: 'Solo, on Lakelet', total: 4,
   why: "One person doesn't need a shared catalog. The same workload on the Local tier is the S3 bill plus whatever you burst.",
-  lines: [['All local runs', '$0.00'], ['9 burst runs', '$3.40'], ['Your S3 bucket', '$0.87'], ['Month', '$4.27']] };
+  lines: [['All local runs', '$0.00'], ['9 burst runs', '$3.17'], ['Your S3 bucket', '$0.87'], ['Month', '$4.04']] };
 
 export const fmt = (n: number) => '$' + n.toLocaleString('en-US');
 export const maxTotal = Math.max(...vendors.map(v => v.total));
