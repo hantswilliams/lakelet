@@ -103,6 +103,10 @@ class Engine:
             "AUTHORIZATION_TYPE 'none', DEFAULT_SCHEMA 'main')"
         )
         self.con.execute("USE lakelet.main")
+        if proxy := os.environ.get("LAKELET_HTTP_PROXY"):
+            # `lakelet audit network`: DuckDB's HTTP client is not a Python socket, so the
+            # audit watches it through a loopback proxy that forwards loopback targets only.
+            self.con.execute("SET http_proxy = ?", [proxy])
         settings = json.dumps({metric: "true" for metric in PROFILE_METRICS})
         self.con.execute("SET custom_profiling_settings = ?", [settings])
         self.con.execute("SET enable_profiling = 'json'")

@@ -1,0 +1,220 @@
+# Copyright 2026 Lakelet contributors
+# SPDX-License-Identifier: Apache-2.0
+"""Step 7 gate (brief §4): the CLI over every core operation (D17), the quickstart end to
+end, the gauge line on stderr and rows on stdout so it pipes (PRD F0.6.2), exit codes 2 and
+4 (D23), `catalog serve` read from another process, `audit network` reporting zero attempts
+(D33), and the startup budget: the gauge line within 1 s of process start."""
+
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import duckdb
+import pyarrow.parquet as pq
+import pytest
+from pyiceberg.catalog.rest import RestCatalog
+from typer.testing import CliRunner
+
+from lakelet.cli import app
+
+runner = CliRunner()
+
+
+def invoke(root: Path, *args: str):
+    return runner.invoke(app, ["-C", str(root), *args])
+
+
+@pytest.fixture
+def project_dir(tmp_path):
+    root = tmp_path / "acme"
+    result = runner.invoke(app, ["init", str(root), "--probe-mb", "8"])
+    assert result.exit_code == 0, result.output
+    con = duckdb.connect()
+    con.execute(
+        f"COPY (SELECT range AS id, 'c' || (range % 10) AS customer, range * 1.5 AS amt "
+        f"FROM range(1000)) TO '{tmp_path}/orders.csv' (HEADER)"
+    )
+    return root
+
+
+def test_init_prints_the_layout_and_the_extension_line(tmp_path) -> None:
+    result = runner.invoke(app, ["init", str(tmp_path / "p"), "--probe-mb", "8"])
+    assert result.exit_code == 0, result.output
+    assert "lakelet.toml" in result.output and "AGENTS.md" in result.output
+    assert "DuckDB extensions" in result.output and "lakehouse ready" in result.output
+    assert "MB/s" in result.output
+    again = runner.invoke(app, ["init", str(tmp_path / "p")])
+    assert again.exit_code == 1 and "already" in again.output
+
+
+def test_import_preview_import_and_tables(project_dir, tmp_path) -> None:
+    csv = str(tmp_path / "orders.csv")
+    preview = invoke(project_dir, "import", csv, "--preview")
+    assert preview.exit_code == 0, preview.output
+    assert "iceberg type" in preview.output and "orders" in preview.output
+    imported = invoke(project_dir, "import", csv)
+    assert imported.exit_code == 0 and "orders: 1,000 rows" in imported.output
+    again = invoke(project_dir, "import", csv)
+    assert again.exit_code == 1 and "--replace" in again.output
+    assert invoke(project_dir, "import", csv, "--append").exit_code == 0
+    listed = invoke(project_dir, "tables", "list")
+    assert listed.exit_code == 0 and "orders" in listed.output and "2,000" in listed.output
+    described = invoke(project_dir, "tables", "describe", "orders")
+    assert described.exit_code == 0, described.output
+    assert "unpartitioned" in described.output and "customer" in described.output
+    sampled = invoke(project_dir, "tables", "sample", "orders", "-n", "2")
+    assert sampled.exit_code == 0 and "customer" in sampled.output
+    assert invoke(project_dir, "tables", "describe", "nope").exit_code == 1
+
+
+def test_sql_pipes_csv_with_the_gauge_line_on_stderr(project_dir, tmp_path) -> None:
+    assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
+    sql = "select customer, count(*) as n from orders group by 1 order by 1"
+    result = invoke(project_dir, "sql", sql)
+    assert result.exit_code == 0, result.output
+    lines = result.stdout.strip().splitlines()
+    assert lines[0] == "customer,n" and lines[1] == "c0,100" and len(lines) == 11
+    assert "● Runs here · scans" in result.stderr and "✓ 10 rows" in result.stderr
+
+    as_json = invoke(project_dir, "sql", sql, "--format", "json")
+    rows = [json.loads(line) for line in as_json.stdout.strip().splitlines()]
+    assert rows[0] == {"customer": "c0", "n": 100} and len(rows) == 10
+
+    parquet = tmp_path / "out.parquet"
+    assert invoke(project_dir, "sql", sql, "--format", "parquet", "-o", str(parquet)).exit_code == 0
+    assert pq.read_table(parquet).num_rows == 10
+    assert invoke(project_dir, "sql", sql, "--format", "parquet").exit_code == 1
+
+    as_table = invoke(project_dir, "sql", sql, "--format", "table")
+    assert as_table.exit_code == 0 and "customer" in as_table.stdout and "c9" in as_table.stdout
+
+    from_file = tmp_path / "q.sql"
+    from_file.write_text(sql)
+    assert invoke(project_dir, "sql", "-f", str(from_file)).stdout.startswith("customer,n")
+    assert invoke(project_dir, "sql", sql, "--format", "yaml").exit_code == 1
+    bad = invoke(project_dir, "sql", "select * from nope")
+    assert bad.exit_code == 1
+
+
+def test_estimate_prints_the_line_or_json(project_dir, tmp_path) -> None:
+    assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
+    line = invoke(project_dir, "estimate", "select sum(amt) from orders")
+    assert line.exit_code == 0, line.output
+    assert line.stdout.startswith("● Runs here · scans ")
+    as_json = invoke(project_dir, "estimate", "select sum(amt) from orders", "--json")
+    data = json.loads(as_json.stdout)
+    assert (
+        data["verdict"] == "green" and data["worker"] in ("S", "M", "L", "XL") and data["cap"] > 0
+    )
+
+
+def test_red_exits_2_and_run_anyway_runs(project_dir, tmp_path) -> None:
+    assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
+    toml = project_dir / "lakelet.toml"
+    toml.write_text(
+        toml.read_text()
+        .replace("green_max_seconds = 60", "green_max_seconds = 0.0000001")
+        .replace("yellow_max_seconds = 600", "yellow_max_seconds = 0.0000002")
+    )
+    refused = invoke(project_dir, "sql", "select count(*) from orders")
+    assert refused.exit_code == 2
+    assert "Needs more machine" in refused.stderr and "cap $" in refused.stderr
+    assert refused.stdout == ""
+    ran = invoke(project_dir, "sql", "select count(*) from orders", "--run-anyway")
+    assert ran.exit_code == 0 and ran.stdout.strip().splitlines()[1] == "1000"
+
+
+def test_question_save_list_run(project_dir, tmp_path) -> None:
+    assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
+    saved = invoke(
+        project_dir,
+        "question",
+        "save",
+        "Revenue by customer",
+        "--sql",
+        "select customer, sum(amt) as revenue from orders group by 1 order by 1",
+    )
+    assert saved.exit_code == 0 and "saved revenue_by_customer" in saved.output
+    listed = invoke(project_dir, "question", "list")
+    assert "revenue_by_customer" in listed.output and "never" in listed.output
+    ran = invoke(project_dir, "question", "run", "revenue_by_customer")
+    assert ran.exit_code == 0, ran.output
+    assert ran.stdout.startswith("customer,revenue") and "● Runs here" in ran.stderr
+    assert "never" not in invoke(project_dir, "question", "list").output
+    assert invoke(project_dir, "question", "run", "nope").exit_code == 1
+
+
+def test_gauge_history_lists_runs(project_dir, tmp_path) -> None:
+    assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
+    invoke(project_dir, "sql", "select count(*) from orders")
+    history = invoke(project_dir, "gauge", "history", "--last", "5")
+    assert history.exit_code == 0, history.output
+    assert "green" in history.output and "select count(*)" in history.output
+
+
+def test_not_a_project_is_a_clear_exit_1(tmp_path) -> None:
+    result = invoke(tmp_path, "tables", "list")
+    assert result.exit_code == 1 and "not a Lakelet project" in result.output
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def test_catalog_serve_is_readable_from_another_process(project_dir, tmp_path) -> None:
+    assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
+    port = _free_port()
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "lakelet.cli", "-C", str(project_dir)]
+        + ["catalog", "serve", "--port", str(port)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        line = proc.stdout.readline()
+        assert f"catalog at http://127.0.0.1:{port}" in line, line
+        table = RestCatalog("lakelet", uri=f"http://127.0.0.1:{port}").load_table("main.orders")
+        assert table.scan().to_arrow().num_rows == 1000
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+    refused = invoke(project_dir, "catalog", "serve", "--host", "0.0.0.0")
+    assert refused.exit_code == 1 and "loopback" in refused.output
+
+
+def test_audit_network_reports_nothing_left_the_machine(project_dir) -> None:
+    result = invoke(project_dir, "audit", "network")
+    assert result.exit_code == 0, result.output
+    assert "self-check, python socket guard: ok" in result.output
+    assert "self-check, duckdb http proxy: ok" in result.output
+    assert "python outbound connection attempts: 0" in result.output
+    assert "duckdb http requests beyond loopback: 0" in result.output
+    assert "nothing left the machine" in result.output
+
+
+def test_startup_budget_gauge_line_within_a_second(project_dir, tmp_path) -> None:
+    assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
+    env = dict(os.environ, PYTHONWARNINGS="ignore")
+    timings = []
+    for _ in range(3):
+        started = time.perf_counter()
+        completed = subprocess.run(
+            [sys.executable, "-m", "lakelet.cli", "-C", str(project_dir)]
+            + ["sql", "select count(*) from orders"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        timings.append(time.perf_counter() - started)
+        assert completed.returncode == 0, completed.stderr
+        assert "● Runs here" in completed.stderr
+    best = min(timings)
+    print(f"\nlakelet sql, process start to exit: best {best:.2f}s of {len(timings)} runs")
+    assert best < 1.0, f"startup budget missed: {best:.2f}s"
