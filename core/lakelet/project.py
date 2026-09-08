@@ -9,11 +9,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from lakelet.catalog import EmbeddedCatalog, Store, create_app
+from lakelet.catalog.commit import MetadataIO
 from lakelet.catalog.store import NotFound
 from lakelet.config import Config, render_default
 from lakelet.engine import Engine, install_extensions
+
+if TYPE_CHECKING:
+    from lakelet.tables import Tables
 
 NAMESPACE = "main"
 GITIGNORE_LINES = ("warehouse/", ".lakelet/", ".DS_Store")
@@ -82,9 +87,11 @@ class Project:
         self.cache_dir = self.lakelet_dir / "cache"
         self.catalog_db = self.lakelet_dir / "catalog.db"
         self.history_db = self.lakelet_dir / "history.db"
-        self.store: Store | None = None
+        self.store: Store = Store(f"sqlite:///{self.catalog_db}")
+        self.metadata_io = MetadataIO({})
         self._catalog: EmbeddedCatalog | None = None
         self._engine: Engine | None = None
+        self._tables: Tables | None = None
 
     # -- on disk --------------------------------------------------------------------
 
@@ -153,7 +160,6 @@ class Project:
     def _start(self) -> None:
         self.lakelet_dir.mkdir(exist_ok=True)
         self.cache_dir.mkdir(exist_ok=True)
-        self.store = Store(f"sqlite:///{self.catalog_db}")
         self._ensure_namespace(self.store)
         self._catalog = EmbeddedCatalog(create_app(self.store, warehouse=self.warehouse_url))
         url = self._catalog.start()
@@ -173,6 +179,14 @@ class Project:
     def engine(self) -> Engine:
         assert self._engine is not None, "the project is not open"
         return self._engine
+
+    @property
+    def tables(self) -> Tables:
+        if self._tables is None:
+            from lakelet.tables import Tables
+
+            self._tables = Tables(self)
+        return self._tables
 
     def close(self) -> None:
         if self._engine is not None:

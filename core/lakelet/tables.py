@@ -1,0 +1,289 @@
+# Copyright 2026 Lakelet contributors
+# SPDX-License-Identifier: Apache-2.0
+"""Tables (brief §3.6, D16, D24, D36, M3): preview a file, import a file or a folder into an
+Iceberg table through the catalog, list, describe, sample. Every write is a DuckDB
+statement through the attached catalog; the catalog does the commit."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
+
+from lakelet import types
+from lakelet.catalog.store import NotFound
+from lakelet.engine import run_with_retry
+from lakelet.project import NAMESPACE, TABLES_END, TABLES_START, identifier
+
+if TYPE_CHECKING:
+    from lakelet.project import Project
+
+READERS = {
+    ".csv": "read_csv_auto({path})",
+    ".tsv": "read_csv_auto({path})",
+    ".parquet": "read_parquet({path})",
+    ".json": "read_json_auto({path})",
+    ".jsonl": "read_json_auto({path})",
+    ".xlsx": "read_xlsx({path})",
+}
+Mode = Literal["create", "replace", "append"]
+
+
+class UnsupportedFile(Exception):
+    pass
+
+
+class TableExists(Exception):
+    """The table is there already; the caller offers replace, append or another name."""
+
+
+class NoSuchTable(Exception):
+    pass
+
+
+@dataclass
+class Column:
+    name: str
+    duckdb_type: str
+    iceberg_type: str
+    note: str = ""
+
+
+@dataclass
+class Preview:
+    name: str
+    source: str
+    columns: list[Column]
+    sample: list[tuple]
+
+
+@dataclass
+class TableInfo:
+    name: str
+    rows: int
+    bytes: int
+    columns: list[tuple[str, str]]
+    location: str
+    snapshot_id: int | None
+
+
+@dataclass
+class TableDescription(TableInfo):
+    partitioning: str = "unpartitioned"
+    freshness: datetime | None = None
+    last_commit: dict[str, Any] = field(default_factory=dict)
+    snapshots: int = 0
+    format_version: int = 2
+
+
+def _sql_literal(text: str) -> str:
+    return "'" + text.replace("'", "''") + "'"
+
+
+def _quoted(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+class Tables:
+    def __init__(self, project: Project) -> None:
+        self.project = project
+
+    # -- reading files -------------------------------------------------------------
+
+    @staticmethod
+    def _reader(path: Path) -> str:
+        template = READERS.get(path.suffix.lower())
+        if template is None:
+            raise UnsupportedFile(f"{path.name}: Lakelet imports {', '.join(READERS)}")
+        if not path.exists():
+            raise FileNotFoundError(path)
+        return template.format(path=_sql_literal(str(path)))
+
+    def _inferred(self, reader: str) -> list[Column]:
+        rows = self.project.engine.execute(f"DESCRIBE SELECT * FROM {reader}").fetchall()
+        columns = []
+        for name, duckdb_type, *_ in rows:
+            c = types.coerce(duckdb_type)
+            columns.append(Column(name, duckdb_type, c.iceberg_type, c.note))
+        return columns
+
+    @staticmethod
+    def _select(columns: list[Column]) -> str:
+        parts = []
+        for col in columns:
+            cast_to = types.coerce(col.duckdb_type).cast_to
+            q = _quoted(col.name)
+            parts.append(f"CAST({q} AS {cast_to}) AS {q}" if cast_to else q)
+        return ", ".join(parts)
+
+    def preview(self, path: str | Path, name: str | None = None, sample: int = 5) -> Preview:
+        path = Path(path)
+        reader = self._reader(path)
+        columns = self._inferred(reader)
+        rows = self.project.engine.execute(
+            f"SELECT {self._select(columns)} FROM {reader} LIMIT {int(sample)}"
+        ).fetchall()
+        return Preview(name or identifier(path.stem), str(path), columns, rows)
+
+    # -- importing -----------------------------------------------------------------
+
+    def import_file(
+        self, path: str | Path, name: str | None = None, mode: Mode = "create"
+    ) -> TableInfo:
+        path = Path(path)
+        reader = self._reader(path)
+        name = name or identifier(path.stem)
+        target = f"lakelet.{NAMESPACE}.{_quoted(name)}"
+        exists = self._exists(name)
+        if mode == "create" and exists:
+            raise TableExists(name)
+        if mode == "append" and not exists:
+            mode = "create"
+        if mode == "append":
+            columns = self._existing_columns(name)
+            statement = f"INSERT INTO {target} SELECT {self._select(columns)} FROM {reader}"
+        else:
+            if exists:
+                run_with_retry(self.project.engine, f"DROP TABLE {target}")
+            columns = self._inferred(reader)
+            statement = f"CREATE TABLE {target} AS SELECT {self._select(columns)} FROM {reader}"
+        run_with_retry(self.project.engine, statement)
+        self.refresh_agents_md()
+        return self._info(name)
+
+    def import_dir(self, path: str | Path, mode: Mode = "create") -> list[TableInfo]:
+        """One table per file (brief D16). Files with an unsupported extension are skipped."""
+        root = Path(path)
+        files = sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower() in READERS)
+        names: dict[str, Path] = {}
+        for file in files:
+            name = identifier(file.stem)
+            if name in names:
+                raise TableExists(f"{names[name].name} and {file.name} would both be {name}")
+            names[name] = file
+        return [self.import_file(file, name=name, mode=mode) for name, file in names.items()]
+
+    def _existing_columns(self, name: str) -> list[Column]:
+        rows = self.project.engine.execute(
+            f"DESCRIBE lakelet.{NAMESPACE}.{_quoted(name)}"
+        ).fetchall()
+        return [Column(n, t, types.coerce(t).iceberg_type) for n, t, *_ in rows]
+
+    # -- reading the catalog -------------------------------------------------------
+
+    def _exists(self, name: str) -> bool:
+        try:
+            self.project.store.get_table(NAMESPACE, name)
+        except NotFound:
+            return False
+        return True
+
+    def _metadata(self, name: str):
+        try:
+            location = self.project.store.get_table(NAMESPACE, name)
+        except NotFound as e:
+            raise NoSuchTable(name) from e
+        return self.project.metadata_io.read(location)
+
+    def _info(self, name: str) -> TableInfo:
+        md = self._metadata(name)
+        snapshot = md.current_snapshot()
+        rows, size = self.project.metadata_io.table_stats(md)
+        return TableInfo(
+            name=name,
+            rows=rows,
+            bytes=size,
+            columns=[(f.name, str(f.field_type)) for f in md.schema().fields],
+            location=md.location,
+            snapshot_id=snapshot.snapshot_id if snapshot else None,
+        )
+
+    def list(self) -> list[TableInfo]:
+        return [self._info(name) for name in self.project.store.list_tables(NAMESPACE)]
+
+    def describe(self, name: str) -> TableDescription:
+        md = self._metadata(name)
+        info = self._info(name)
+        snapshot = md.current_snapshot()
+        spec = md.spec()
+        partitioning = (
+            ", ".join(
+                f"{f.name} = {f.transform}({md.schema().find_column_name(f.source_id)})"
+                for f in spec.fields
+            )
+            if spec.fields
+            else "unpartitioned"
+        )
+        return TableDescription(
+            **info.__dict__,
+            partitioning=partitioning,
+            freshness=datetime.fromtimestamp(snapshot.timestamp_ms / 1000, tz=UTC)
+            if snapshot
+            else None,
+            last_commit=(
+                {
+                    "snapshot_id": snapshot.snapshot_id,
+                    "operation": snapshot.summary.operation.value if snapshot.summary else None,
+                    "timestamp": datetime.fromtimestamp(
+                        snapshot.timestamp_ms / 1000, tz=UTC
+                    ).isoformat(),
+                }
+                if snapshot
+                else {}
+            ),
+            snapshots=len(md.snapshots),
+            format_version=md.format_version,
+        )
+
+    def sample(self, name: str, n: int = 5, truncate: int | None = None) -> list[dict[str, Any]]:
+        if not self._exists(name):
+            raise NoSuchTable(name)
+        cursor = self.project.engine.execute(
+            f"SELECT * FROM lakelet.{NAMESPACE}.{_quoted(name)} LIMIT {int(n)}"
+        )
+        names = [d[0] for d in cursor.description]
+        rows = cursor.fetchall()
+
+        def cut(value: Any) -> Any:
+            if truncate and isinstance(value, str) and len(value) > truncate:
+                return value[:truncate]
+            return value
+
+        return [{col: cut(v) for col, v in zip(names, row, strict=True)} for row in rows]
+
+    # -- AGENTS.md -------------------------------------------------------------------
+
+    def refresh_agents_md(self) -> None:
+        """Regenerate the tables block between the markers (brief D16); leave the file alone
+        if someone removed them."""
+        path = self.project.root / "AGENTS.md"
+        if not path.exists():
+            return
+        text = path.read_text(encoding="utf-8")
+        if TABLES_START not in text or TABLES_END not in text:
+            return
+        lines = [
+            f"- `{t.name}` ({_human_bytes(t.bytes)}, {t.rows:,} rows, local)" for t in self.list()
+        ] or [
+            "No tables yet. `lakelet import <file>` adds one; "
+            "this block is regenerated on every import."
+        ]
+        block = f"{TABLES_START}\n" + "\n".join(lines) + f"\n{TABLES_END}"
+        text = re.sub(
+            re.escape(TABLES_START) + ".*?" + re.escape(TABLES_END),
+            block,
+            text,
+            count=1,
+            flags=re.S,
+        )
+        path.write_text(text, encoding="utf-8")
+
+
+def _human_bytes(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"

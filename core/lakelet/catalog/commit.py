@@ -12,6 +12,7 @@ import uuid
 
 from pyiceberg.catalog import TABLE_METADATA_FILE_NAME_REGEX, MetastoreCatalog
 from pyiceberg.io import FileIO, load_file_io
+from pyiceberg.manifest import ManifestContent
 from pyiceberg.partitioning import UNPARTITIONED_PARTITION_SPEC, PartitionSpec
 from pyiceberg.schema import Schema
 from pyiceberg.serializers import FromInputFile, ToOutputFile
@@ -42,6 +43,22 @@ class MetadataIO:
 
     def write(self, table_metadata: TableMetadata, location: str) -> None:
         ToOutputFile.table_metadata(table_metadata, self.io.new_output(location), overwrite=False)
+
+    def table_stats(self, table_metadata: TableMetadata) -> tuple[int, int]:
+        """Rows and bytes of the data files in the current snapshot, from its manifests.
+        DuckDB's snapshot summaries do not carry the totals Java writers add. Rows are the
+        data files' record counts; position deletes are not subtracted."""
+        snapshot = table_metadata.current_snapshot()
+        if snapshot is None:
+            return 0, 0
+        rows = size = 0
+        for manifest in snapshot.manifests(self.io):
+            if manifest.content != ManifestContent.DATA:
+                continue
+            for entry in manifest.fetch_manifest_entry(self.io, discard_deleted=True):
+                rows += entry.data_file.record_count
+                size += entry.data_file.file_size_in_bytes
+        return rows, size
 
 
 def create_metadata(

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import time
 from pathlib import Path
 
 import duckdb
@@ -28,6 +30,32 @@ PROFILE_METRICS = (
 
 class ExtensionsMissing(RuntimeError):
     pass
+
+
+class CatalogConflict(RuntimeError):
+    """A commit lost the race three times (brief D23); the CLI maps it to exit 4."""
+
+
+CONFLICT_MARKERS = ("Failed to commit Iceberg transaction", "409")
+
+
+def is_conflict(error: Exception) -> bool:
+    return all(marker in str(error) for marker in CONFLICT_MARKERS)
+
+
+def run_with_retry(engine: Engine, sql: str, attempts: int = 3) -> None:
+    """DuckDB does not retry a 409 (step 1); Lakelet re-runs the statement with jittered
+    backoff, then raises CatalogConflict."""
+    for attempt in range(attempts):
+        try:
+            engine.execute(sql)
+            return
+        except duckdb.Error as e:
+            if not is_conflict(e) or attempt == attempts - 1:
+                if is_conflict(e):
+                    raise CatalogConflict(str(e)) from e
+                raise
+            time.sleep(random.uniform(0.1, 0.5) * (attempt + 1))
 
 
 def install_extensions() -> tuple[list[str], str]:
