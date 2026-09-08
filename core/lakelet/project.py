@@ -18,6 +18,8 @@ from lakelet.config import Config, render_default
 from lakelet.engine import Engine, install_extensions
 
 if TYPE_CHECKING:
+    from lakelet.history import History
+    from lakelet.query import Result
     from lakelet.tables import Tables
 
 NAMESPACE = "main"
@@ -92,6 +94,7 @@ class Project:
         self._catalog: EmbeddedCatalog | None = None
         self._engine: Engine | None = None
         self._tables: Tables | None = None
+        self._history: History | None = None
 
     # -- on disk --------------------------------------------------------------------
 
@@ -179,6 +182,20 @@ class Project:
     def engine(self) -> Engine:
         assert self._engine is not None, "the project is not open"
         return self._engine
+
+    @property
+    def history(self) -> History:
+        if self._history is None:
+            from lakelet.history import History
+
+            self.lakelet_dir.mkdir(exist_ok=True)
+            self._history = History(self.history_db)
+        return self._history
+
+    def query(self, sql: str, allow_red: bool = False, batch_rows: int = 1000) -> Result:
+        from lakelet.query import query
+
+        return query(self, sql, allow_red=allow_red, batch_rows=batch_rows)
 
     @property
     def tables(self) -> Tables:
