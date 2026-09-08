@@ -1,0 +1,54 @@
+[project]
+name = "lakelet"
+dynamic = ["version"]
+description = "Your laptop is the warehouse until it can't be. A local-first lakehouse: Iceberg on Parquet, an Iceberg REST catalog, DuckDB, and a pre-flight gauge."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [{ name = "Lakelet contributors" }]
+# Runtime dependencies and ceilings follow the brief, D15.
+dependencies = [
+  "duckdb>=1.5.3,<1.6",
+  "pyiceberg[pyarrow]>=0.12,<0.13",
+  "pyarrow",
+  "sqlalchemy>=2,<3",
+  "fastapi",
+  "uvicorn",
+  "pydantic>=2,<3",
+  "typer",
+  "rich",
+  "psutil",
+]
+
+[project.scripts]
+lakelet = "lakelet.cli:run"
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "httpx",
+  "moto[server]>=5,<6",
+  "boto3",
+  "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "lakelet/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lakelet"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
