@@ -11,6 +11,8 @@ import os
 import platform
 import re
 import shutil
+import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import psutil
@@ -135,3 +137,40 @@ def machine_profile(engine: Engine, root: str) -> dict[str, Any]:
 def machine_hash(profile: dict[str, Any]) -> str:
     key = f"{profile['platform']}|{profile['machine']}|{profile['ram']}|{profile['cores']}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def probe_throughput(warehouse: Path, size_mb: int = 512) -> float:
+    """Brief D36: write a Parquet file of about ``size_mb`` in the warehouse, read it twice
+    with DuckDB, keep the second time, delete it. MB per second."""
+    import duckdb
+
+    warehouse.mkdir(parents=True, exist_ok=True)
+    path = warehouse / ".lakelet-probe.parquet"
+    con = duckdb.connect()
+    rows = max(1, size_mb) * 62_500  # about 16 bytes a row before compression
+    con.execute(
+        f"COPY (SELECT range AS i, random() AS r FROM range({rows})) TO '{path}' "
+        "(FORMAT parquet, COMPRESSION uncompressed)"
+    )
+    try:
+        size = path.stat().st_size
+        con.execute(f"SELECT sum(i) FROM read_parquet('{path}')").fetchall()
+        started = time.perf_counter()
+        con.execute(f"SELECT sum(i) FROM read_parquet('{path}')").fetchall()
+        elapsed = max(time.perf_counter() - started, 1e-4)
+    finally:
+        path.unlink(missing_ok=True)
+        con.close()
+    return size / 1e6 / elapsed
+
+
+def load_machine_cache(cache_dir: Path) -> dict[str, Any]:
+    path = cache_dir / "machine.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def save_machine_cache(cache_dir: Path, data: dict[str, Any]) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tmp = cache_dir / "machine.json.tmp"
+    tmp.write_text(json.dumps(data), encoding="utf-8")
+    tmp.replace(cache_dir / "machine.json")

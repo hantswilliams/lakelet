@@ -18,6 +18,8 @@ from lakelet.config import Config, render_default
 from lakelet.engine import Engine, install_extensions
 
 if TYPE_CHECKING:
+    from lakelet.gauge.manifests import ManifestCache
+    from lakelet.gauge.model import Estimate
     from lakelet.history import History
     from lakelet.query import Result
     from lakelet.tables import Tables
@@ -79,6 +81,7 @@ class InitReport:
     created: list[str] = field(default_factory=list)
     extensions_installed: list[str] = field(default_factory=list)
     extension_directory: str = ""
+    throughput_local_mbps: float | None = None
 
 
 class Project:
@@ -90,7 +93,9 @@ class Project:
         self.catalog_db = self.lakelet_dir / "catalog.db"
         self.history_db = self.lakelet_dir / "history.db"
         self.store: Store = Store(f"sqlite:///{self.catalog_db}")
-        self.metadata_io = MetadataIO({})
+        self.io_properties: dict[str, str] = {}
+        self.metadata_io = MetadataIO(self.io_properties)
+        self._manifests: ManifestCache | None = None
         self._catalog: EmbeddedCatalog | None = None
         self._engine: Engine | None = None
         self._tables: Tables | None = None
@@ -99,7 +104,9 @@ class Project:
     # -- on disk --------------------------------------------------------------------
 
     @classmethod
-    def init(cls, path: str | Path = ".", name: str | None = None) -> InitReport:
+    def init(
+        cls, path: str | Path = ".", name: str | None = None, probe_mb: int = 512
+    ) -> InitReport:
         root = Path(path).resolve()
         root.mkdir(parents=True, exist_ok=True)
         if (root / "lakelet.toml").exists():
@@ -133,6 +140,14 @@ class Project:
         cls._ensure_namespace(Store(f"sqlite:///{root / '.lakelet' / 'catalog.db'}"))
         report.created.append(".lakelet/catalog.db")
         report.extensions_installed, report.extension_directory = install_extensions()
+        if probe_mb:
+            from lakelet.gauge import inputs
+
+            mbps = inputs.probe_throughput(root / "warehouse", probe_mb)
+            inputs.save_machine_cache(
+                root / ".lakelet" / "cache", {"throughput_local_mbps": mbps, "probe_mb": probe_mb}
+            )
+            report.throughput_local_mbps = mbps
         return report
 
     @classmethod
@@ -196,6 +211,19 @@ class Project:
         from lakelet.query import query
 
         return query(self, sql, allow_red=allow_red, batch_rows=batch_rows)
+
+    def estimate(self, sql: str) -> Estimate:
+        from lakelet.query import estimate
+
+        return estimate(self, sql)
+
+    @property
+    def manifests(self) -> ManifestCache:
+        if self._manifests is None:
+            from lakelet.gauge.manifests import ManifestCache
+
+            self._manifests = ManifestCache(self)
+        return self._manifests
 
     @property
     def tables(self) -> Tables:

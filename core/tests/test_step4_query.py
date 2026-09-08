@@ -55,7 +55,7 @@ def test_query_streams_arrow_and_records_the_run(project) -> None:
     assert run.machine_hash and run.lakelet_version and run.duckdb_version == duckdb.__version__
     assert run.ran and run.ran_where == "local" and run.retries == 0 and run.error is None
     assert run.actual_wall == actual.wall and run.actual_bytes == actual.bytes
-    assert run.est_bytes is None and run.verdict is None  # the gauge is step 5
+    assert run.est_bytes and run.verdict == "green" and run.pruning == "full"  # step 5 fills these
 
 
 def test_first_batch_arrives_before_completion(project) -> None:

@@ -21,7 +21,8 @@ import pyarrow as pa
 from lakelet import __version__
 from lakelet.catalog.store import NotFound
 from lakelet.engine import CatalogConflict, is_conflict
-from lakelet.gauge import inputs, manifests
+from lakelet.gauge import inputs, predicates, verdict
+from lakelet.gauge.model import Estimate, Thresholds, estimate_plan
 from lakelet.history import Run
 from lakelet.project import NAMESPACE
 
@@ -29,6 +30,14 @@ if TYPE_CHECKING:
     from lakelet.project import Project
 
 CONFLICT_ATTEMPTS = 3
+
+
+class RedRefused(Exception):
+    """The gauge said Needs more machine and the caller did not allow it (exit 2)."""
+
+    def __init__(self, estimate: Estimate) -> None:
+        super().__init__(estimate.reason)
+        self.estimate = estimate
 
 
 # -- identity (brief D10) --------------------------------------------------------------
@@ -112,7 +121,7 @@ class Result:
         self.sql = sql
         self.run = run
         self.scans = scans
-        self.estimate = None  # step 5
+        self.estimate: Estimate | None = None
         self.actual: Actual | None = None
         self.run_id: int | None = None
         self._reader: pa.RecordBatchReader | None = None
@@ -185,82 +194,206 @@ class Result:
             return
         self.actual.peak_mem = profile.get("system_peak_buffer_memory")
         self.actual.spill = profile.get("system_peak_temp_dir_size")
-        scan_rows = [
-            node.get("operator_cardinality", 0)
+        profile_scans = [
+            node
             for node in inputs.walk([profile])
             if node.get("operator_type") in inputs.SCAN_NODES
         ]
-        self.actual.rows_scanned = sum(scan_rows) if scan_rows else None
-        # Derived (D21): rows each scan produced times the bytes per row of its columns.
-        total = 0.0
-        for scan, rows in zip(self.scans, scan_rows, strict=False):
-            total += rows * scan.get("bytes_per_row", 0.0)
-        self.actual.bytes = int(total) if scan_rows else None
+        if not profile_scans:
+            return
+        # Derived (D21): rows each scan read from its files, as a share of the table, times
+        # the table's bytes and the projected columns' share of them. The profiler's
+        # rows-scanned counter over-reports on tiny single-file tables, so it is capped.
+        rows_total, bytes_total = 0, 0.0
+        for scan, node in zip(self.scans, profile_scans, strict=False):
+            table_rows = scan.get("table_rows") or 0
+            read = node.get("operator_rows_scanned") or node.get("operator_cardinality") or 0
+            read = min(read, table_rows) if table_rows else read
+            rows_total += read
+            if table_rows:
+                share = read / table_rows
+                bytes_total += share * scan.get("table_bytes", 0) * scan.get("fraction", 1.0)
+        self.actual.rows_scanned = rows_total
+        self.actual.bytes = int(bytes_total)
 
 
 def _table_scans(project: Project, sql: str, plan: list[dict[str, Any]]) -> tuple[list, list]:
     """The catalog tables the statement reads with their current snapshot ids, and the
-    plan's scan nodes each attributed to one of them (by projected columns, then by
-    order) with the bytes per row of the projected columns."""
+    plan's scan nodes each attributed to one of them (by projected columns, then by order),
+    pruned with the filters DuckDB pushed down (brief D20)."""
     known = []
     for name in inputs.base_tables(project.engine, sql):
         try:
             location = project.store.get_table(NAMESPACE, name)
         except NotFound:
             continue  # a CTE, a temp table, or something outside the catalog
-        md = project.metadata_io.read(location)
-        snapshot = md.current_snapshot()
+        _, stats = project.manifests.get(name, location)
         known.append(
             {
                 "name": name,
-                "snapshot_id": snapshot.snapshot_id if snapshot else None,
-                "locality": "local" if md.location.startswith("file://") else "remote",
-                "columns": {f.name: f.field_id for f in md.schema().fields},
-                "metadata": md,
+                "location": location,
+                "snapshot_id": stats.snapshot_id,
+                "locality": "local" if stats.location.startswith("file://") else "remote",
+                "source": stats.location,
+                "columns": set(project.metadata_io.read(location).schema().column_names),
+                "stats": stats,
+                "bytes_after_pruning": 0,
+                "files_after_pruning": 0,
             }
         )
     scans = inputs.scan_nodes(plan)
     unassigned = list(known)
     for scan in scans:
         projected = set(scan["projections"])
-        candidates = [t for t in known if projected and projected <= set(t["columns"])]
+        candidates = [t for t in known if projected and projected <= t["columns"]]
         table = candidates[0] if len(candidates) == 1 else (unassigned[0] if unassigned else None)
         if table is None:
+            scan.update(bytes=0, rows=0, files=0, pruning="full")
             continue
         if table in unassigned:
             unassigned.remove(table)
-        stats = manifests.file_stats(project.metadata_io, table["metadata"])
-        ids = {table["columns"][c] for c in projected if c in table["columns"]} or None
-        scan["table"] = table["name"]
-        scan["bytes_per_row"] = manifests.bytes_per_row(stats, ids)
+        translation = predicates.translate(scan["filters"])
+        pruned, accepted = project.manifests.prune(
+            table["name"], table["location"], translation.expression, scan["projections"]
+        )
+        stats = table["stats"]
+        scan.update(
+            table=table["name"],
+            locality=table["locality"],
+            bytes=pruned.bytes,
+            rows=pruned.rows,
+            files=pruned.files,
+            of_files=pruned.of_files,
+            pruning=translation.pruning if accepted else "none",
+            dropped=translation.dropped,
+            bytes_per_row=stats.bytes_per_row(scan["projections"]),
+            fraction=stats.fraction(scan["projections"]),
+            table_rows=stats.rows,
+            table_bytes=stats.bytes,
+        )
+        table["bytes_after_pruning"] += pruned.bytes
+        table["files_after_pruning"] += pruned.files
     tables = [
-        {"name": t["name"], "snapshot_id": t["snapshot_id"], "locality": t["locality"]}
+        {
+            k: t[k]
+            for k in (
+                "name",
+                "snapshot_id",
+                "locality",
+                "source",
+                "bytes_after_pruning",
+                "files_after_pruning",
+            )
+        }
         for t in known
     ]
     return tables, scans
 
 
+def _overall_pruning(scans: list[dict[str, Any]]) -> str:
+    states = {s.get("pruning", "full") for s in scans}
+    if "none" in states:
+        return "none"
+    return "partial" if "partial" in states else "full"
+
+
+def _thresholds(project: Project) -> Thresholds:
+    g = project.config.gauge
+    return Thresholds(g.green_max_seconds, g.yellow_max_seconds, g.green_max_memory_fraction)
+
+
+def _estimate(project: Project, sql: str) -> tuple[Estimate, list[dict[str, Any]]]:
+    engine = project.engine
+    plan = inputs.plan_json(engine, sql)
+    tables, scans = _table_scans(project, sql, plan)
+    machine = inputs.machine_profile(engine, str(project.root))
+    cache = inputs.load_machine_cache(project.cache_dir)
+    throughput = cache.get("throughput_local_mbps")
+    bandwidth = cache.get("bandwidth_mbps")
+    numbers = estimate_plan(plan, scans, machine, throughput, bandwidth, _thresholds(project))
+    remote_source = next((t["source"] for t in tables if t["locality"] == "remote"), None)
+    text = verdict.reason(numbers, remote_source, bandwidth)
+    est = Estimate(
+        verdict=numbers["verdict"],
+        words=verdict.WORDS[numbers["verdict"]],
+        bytes_scanned=numbers["bytes_scanned"],
+        rows_scanned=numbers["rows_scanned"],
+        files_scanned=numbers["files_scanned"],
+        peak_memory=numbers["peak_memory"],
+        wall_local=numbers["wall_local"],
+        io_seconds=numbers["io_seconds"],
+        cpu_seconds=numbers["cpu_seconds"],
+        spill_bytes=numbers["spill_bytes"],
+        reason=text,
+        fingerprint=fingerprint(sql, [(t["name"], t["snapshot_id"]) for t in tables]),
+        pruning=_overall_pruning(scans),
+        tables=tables,
+        remote=numbers["remote"],
+        bandwidth_mbps=bandwidth,
+        throughput_mbps=numbers["throughput_mbps"],
+        worker=numbers["worker"],
+        wall_burst=numbers["wall_burst"],
+        cost_burst=numbers["cost_burst"],
+        cap=numbers["cap"],
+        plan=plan,
+    )
+    return est, scans
+
+
+def estimate(project: Project, sql: str) -> Estimate:
+    """The gauge: three numbers, a verdict, one sentence (brief D8, D28, D29)."""
+    return _estimate(project, sql)[0]
+
+
 def query(project: Project, sql: str, allow_red: bool = False, batch_rows: int = 1000) -> Result:
     engine = project.engine
+    est: Estimate | None = None
+    scans: list[dict[str, Any]] = []
+    tables: list[dict[str, Any]] = []
+    plan: list[dict[str, Any]] = []
     try:
-        plan = inputs.plan_json(engine, sql)
-        tables, scans = _table_scans(project, sql, plan)
-    except duckdb.Error:
-        # Planning failed (an unknown table, a syntax error, an unsupported statement). The
-        # gauge never blocks execution (PRD F0.3): run anyway and let DuckDB say why.
-        plan, tables, scans = [], [], []
+        est, scans = _estimate(project, sql)
+        tables, plan = est.tables, est.plan
+    except Exception:  # noqa: BLE001
+        # The gauge never blocks execution (PRD F0.3): run anyway, record without an
+        # estimate, and let DuckDB say why if the statement itself is wrong.
+        try:
+            plan = inputs.plan_json(engine, sql)
+            tables, scans = _table_scans(project, sql, plan)
+        except Exception:  # noqa: BLE001
+            plan, tables, scans = [], [], []
     profile = inputs.machine_profile(engine, str(project.root))
+    cache = inputs.load_machine_cache(project.cache_dir)
     run = Run(
-        fingerprint=fingerprint(sql, [(t["name"], t["snapshot_id"]) for t in tables]),
+        fingerprint=est.fingerprint
+        if est
+        else fingerprint(sql, [(t["name"], t["snapshot_id"]) for t in tables]),
         sql_hash=sql_hash(sql),
         sql_text=sql,
         lakelet_version=__version__,
         duckdb_version=duckdb.__version__,
         machine_hash=inputs.machine_hash(profile),
         machine=profile,
-        tables=tables,
+        tables=[{k: v for k, v in t.items() if k != "source"} for t in tables],
         operator_counts=inputs.operator_counts(plan),
+        throughput_local_mbps=cache.get("throughput_local_mbps"),
+        bandwidth_mbps=cache.get("bandwidth_mbps"),
     )
+    if est is not None:
+        run.pruning = est.pruning
+        run.est_bytes = est.bytes_scanned
+        run.est_peak_mem = est.peak_memory
+        run.est_wall_local = est.wall_local
+        run.est_wall_burst = est.wall_burst
+        run.est_cost_burst = est.cost_burst
+        run.verdict = est.verdict
+        run.reason = est.reason
+        if est.verdict == "red" and not allow_red:
+            run.ran = False
+            run.ran_where = "refused"
+            project.history.record(run)
+            raise RedRefused(est)
     result = Result(project, sql, run, scans)
+    result.estimate = est
     result._execute(batch_rows)
     return result
