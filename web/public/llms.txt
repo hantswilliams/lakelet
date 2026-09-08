@@ -1,0 +1,11 @@
+# Lakelet
+
+> Open-source, local-first lakehouse in one binary: DuckDB, Apache Iceberg and dbt Core, local by default. Every query and dbt run gets a pre-flight verdict (the gauge); runs that don't fit burst to an ephemeral worker in your own cloud with a hard cost cap shown before they start. Data stays as Iceberg in your own bucket.
+
+## Pages
+- [Home](/): thesis, the gauge, pricing summary, waitlist
+- [The app](/app): the desktop app walkthrough
+- [How it runs](/how-it-runs): solo, team and company topologies; what stays on the laptop
+- [Medallion](/medallion): bronze / silver / gold on a laptop with a dbt project
+- [For agents](/agents): MCP server, per-agent daily caps, AGENTS.md
+- [Pricing](/pricing): Local free, Team $24/person/month, Burst cost + 15%; comparison vs Snowflake, BigQuery, Databricks, MotherDuck

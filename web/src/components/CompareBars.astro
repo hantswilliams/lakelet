@@ -1,0 +1,31 @@
+---
+// Horizontal bar comparison of the modeled month. Reads data/pricing.ts.
+import { vendors, maxTotal, fmt, scenario } from '../data/pricing';
+interface Props { heading?: boolean; note?: string; class?: string }
+const { heading = true, note, class: cls = '' } = Astro.props;
+---
+<div class:list={['panel', 'compare', cls]} aria-label="Monthly cost comparison">
+  {heading && <h3>{scenario.label}</h3>}
+  {heading && <p class="meta">{scenario.meta}</p>}
+  <div class="bars">
+    {vendors.map(v => (
+      <div class:list={['cbar', { us: v.us }]}>
+        <span>{v.name}</span><i style={`--w:${Math.max(9, Math.round(v.total / maxTotal * 100))}%`}></i><b>{fmt(v.total)}</b>
+      </div>
+    ))}
+  </div>
+  {note ? <p class="fine" set:html={note} /> : <slot />}
+</div>
+
+<style>
+  .compare{padding:24px;box-shadow:0 20px 40px -30px rgba(23,32,41,.35)}
+  .compare h3{font-size:16px;font-weight:800}
+  .compare .meta{font-size:13px;color:var(--muted);margin:2px 0 18px}
+  .bars{display:grid;gap:10px;margin:0 0 16px}
+  .cbar{display:grid;grid-template-columns:92px 1fr 64px;align-items:center;gap:12px;font-size:14px;font-variant-numeric:tabular-nums}
+  .cbar span{color:var(--muted);font-weight:600}
+  .cbar i{display:block;height:14px;border-radius:5px;background:var(--line);width:var(--w);min-width:6px}
+  .cbar b{text-align:right;font-weight:800}
+  .cbar.us span,.cbar.us b{color:var(--local)}
+  .cbar.us i{background:var(--local)}
+</style>

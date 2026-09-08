@@ -1,0 +1,10 @@
+---
+import Fish from './Fish.astro';
+import { site } from '../data/nav';
+---
+<footer><span><Fish class="fish" />{site.footer.left}</span><span>{site.footer.right}</span></footer>
+
+<style>
+  footer{padding:24px 0 40px;color:var(--muted);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  footer :global(.fish){vertical-align:-6px;margin-right:6px}
+</style>

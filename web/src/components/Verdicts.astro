@@ -1,0 +1,10 @@
+---
+// The three verdict explanations. `stack` lays them out vertically (beside a terminal).
+interface Props { stack?: boolean }
+const { stack = false } = Astro.props;
+---
+<div class:list={['three', { stack }]}>
+  <div class="g"><h3>Runs here</h3><p>Fits in memory, finishes in seconds. This is most queries on most teams' data. Costs nothing.</p></div>
+  <div class="y"><h3>Runs here, slowly</h3><p>Spills to disk or takes a few minutes. Lakelet shows the estimate and lets you decide whether to wait.</p></div>
+  <div class="r"><h3>Needs more machine</h3><p>One click starts a worker on your cloud account with the RAM this run needs, runs it against the same tables, and shuts down. You see the maximum cost before you click.</p></div>
+</div>

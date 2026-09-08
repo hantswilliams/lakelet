@@ -1,0 +1,74 @@
+---
+import '../styles/tokens.css';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import { site } from '../data/nav';
+import { url } from '../lib/url';
+interface Props { title: string; description: string; mono?: boolean }
+const { title, description } = Astro.props;
+const fullTitle = title === site.name ? `${site.name} — ${site.tagline}` : `${title} — ${site.name}`;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{fullTitle}</title>
+  <meta name="description" content={description}>
+  <link rel="canonical" href={canonical}>
+  <meta property="og:title" content={fullTitle}>
+  <meta property="og:description" content={description}>
+  <meta property="og:type" content="website">
+  <meta property="og:url" content={canonical}>
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" type="image/svg+xml" href={url("/favicon.svg")}>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <slot name="head" />
+</head>
+<body>
+  <div class="wrap">
+    <Nav />
+    <slot />
+    <Footer />
+  </div>
+
+  <script>
+    // ---- Waitlist -----------------------------------------------------------
+    // Every <Waitlist/> form on the site posts through submitWaitlist().
+    // Replace its body with a real provider when ready, e.g.
+    //   Cloudflare Pages Function (in this repo):  fetch('/api/waitlist', {method:'POST', body:fd})
+    //   Formspree:  fetch('https://formspree.io/f/XXXX', {method:'POST', body:fd, headers:{Accept:'application/json'}})
+    //   Buttondown: fetch('https://api.buttondown.email/v1/subscribers', ...)  (needs a proxy for the key)
+    // The "stack" field ("What do you use today?") is the useful signal; keep it.
+    async function submitWaitlist(fd: FormData): Promise<boolean> {
+      if (import.meta.env.PUBLIC_WAITLIST_URL) {
+        const r = await fetch(import.meta.env.PUBLIC_WAITLIST_URL, { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
+        return r.ok;
+      }
+      console.log('waitlist (no PUBLIC_WAITLIST_URL set)', Object.fromEntries(fd));
+      return true;
+    }
+    document.querySelectorAll<HTMLFormElement>('form[data-waitlist]').forEach(f => {
+      f.addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(f);
+        if (fd.get('website')) return;                      // honeypot
+        const email = String(fd.get('email') || '').trim();
+        let fine = f.querySelector<HTMLElement>('.fine:not(.done)');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          if (!fine) { fine = document.createElement('p'); fine.className = 'fine'; f.appendChild(fine); }
+          fine.textContent = 'Please enter a valid email.'; fine.classList.add('err'); (f.elements.namedItem('email') as HTMLInputElement).focus(); return;
+        }
+        const btn = f.querySelector<HTMLButtonElement>('button[type=submit]')!; btn.disabled = true;
+        const ok = await submitWaitlist(fd).catch(() => false);
+        btn.disabled = false;
+        if (ok) { f.querySelector<HTMLElement>('.row')!.hidden = true; if (fine) fine.hidden = true; f.querySelector<HTMLElement>('.fine.done')!.hidden = false; }
+        else if (fine) { fine.textContent = 'Something went wrong. Try again?'; fine.classList.add('err'); }
+      });
+    });
+  </script>
+</body>
+</html>

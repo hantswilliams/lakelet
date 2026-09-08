@@ -1,0 +1,346 @@
+---
+import Base from '../layouts/Base.astro';
+import { url } from '../lib/url';
+import Waitlist from '../components/Waitlist.astro';
+import GaugeSlider from '../components/GaugeSlider.astro';
+import ReplayTerminal from '../components/ReplayTerminal.astro';
+import Verdicts from '../components/Verdicts.astro';
+import CompareBars from '../components/CompareBars.astro';
+import WorkerLadder from '../components/WorkerLadder.astro';
+import Terminal from '../components/Terminal.astro';
+import Logo from '../components/Logo.astro';
+import { plans } from '../data/pricing';
+import { site } from '../data/nav';
+---
+<Base title="Lakelet" description="An open-source lakehouse in one binary: DuckDB, Iceberg and dbt, local by default. Every query gets a pre-flight verdict; the ones that don't fit burst to a worker in your own cloud with a hard cost cap.">
+
+  <div class="hero">
+    <div>
+      <div class="hero-brand" id="heroBrand" aria-hidden="true">
+        <svg viewBox="0 0 420 110">
+          <text x="20" y="84" font-size="64" letter-spacing="-1.5" fill="#172029">lakelet</text>
+          <path d="M78 92 c6 -4 12 -4 18 0" stroke="#7FB3D5" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <path d="M232 92 c6 -4 12 -4 18 0" stroke="#7FB3D5" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <g class="leaper" id="leaper"><g><path d="M-12 0 L-22 -8 C-19 -3, -19 3, -22 8 Z" fill="#E8731A"/><ellipse rx="14" ry="9" fill="#F5A623"/><path d="M-3 -8 C0 -14, 6 -13, 7 -7 Z" fill="#E8731A"/><circle cx="7" cy="-2" r="3" fill="#fff"/><circle cx="8" cy="-2" r="1.5" fill="#172029"/></g></g>
+        </svg>
+      </div>
+      <h1>Your data fits on your laptop.</h1>
+      <p class="lede">An open-source lakehouse in one binary: DuckDB, Iceberg and dbt, local by default. Every query gets a pre-flight verdict; the ones that don't fit burst to a worker in your own cloud with a hard cost cap. Humans ask in English or SQL. Agents call it over MCP.</p>
+      <Waitlist stack layout="stacked" note="Private beta on macOS and Linux. Free forever on the laptop. No spam." />
+      <div class="cta small">
+        <code class="install">$ brew install lakelet</code>
+        <a href={site.github}>Read the source</a>
+        <a href={url("/app")}>See the app</a>
+      </div>
+    </div>
+    <GaugeSlider />
+  </div>
+
+<div class="statbar">
+    <span>v0.1.0 · private beta</span><span>Apache 2.0</span><span>macOS 13+ · Ubuntu 22.04+</span><span><b>brew</b> · <b>pipx</b> · signed DMG</span><span>DuckDB 1.5.3 · Iceberg V3 · dbt Core 2</span><span><a href="https://github.com">github.com/lakelet</a></span><span><a href="#engineers">docs</a></span><span><a href={url("/agents")}>for agents</a></span>
+  </div>
+
+  <svg class="wave" viewBox="0 0 1080 28" preserveAspectRatio="none" aria-hidden="true"><path d="M0 14 C90 4, 180 24, 270 14 S450 4, 540 14 S720 24, 810 14 S990 4, 1080 14" stroke="#7FB3D5" stroke-width="2" fill="none"/></svg>
+  
+<section id="why">
+    <div class="eyebrow"># why</div>
+    <div class="why">
+      <div>
+        <h2 class="sec">Most teams pay by the second for a computer they already own.</h2>
+        <div class="sub">
+          <p>A cloud warehouse makes sense at a petabyte. Below a terabyte, a laptop with DuckDB is usually faster, and it doesn't tick.</p>
+          <p>Lakelet keeps your tables as Apache Iceberg in your own bucket, runs dbt Core against them on your machine, and checks each run before it starts. If it fits, it runs for free. If it doesn't, one click sends that one run to a worker that lives for a few minutes and shuts itself off.</p>
+          <p>Nothing is locked in. Point Snowflake or Spark at the same bucket tomorrow and everything is still there.</p>
+        </div>
+      </div>
+      <CompareBars note="Same workload, same bucket. Lakelet's number is five Team seats, nine burst runs and S3 storage; 1,231 runs happen on laptops for $0. <a href='/pricing'>Every assumption, and where Lakelet isn't cheaper →</a>" />
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="eyebrow"># the gauge</div>
+    <h2 class="sec">Three verdicts. You see them before anything runs.</h2>
+    <p class="sub">Lakelet reads the Iceberg manifests and DuckDB's own query plan to estimate scan size, peak memory and wall time, then compares that to the machine you're sitting at. Same laptop, three questions, three different answers.</p>
+    <div class="gauge-demo">
+      <ReplayTerminal />
+      <Verdicts stack />
+    </div>
+    <p class="fine" style="margin-top:14px">Every verdict shows its reasoning in one line. That sentence is the product.</p>
+  </section>
+
+<section id="ask">
+    <div class="eyebrow"># one box</div>
+    <h2 class="sec">One box. Ask in English or write SQL. Either way, you see the SQL.</h2>
+    <p class="sub">Type a question and Lakelet writes the query in front of you, editable, and runs the gauge before it runs anything. Type SQL and it just runs. The engineer ignores the English; the founder ignores the SQL. Nobody is asked which one they are.</p>
+    <div class="two">
+      <div class="panel who">
+        <h3>If you write SQL</h3>
+        <p>Your dbt project as-is. DAG coloured by verdict. <code>lakelet run --burst auto</code> in CI with a per-project cap. Your tables readable from Spark, Trino or Snowflake through an open Iceberg catalog.</p>
+      </div>
+      <div class="panel who">
+        <h3>If you don't</h3>
+        <p>Drop a CSV or an export onto the window and it's a table. Ask a question. Get a chart. Bring your own model key or run one locally; nothing leaves your laptop until you say so.</p>
+      </div>
+    </div>
+  </section>
+
+<section id="tables">
+    <div class="eyebrow"># open formats</div>
+    <h2 class="sec">Same tables everywhere, because they never move.</h2>
+    <p class="sub">Your data lives as Iceberg in your own S3 bucket. The laptop and the cloud worker read and write the same files through the same catalog. Bursting is just pointing a bigger DuckDB at the same prefix.</p>
+    <div class="panel how-diagram">
+      <svg viewBox="0 0 960 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram: your laptop and an ephemeral worker both read and write the same Iceberg tables in your S3 bucket, coordinated through an Iceberg REST catalog.">
+        <defs>
+          <marker id="hd-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="#5C6B7A"/></marker>
+          <marker id="hd-arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="#D24B3A"/></marker>
+        </defs>
+
+        <!-- Burst arc (top) -->
+        <path class="burst-arc" d="M150 74 C150 14, 810 14, 810 74" fill="none" stroke="#D24B3A" stroke-width="1.6" marker-end="url(#hd-arrB)"/>
+        <rect x="336" y="16" width="288" height="28" rx="14" fill="#FFFFFF" stroke="#D24B3A"/>
+        <text class="mono" x="480" y="34" text-anchor="middle" font-size="11.5" fill="#D24B3A"><tspan fill="#F5A623" font-weight="700">&gt;(°)&lt;</tspan> ~~~&gt;  burst one run · cap <tspan font-weight="700">$0.41</tspan></text>
+
+        <!-- Laptop -->
+        <g>
+          <rect x="30" y="80" width="200" height="120" rx="12" fill="#FFFFFF" stroke="#D5DBE2"/>
+          <rect x="80" y="102" width="100" height="58" rx="4" fill="#0F1519" stroke="#263140"/>
+          <rect x="68" y="162" width="124" height="7" rx="2" fill="#D5DBE2"/>
+          <text class="mono" x="130" y="136" text-anchor="middle" font-size="11" fill="#F5A623">lakelet</text>
+          <text x="130" y="226" text-anchor="middle" font-size="14" font-weight="800" fill="#172029">Your laptop</text>
+          <text x="130" y="246" text-anchor="middle" font-size="12" fill="#5C6B7A">DuckDB + dbt Core · local catalog</text>
+          <text x="130" y="264" text-anchor="middle" font-size="12" fill="#5C6B7A">free, open source</text>
+        </g>
+
+        <!-- Bucket (center) -->
+        <g>
+          <path d="M370 80 v110 a110 14 0 0 0 220 0 v-110z" fill="#EAF2F8" stroke="#2E6E9E" stroke-width="1.5"/>
+          <ellipse cx="480" cy="80" rx="110" ry="14" fill="#D6E6F2" stroke="#2E6E9E" stroke-width="1.5"/>
+          <text x="480" y="124" text-anchor="middle" font-size="14" font-weight="800" fill="#172029">Your S3 / GCS / R2 bucket</text>
+          <text class="mono" x="480" y="145" text-anchor="middle" font-size="11" fill="#2E6E9E">s3://your-bucket/warehouse/</text>
+          <text x="480" y="168" text-anchor="middle" font-size="12" fill="#5C6B7A">Apache Iceberg on Parquet</text>
+          <text x="480" y="186" text-anchor="middle" font-size="12" fill="#5C6B7A">Lakelet never holds your data</text>
+        </g>
+
+        <!-- Worker -->
+        <g>
+          <rect x="730" y="80" width="200" height="120" rx="12" fill="#FFFFFF" stroke="#D5DBE2" stroke-dasharray="6 5"/>
+          <rect x="780" y="102" width="100" height="58" rx="4" fill="#0F1519" stroke="#263140"/>
+          <text class="mono" x="830" y="136" text-anchor="middle" font-size="11" fill="#F5A623">duckdb ×16</text>
+          <text x="830" y="226" text-anchor="middle" font-size="14" font-weight="800" fill="#172029">Burst worker</text>
+          <text x="830" y="246" text-anchor="middle" font-size="12" fill="#5C6B7A">sized per run, in your bucket's region</text>
+          <text x="830" y="264" text-anchor="middle" font-size="12" fill="#5C6B7A">lives for one run, then shuts down</text>
+        </g>
+
+        <!-- Data arrows -->
+        <line x1="238" y1="150" x2="362" y2="150" stroke="#5C6B7A" stroke-width="1.5" marker-start="url(#hd-arr)" marker-end="url(#hd-arr)"/>
+        <text x="300" y="138" text-anchor="middle" font-size="11" fill="#5C6B7A">read / write Iceberg</text>
+        <line x1="598" y1="150" x2="722" y2="150" stroke="#5C6B7A" stroke-width="1.5" marker-start="url(#hd-arr)" marker-end="url(#hd-arr)"/>
+        <text x="660" y="138" text-anchor="middle" font-size="11" fill="#5C6B7A">same prefix, same files</text>
+
+        <!-- Catalog (below center) -->
+        <g>
+          <rect x="340" y="262" width="280" height="50" rx="10" fill="#FFFFFF" stroke="#D5DBE2"/>
+          <text x="480" y="283" text-anchor="middle" font-size="13" font-weight="800" fill="#172029">Iceberg REST catalog</text>
+          <text x="480" y="301" text-anchor="middle" font-size="11" fill="#5C6B7A">local SQLite · hosted Postgres · or your Polaris</text>
+        </g>
+        <path d="M230 186 C290 186, 290 287, 334 287" fill="none" stroke="#B8C2CC" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <path d="M730 186 C670 186, 670 287, 626 287" fill="none" stroke="#B8C2CC" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <text x="303" y="240" text-anchor="start" font-size="11" fill="#5C6B7A">atomic commits</text>
+        <text x="657" y="240" text-anchor="end" font-size="11" fill="#5C6B7A">short-lived credentials</text>
+      </svg>
+    </div>
+    <p class="scroll-hint">← scroll the diagram →</p>
+    <div class="facts">
+      <div><b>Under 1 TB</b><span>where a laptop beats an X-Small warehouse on most analytical queries</span></div>
+      <div><b>One binary</b><span>DuckDB, Iceberg write support and dbt Core, installed with brew or pip</span></div>
+      <div><b>Cap shown first</b><span>every burst run displays its maximum cost before you confirm it</span></div>
+      <div><b>Your bucket, open catalog</b><span>Iceberg REST catalog, readable by anything that speaks Iceberg</span></div>
+    </div>
+  </section>
+
+<section id="agents">
+    <div class="eyebrow"># for agents</div>
+    <h2 class="sec">Agents are about to run a lot of SQL. Give them a lakehouse with a budget.</h2>
+    <p class="sub">More than 60% of new Supabase databases are now launched by an AI tool rather than a person. Analytics is next: agents that load data, write models and answer questions on their own. Lakelet is built to be used that way from the first release, and it ships with the guardrail the incumbents lack: an agent has to ask the gauge before it runs, and it cannot spend past the cap you wrote.</p>
+    <div class="agents">
+      <Terminal title="~/.config/claude/mcp.json · lakelet mcp">
+<pre class="softwrap"><span class="d">// one line to give an agent your tables, the gauge, and a budget</span>
+&#123;
+  <span class="b">"mcpServers"</span>: &#123;
+    <span class="b">"lakelet"</span>: &#123;
+      <span class="b">"command"</span>: <span class="o">"lakelet"</span>, <span class="b">"args"</span>: [<span class="o">"mcp"</span>, <span class="o">"--project"</span>, <span class="o">"~/acme-analytics"</span>],
+      <span class="b">"env"</span>: &#123; <span class="b">"LAKELET_AGENT_CAP_USD"</span>: <span class="o">"2.00"</span> &#125;
+    &#125;
+  &#125;
+&#125;
+
+<span class="d">// read tools on by default; write tools opt-in per project in lakelet.toml</span>
+read   list_tables · describe · sample · estimate · query · lineage
+write  import_file · save_question · publish · burst(cap_usd)   <span class="d">[agents] allow = [...]</span>
+
+<span class="d">$</span> lakelet agents log
+<span class="p">agent:claude</span>  estimate  dau_by_country      <span class="r">●</span> Red · burst offered · cap $0.41
+<span class="p">agent:claude</span>  burst     dau_by_country      <span class="g">●</span> done · 1 min 12 s · <span class="w">$0.19</span>
+<span class="p">agent:claude</span>  query     top_customers_2026  <span class="g">●</span> Green · 1.8 s · $0.00
+<span class="p">agent:claude</span>  save      monthly_revenue     <span class="g">●</span> commit a41f2c9 · 2 checks added
+<span class="p">budget</span>       today $0.19 of $2.00 · 4 calls · 0 refused</pre>
+      </Terminal>
+      <div class="agentlist">
+        <div class="panel"><h3>The gauge as a guardrail <code>estimate</code></h3><p>An agent asks before it runs. Green runs; Red comes back as a cost and a time the agent can reason about, not a surprise bill. The same verdict humans see, as a tool result.</p></div>
+        <div class="panel"><h3>A cap per agent, per day <code>LAKELET_AGENT_CAP_USD</code></h3><p>Set once. The worker enforces it; past it, calls are refused with the remaining budget. An autonomous loop cannot spend more than the number you wrote.</p></div>
+        <div class="panel"><h3>Everything it did, in git <code>save_question</code></h3><p>Questions an agent saves become dbt models with tests and a commit that names the agent. Review the diff like any other PR.</p></div>
+        <div class="panel"><h3>Legible to models <code>AGENTS.md</code> <code>llms.txt</code></h3><p><code>lakelet init</code> writes an AGENTS.md describing your tables, the gauge and the cap, so any coding agent that opens the folder knows how to behave. The docs ship as llms.txt. <a href={url("/agents")}>Full agent reference →</a></p></div>
+      </div>
+    </div>
+    <div class="two" style="margin-top:20px">
+      <div class="panel who">
+        <h3>Works with</h3>
+        <p>Claude Code, Cursor, Codex, Windsurf, and anything else that speaks MCP. Any model provider, or a local model. Local model plus local project means nothing leaves the laptop; agents get the same privacy posture people do.</p>
+      </div>
+      <div class="panel who">
+        <h3>For platforms</h3>
+        <p>Build an AI app builder, a notebook or a BI tool? A provisioning API and a remote MCP let you create a lakehouse for your user in their bucket with one call, set their cap, and never host their data. Team tier, 2027. <a href="#waitlist">Talk to us</a>.</p>
+      </div>
+    </div>
+  </section>
+
+<section id="engineers">
+    <div class="eyebrow"># for engineers</div>
+    <h2 class="sec">For engineers: what changed in 2026, and what Lakelet does with it.</h2>
+    <p class="sub">You bring the laptop and the bucket. Lakelet brings the catalog, the estimate, and the worker. Everything underneath is open and versioned.</p>
+    <div class="facts tech">
+      <div><b>DuckDB 1.5.3 writes Iceberg</b><span>MERGE INTO, ALTER TABLE, bucket() and truncate() partition transforms, Iceberg V3 deletion vectors and row lineage, from an embedded engine against any REST catalog. Released May 29, 2026.</span></div>
+      <div><b>No Spark cluster to write a table</b><span>Until May, writing Iceberg meant running Spark. A JVM cluster to append rows to a table on your own laptop is the thing this release removed. Lakelet never starts one.</span></div>
+      <div><b>An open catalog, not a Lakelet one</b><span>Lakelet ships its own Iceberg REST catalog: SQLite in the binary, Postgres when hosted. It is Polaris-compatible and you can attach Polaris, Lakekeeper or S3 Tables instead. Spark, Trino, Snowflake and Athena read what Lakelet writes.</span></div>
+      <div><b>The engine stays MIT</b><span>AWS acquired DuckLabs on Aug 26, 2026. The DuckDB project was explicitly not acquired and remains under the independent DuckDB Foundation. Lakelet owns the catalog, the gauge and the burst path, not the engine.</span></div>
+    </div>
+    <div class="engines">
+      <span>DuckDB 1.5.3</span><span>Apache Iceberg V3</span><span>Iceberg REST catalog</span><span>dbt Core v2 · Rust runtime</span><span>Apache Polaris compatible</span><span>Parquet on your S3 / GCS / R2</span>
+    </div>
+    <div class="techgrid">
+      <div class="panel ladder">
+        <h3>Burst worker sizes</h3>
+        <p>Sized from the gauge's peak-memory estimate with a 1.5× margin, launched in your bucket's region. AWS Fargate list price per hour before Lakelet's 15%; most jobs run for minutes.</p>
+        <WorkerLadder />
+        <small>Spot and a Lambda backend for jobs under 10 GB follow the private beta. Cold start today is 30–60 s on Fargate, and the timer shows it.</small>
+      </div>
+      <Terminal title="the whole thing from a terminal" class="eng-term">
+        <pre class="softwrap">$ lakelet init
+  catalog   ./.lakelet/catalog.db   (Iceberg REST, SQLite)
+  warehouse ./warehouse             (Parquet + Iceberg)
+
+$ lakelet sql "select count(*) from s3_events"
+  <span class="g">● Runs here</span> · scans 2.1 GB · ~4 s
+  9,412,880
+
+$ lakelet estimate -f dau_by_country.sql
+  <span class="r">● Needs more machine</span> · 48 GB from s3://acme-data,
+  ~34 min at 190 Mbps · burst ~1.5 min · cap $0.41
+
+$ lakelet run --burst auto        # dbt, CI, per-project cap in lakelet.toml
+  12 models · 9 local · 3 burst · est $0.58 · cap $5.00
+  <span class="r">&gt;(°)&lt;</span> ~~~~~~&gt;  bursting fct_daily_active · 16 vCPU / 64 GB · us-east-1
+
+$ lakelet catalog serve --port 8181   # let Spark or Trino read your tables</pre>
+      </Terminal>
+    </div>
+    <p class="sub" style="margin-top:22px">Security in one paragraph: hosted Lakelet stores catalog metadata, job specs and metrics, never data files. Workers get a single-use job token and storage credentials scoped to the table prefixes in that job, expiring with it. No inbound network on a worker; outbound only to your bucket, the catalog and the control plane. SQL text is kept for the duration of the job unless you opt into history.</p>
+  </section>
+
+  <section id="pricing">
+    <div class="eyebrow"># pricing</div>
+    <h2 class="sec">Priced like a tool, not like a meter.</h2>
+    <p class="sub">The local app is open source and stays free. You pay for a shared catalog and for compute you borrow, with a hard cap you set per run.</p>
+    <div class="grid3 plans3">
+      {plans.map(p => (
+        <div class="panel plan"><b>{p.price}{p.unit && <small>{p.unit}</small>}</b><h3>{p.name}</h3><p>{p.blurb}</p></div>
+      ))}
+    </div>
+    <p class="sub" style="margin:18px 0 0"><a href={url("/pricing")}>Full pricing, worker sizes, and a line-by-line comparison with Snowflake, BigQuery, Databricks and MotherDuck →</a></p>
+  </section>
+
+  <section class="final dark" id="waitlist">
+    <Logo width={360} dark class="final-logo" />
+    <h2 class="sec">Send us your last warehouse bill. We'll show you the Lakelet version.</h2>
+    <p class="lede">Private beta on macOS and Linux. Free forever on the laptop.</p>
+    <Waitlist dark />
+  </section>
+
+</Base>
+
+<style>
+  /* hero */
+  .hero{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;padding:56px 0 72px}
+  .hero>*{min-width:0}
+  .hero h1{font-size:clamp(34px,4.6vw,54px);line-height:1.02;letter-spacing:-.03em;font-weight:800}
+  .hero .lede{font-size:18px;margin:20px 0 0;max-width:36ch}
+  .hero-brand{margin:6px 0 10px}
+  .hero-brand svg{width:min(300px,70vw);height:auto;display:block}
+  .hero-brand svg text{font-family:var(--sans);font-weight:800}
+  @keyframes leap{0%{offset-distance:0%;opacity:0}8%{opacity:1}92%{opacity:1}100%{offset-distance:100%;opacity:0}}
+  .leaper{offset-path:path('M92 40 C120 -10, 210 -10, 238 40');offset-rotate:auto;offset-distance:50%;opacity:1}
+  .leaper.play{animation:leap 2.4s cubic-bezier(.45,.05,.55,.95) 1 forwards}
+  @media (prefers-reduced-motion:reduce){.leaper.play{animation:none;offset-distance:50%;opacity:1}}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .cta.small{margin-top:18px;gap:18px;font-size:14px;font-weight:600}
+  .cta.small a{color:var(--muted)}
+  code.install{font:500 13px var(--mono);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+  .statbar{display:flex;flex-wrap:wrap;gap:10px 22px;font:500 12.5px var(--mono);color:var(--muted);padding:14px 0 6px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:8px 0 26px}
+  .statbar b{color:var(--ink);font-weight:700}
+  .statbar a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--shallow)}
+  .wave{display:block;width:100%;height:28px;margin:6px 0 -6px}
+  .sub{max-width:56ch}
+  /* why */
+  .why{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:start}
+  .why>*{min-width:0}
+  /* gauge demo */
+  .gauge-demo{display:grid;grid-template-columns:1.15fr .85fr;gap:20px;align-items:start}
+  .gauge-demo>*{min-width:0}
+  /* tables section diagram (from burrow) */
+  .how-diagram{margin-top:8px;margin-bottom:20px;padding:26px 18px;overflow-x:auto;box-shadow:0 20px 40px -30px rgba(23,32,41,.35)}
+  .how-diagram svg{display:block;width:100%;height:auto;max-width:960px;margin:0 auto;min-width:560px}
+  .how-diagram svg text{font-family:var(--sans)}
+  .how-diagram svg text.mono{font-family:var(--mono)}
+  .how-diagram+.scroll-hint{margin:-8px 0 18px}
+  @media (prefers-reduced-motion:no-preference){
+    .how-diagram .burst-arc{stroke-dasharray:6 6;animation:burstflow 1.6s linear infinite}
+    @keyframes burstflow{to{stroke-dashoffset:-24}}
+  }
+  /* agents */
+  .agents{display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:start}
+  .agents>*{min-width:0}
+  .agents :global(.term pre){padding:14px 16px 16px}
+  .agentlist{display:grid;gap:14px}
+  .agentlist .panel{padding:18px 20px}
+  .agentlist h3{font-size:16px;margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .agentlist h3 code{font-size:12px;background:var(--bg);border-radius:4px;padding:2px 6px;color:var(--lake)}
+  .agentlist p{color:var(--muted);font-size:14px}
+  /* engineers */
+  .techgrid{display:grid;grid-template-columns:1fr 1.2fr;gap:20px}
+  .techgrid>*{min-width:0}
+  .ladder{padding:22px}
+  .ladder h3{font-size:17px;margin-bottom:8px}
+  .ladder p{color:var(--muted);font-size:14px;margin-bottom:12px}
+  .ladder small{display:block;color:var(--muted);font-size:12px;margin-top:10px}
+  .techgrid :global(.eng-term .bar em){text-transform:none}
+  /* pricing */
+  .plan{padding:22px}
+  .plan b{display:block;font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1}
+  .plan b small{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0;margin-left:4px}
+  .plan h3{font-size:17px;margin:10px 0 6px}
+  .plan p{color:var(--muted);font-size:14px}
+  /* final */
+  .final :global(.final-logo){width:min(360px,80vw);height:auto;margin:0 auto 18px;display:block}
+  @media (max-width:820px){
+    .hero{grid-template-columns:1fr;padding:32px 0 48px}
+    .why,.gauge-demo,.agents,.techgrid{grid-template-columns:1fr}
+  }
+</style>
+
+<script>
+  (function () {
+    const l = document.getElementById('leaper'), b = document.getElementById('heroBrand'); if (!l || !b) return;
+    const play = () => { l.classList.remove('play'); void (l as any).offsetWidth; l.classList.add('play'); };
+    setTimeout(play, 400); b.addEventListener('mouseenter', play); b.addEventListener('click', play);
+  })();
+</script>

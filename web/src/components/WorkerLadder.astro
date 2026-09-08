@@ -1,0 +1,21 @@
+---
+import { workerLadder } from '../data/pricing';
+interface Props { detailed?: boolean }
+const { detailed = false } = Astro.props;
+---
+<div class="tblwrap">
+  <table class="ladder">
+    <tr><th>Worker</th><th class="n">vCPU</th><th class="n">Memory</th><th class="n">List / hr</th>{detailed && <th class="n">+15% / hr</th>}{detailed && <th class="n">5-min run</th>}</tr>
+    {workerLadder.map(w => (
+      <tr><td>{w.size}</td><td class="n">{w.vcpu}</td><td class="n">{w.mem} GB</td><td class="n">${w.listHr.toFixed(2)}</td>{detailed && <td class="n">${w.withMarginHr.toFixed(2)}</td>}{detailed && <td class="n">${w.fiveMin.toFixed(2)}</td>}</tr>
+    ))}
+  </table>
+</div>
+
+<style>
+  .ladder{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums;min-width:320px}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:12px;padding:6px 8px 6px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:8px 8px 8px 0;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:0}
+  .n{text-align:right;white-space:nowrap}
+</style>

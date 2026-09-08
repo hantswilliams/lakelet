@@ -1,0 +1,40 @@
+---
+// The early-access form. `stack` adds the "What do you use today?" select
+// (only the hero form on the landing page collects it). `dark` styles it for
+// the dark CTA band. `layout="stacked"` puts the select under the email row.
+// Submission is handled once, site-wide, in Base.astro.
+import { site } from '../data/nav';
+interface Props { stack?: boolean; dark?: boolean; layout?: 'inline' | 'stacked'; note?: string; id?: string }
+const { stack = false, dark = false, layout = 'inline', note, id } = Astro.props;
+---
+<form class:list={['waitlist', { dark, stacked: layout === 'stacked' }]} data-waitlist method="POST" action="#" novalidate id={id}>
+  <div class="row">
+    <input type="email" name="email" placeholder="you@company.com" aria-label="Work email" autocomplete="email" required>
+    {layout === 'inline' && stack && <select name="stack" aria-label="What do you use today?"><option value="">What do you use today?</option>{site.stackOptions.map(o => <option>{o}</option>)}</select>}
+    <button class:list={['btn', { fish: dark }]} type="submit">{site.cta.label}</button>
+  </div>
+  {layout === 'stacked' && stack && <select name="stack" aria-label="What do you use today?"><option value="">What do you use today? (optional)</option>{site.stackOptions.map(o => <option>{o}</option>)}</select>}
+  <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+  {note && <p class="fine">{note}</p>}
+  <p class="fine done" hidden>You're on the list. We'll be in touch.</p>
+</form>
+
+<style>
+  form.waitlist{margin-top:22px;display:grid;gap:10px;max-width:520px}
+  form.waitlist .row{display:flex;gap:10px;flex-wrap:wrap}
+  form.waitlist input[type=email],form.waitlist select{font:500 15px var(--sans);padding:12px 14px;border:1.5px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);min-width:0}
+  form.waitlist input[type=email]{flex:1 1 220px}
+  form.waitlist select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%235C6B7A' stroke-width='1.8'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+  form.waitlist .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+  form.waitlist .fine{margin:0}
+  form.waitlist :global(.fine.err){color:var(--burst)}
+  form.waitlist .fine.done{color:var(--local);font-weight:600}
+  /* dark band variant */
+  form.waitlist.dark{margin:22px auto 0;max-width:720px}
+  form.waitlist.dark .row{justify-content:center}
+  form.waitlist.dark input[type=email],form.waitlist.dark select{background:#22303D;border-color:#3A4856;color:#fff}
+  form.waitlist.dark input[type=email]{max-width:320px}
+  form.waitlist.dark select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%239AA8B6' stroke-width='1.8'/%3E%3C/svg%3E")}
+  form.waitlist.dark .fine{text-align:center}
+  form.waitlist.dark .fine.done{color:#8FE0B0}
+</style>

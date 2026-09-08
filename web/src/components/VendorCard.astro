@@ -1,0 +1,27 @@
+---
+import type { Vendor } from '../data/pricing';
+import { fmt } from '../data/pricing';
+interface Props { vendor: Vendor }
+const { vendor: v } = Astro.props;
+---
+<div class:list={['panel', 'vendor', { us: v.us }]}>
+  <h3>{v.name} <b>{fmt(v.total)}</b></h3>
+  <p class="why">{v.why}</p>
+  <table>
+    {v.lines.map(([k, val], i) => <tr><td class:list={{ total: i === v.lines.length - 1 }}>{k}</td><td class:list={{ total: i === v.lines.length - 1 }}>{val}</td></tr>)}
+  </table>
+</div>
+
+<style>
+  .vendor{padding:22px}
+  .vendor h3{font-size:17px;display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .vendor h3 b{font-size:22px;letter-spacing:-.02em}
+  .vendor .why{font-size:13px;color:var(--muted);margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+  td{padding:7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  td:last-child{text-align:right;white-space:nowrap}
+  td.total{font-weight:800}
+  .vendor.us{border-color:var(--local)}
+  .vendor.us h3 b{color:var(--local)}
+</style>

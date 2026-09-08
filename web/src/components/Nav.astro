@@ -1,0 +1,24 @@
+---
+import Logo from './Logo.astro';
+import { nav, site } from '../data/nav';
+import { url, isCurrent } from '../lib/url';
+const pathname = Astro.url.pathname;
+---
+<header>
+  <a class="logo" href={url("/")} aria-label="Lakelet home"><Logo /></a>
+  <nav>
+    {nav.map(item => (
+      <a href={url(item.href)} aria-current={isCurrent(item.href, pathname) ? 'page' : undefined} rel={'external' in item && item.external ? 'noopener' : undefined}>{item.label}</a>
+    ))}
+    <a class="btn" href={url(site.cta.href)}>{site.cta.label}</a>
+  </nav>
+</header>
+
+<style>
+  header{display:flex;align-items:center;justify-content:space-between;padding:20px 0}
+  a.logo{text-decoration:none;display:flex;align-items:center}
+  nav{display:flex;gap:22px;font-size:14px;font-weight:600;align-items:center}
+  nav a{text-decoration:none;color:var(--muted)}
+  nav a:hover,nav a[aria-current]{color:var(--lake)}
+  @media (max-width:820px){ nav a:not(:last-child){display:none} }
+</style>

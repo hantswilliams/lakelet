@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://lakelet.dev/sitemap-index.xml

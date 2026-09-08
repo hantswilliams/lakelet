@@ -1,0 +1,99 @@
+---
+// Looping typewriter replay of a transcript. The transcript is rendered
+// statically inside <pre> (works without JS, for crawlers, and under
+// prefers-reduced-motion); with motion allowed it's lifted out and replayed.
+// Lines are <span class="ln ...">; "cmd" lines are typed, a line with
+// data-input="y" pauses then types the answer, "cmd end" is the final prompt.
+import Terminal from './Terminal.astro';
+---
+<Terminal title="zsh · ~/acme-analytics · lakelet sql" class="term-replay" label="A lakelet terminal session: one query runs here in two seconds, one runs here slowly and spills to disk, and one needs more machine and bursts to a worker with a $0.41 cap, finishing for $0.29.">
+  <button slot="bar" type="button" class="replay" id="gaugeReplay" aria-label="Replay">↻ replay</button>
+<pre id="gaugeTerm" class="softwrap"><span class="ln cmd"><span class="p">$</span> lakelet sql <span class="o">"select region, sum(amount) from orders where order_date &gt;= '2026-08-01' group by 1"</span></span>
+<span class="ln"><span class="g">●</span> <span class="w">Runs here</span> <span class="d">· scans 210 MB · fits in memory · ~2 s</span></span>
+<span class="ln tbl">  ┌──────────┬─────────────┐</span>
+<span class="ln tbl">  │ region   │ sum(amount) │</span>
+<span class="ln tbl">  ├──────────┼─────────────┤</span>
+<span class="ln tbl">  │ EMEA     │   4,182,930 │</span>
+<span class="ln tbl">  │ NA       │   9,517,204 │</span>
+<span class="ln tbl">  │ APAC     │   2,904,118 │</span>
+<span class="ln tbl">  └──────────┴─────────────┘</span>
+<span class="ln"><span class="d">  3 rows · 1.8 s</span></span>
+<span class="ln gap"></span>
+<span class="ln cmd"><span class="p">$</span> lakelet sql -f models/customer_ltv.sql</span>
+<span class="ln"><span class="y">●</span> <span class="w">Runs here, slowly</span> <span class="d">· scans 6.4 GB · peak 14 GB of 12.8 GB limit · <span class="y">spills to disk</span> · ~3 min</span></span>
+<span class="ln"><span class="d">  burst would be ~40 s · cap $0.08 · add --burst to send it instead</span></span>
+<span class="ln"><span class="g">✓</span> 2.9M rows · 2m 41s <span class="d">· spilled 3.1 GB to disk</span></span>
+<span class="ln gap"></span>
+<span class="ln cmd"><span class="p">$</span> lakelet sql -f models/sessions_rollup.sql</span>
+<span class="ln"><span class="r">●</span> <span class="w">Needs more machine</span> <span class="d">· 48 GB from s3://acme-data · ~34 min at your 190 Mbps</span></span>
+<span class="ln ask" data-input="y">  <span class="o">&gt;(°)&lt;</span> <span class="d">~~~~~~&gt;</span> burst? 16 vCPU / 64 GB · us-east-1 · cap <span class="w">$0.41</span>   <span class="d">[y/N]</span> <span class="ti">y</span></span>
+<span class="ln"><span class="d">  job brst_7k2q started in us-east-1 · worker lives for this run only</span></span>
+<span class="ln"><span class="g">✓</span> done · 1m 24s · 48 GB scanned · <span class="w">$0.29</span> <span class="d">of $0.41 cap · result registered as temp table</span></span>
+<span class="ln gap"></span>
+<span class="ln cmd end"><span class="p">$</span> </span></pre>
+</Terminal>
+
+<style is:global>
+  .term-replay{position:relative}
+  .term-replay pre{padding:14px 16px 12px}
+  .term-replay .ln{display:inline}
+  .term-replay .tbl{color:#9AA8B6;white-space:pre}
+  .term-replay .ti{color:#fff;font-weight:700}
+  .term-replay .cur{display:inline-block;width:.6em;height:1.1em;vertical-align:-.2em;background:#F5A623;margin-left:1px;animation:curblink 1s steps(1) infinite}
+  .term-replay pre.ghost{position:absolute;left:0;right:0;top:0;visibility:hidden;pointer-events:none;min-height:0!important}
+  @keyframes curblink{50%{opacity:0}}
+  .term-replay .bar .replay{margin-left:auto;font:500 11px var(--mono);color:#9AA8B6;background:transparent;border:1px solid var(--termline);border-radius:5px;padding:3px 8px;cursor:pointer}
+  .term-replay .bar .replay:hover{color:#fff}
+  @media (prefers-reduced-motion:reduce){.term-replay .cur{animation:none}}
+</style>
+
+<script>
+  (function () {
+    const pre = document.getElementById('gaugeTerm'); if (!pre) return;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const btn = document.getElementById('gaugeReplay');
+    if (reduce) { if (btn) btn.hidden = true; return; }
+    const script = [...pre.querySelectorAll<HTMLElement>('.ln')].map(l => ({ html: l.innerHTML, cls: l.className, input: l.getAttribute('data-input') }));
+    // a hidden ghost copy of the finished transcript sets the height, so the layout never jumps while replaying
+    const ghost = pre.cloneNode(true) as HTMLElement; ghost.id = ''; ghost.classList.add('ghost'); ghost.setAttribute('aria-hidden', 'true'); pre.parentNode!.appendChild(ghost);
+    const lock = () => { pre.style.minHeight = ghost.offsetHeight + 'px'; };
+    lock(); window.addEventListener('resize', lock);
+    pre.innerHTML = '';
+    let visible = true, run = 0;
+    if ('IntersectionObserver' in window) new IntersectionObserver(es => { visible = es[0].isIntersecting; }, { threshold: .15 }).observe(pre);
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+    async function wait(ms: number, id: number) { await sleep(ms); while (!visible && id === run) await sleep(200); }
+    const cur = () => { const c = document.createElement('span'); c.className = 'cur'; return c; };
+    async function typeText(node: HTMLElement, text: string, id: number, per = 18) {
+      const c = cur(); node.appendChild(c);
+      for (const ch of text) { if (id !== run) return; node.insertBefore(document.createTextNode(ch), c); await wait(per + Math.random() * per * 1.4, id); }
+      c.remove();
+    }
+    const mk = (cls: string) => { const el = document.createElement('span'); el.className = cls; return el; };
+    async function play() {
+      const id = ++run; pre!.innerHTML = '';
+      for (const step of script) {
+        if (id !== run) return;
+        const el = mk(step.cls); if (pre!.childNodes.length) pre!.appendChild(document.createTextNode('\n')); pre!.appendChild(el);
+        if (step.cls.includes('cmd')) {
+          const tmp = document.createElement('span'); tmp.innerHTML = step.html;
+          const p = tmp.querySelector('.p'); const text = tmp.textContent!.replace(/^\$\s?/, '');
+          el.appendChild(p ? p.cloneNode(true) : document.createTextNode('$')); el.appendChild(document.createTextNode(' '));
+          if (step.cls.includes('end')) { el.appendChild(cur()); await wait(2600, id); continue; }
+          await wait(420, id); await typeText(el, text, id); if (id !== run) return;
+          el.innerHTML = step.html; await wait(380, id);
+        } else if (step.input) {
+          el.innerHTML = step.html; const ti = el.querySelector<HTMLElement>('.ti')!; ti.textContent = '';
+          await wait(1300, id); await typeText(ti, step.input, id, 110); if (id !== run) return; await wait(700, id);
+        } else {
+          el.innerHTML = step.html;
+          await wait(step.cls.includes('gap') ? 90 : step.cls.includes('tbl') ? 45 : step.html.includes('✓') ? 900 : 420, id);
+        }
+        pre!.scrollTop = pre!.scrollHeight;
+      }
+      if (id === run) play();   // loop
+    }
+    if (btn) btn.addEventListener('click', () => play());
+    play();
+  })();
+</script>

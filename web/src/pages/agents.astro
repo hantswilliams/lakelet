@@ -1,0 +1,240 @@
+---
+import Base from '../layouts/Base.astro';
+import { url } from '../lib/url';
+import Terminal from '../components/Terminal.astro';
+import Waitlist from '../components/Waitlist.astro';
+---
+<Base title="For agents" description="Everything a coding agent, an autonomous pipeline or a platform needs to use Lakelet: setup per client, the tool list, permissions and budgets, the AGENTS.md contract, and the platforms API.">
+  <div class="doc">
+    <div class="eyebrow"># for agents · reference</div>
+    <h1>A lakehouse an agent can use without a human watching the bill.</h1>
+    <p class="lede">Everything a coding agent, an autonomous pipeline or a platform needs to use Lakelet: setup per client, the tool list, permissions and budgets, the AGENTS.md contract, and the platforms API. Same core as the CLI and the app; the gauge and the cap apply to every call.</p>
+    <div class="toc"><a href="#setup">setup</a><a href="#tools">tools</a><a href="#permissions">permissions &amp; budget</a><a href="#agentsmd">AGENTS.md</a><a href="#prompts">prompts</a><a href="#audit">audit</a><a href="#platforms">platforms</a><a href="#security">security</a><a href="#faq">faq</a></div>
+  </div>
+
+  <section id="setup">
+    <div class="eyebrow"># setup · one line per client</div>
+    <h2 class="sec">Connect an agent.</h2>
+    <p class="sub">Lakelet ships a stdio MCP server. Point your client at <code>lakelet mcp</code> with a project folder and a daily cap. Read tools work immediately; write tools stay off until you enable them in <code>lakelet.toml</code>.</p>
+    <div class="tabs"><button class="on" data-c="claude">Claude Code</button><button class="" data-c="cursor">Cursor</button><button class="" data-c="codex">Codex</button><button class="" data-c="windsurf">Windsurf</button><button class="" data-c="other">Any MCP client</button></div>
+    <div class="cfg on" id="cfg-claude"><Terminal title="~/.claude/mcp.json  ·  or:  claude mcp add lakelet -- lakelet mcp --project ."><pre>&#123;
+  <span class="b">"mcpServers"</span>: &#123;
+    <span class="b">"lakelet"</span>: &#123;
+      <span class="b">"command"</span>: <span class="o">"lakelet"</span>,
+      <span class="b">"args"</span>: [<span class="o">"mcp"</span>, <span class="o">"--project"</span>, <span class="o">"."</span>],
+      <span class="b">"env"</span>: &#123; <span class="b">"LAKELET_AGENT_CAP_USD"</span>: <span class="o">"2.00"</span> &#125;
+    &#125;
+  &#125;
+&#125;</pre></Terminal></div><div class="cfg " id="cfg-cursor"><Terminal title=".cursor/mcp.json in the project, or Settings › MCP"><pre>&#123;
+  <span class="b">"mcpServers"</span>: &#123;
+    <span class="b">"lakelet"</span>: &#123;
+      <span class="b">"command"</span>: <span class="o">"lakelet"</span>,
+      <span class="b">"args"</span>: [<span class="o">"mcp"</span>, <span class="o">"--project"</span>, <span class="o">"$&#123;workspaceFolder&#125;"</span>],
+      <span class="b">"env"</span>: &#123; <span class="b">"LAKELET_AGENT_CAP_USD"</span>: <span class="o">"2.00"</span> &#125;
+    &#125;
+  &#125;
+&#125;</pre></Terminal></div><div class="cfg " id="cfg-codex"><Terminal title="~/.codex/config.toml"><pre><span class="b">[mcp_servers.lakelet]</span>
+command = <span class="o">"lakelet"</span>
+args    = [<span class="o">"mcp"</span>, <span class="o">"--project"</span>, <span class="o">"."</span>]
+
+<span class="b">[mcp_servers.lakelet.env]</span>
+LAKELET_AGENT_CAP_USD = <span class="o">"2.00"</span></pre></Terminal></div><div class="cfg " id="cfg-windsurf"><Terminal title="~/.codeium/windsurf/mcp_config.json"><pre>&#123;
+  <span class="b">"mcpServers"</span>: &#123;
+    <span class="b">"lakelet"</span>: &#123;
+      <span class="b">"command"</span>: <span class="o">"lakelet"</span>,
+      <span class="b">"args"</span>: [<span class="o">"mcp"</span>, <span class="o">"--project"</span>, <span class="o">"."</span>],
+      <span class="b">"env"</span>: &#123; <span class="b">"LAKELET_AGENT_CAP_USD"</span>: <span class="o">"2.00"</span> &#125;
+    &#125;
+  &#125;
+&#125;</pre></Terminal></div><div class="cfg " id="cfg-other"><Terminal title="stdio transport · or Team tier remote endpoint"><pre><span class="d"># stdio</span>
+<span class="p">$</span> lakelet mcp --project ~/acme-analytics
+
+<span class="d"># remote (Team tier, OAuth)</span>
+https://mcp.lakelet.dev/teams/acme      <span class="d">Authorization: Bearer &lt;oauth token&gt;</span></pre></Terminal></div>
+  </section>
+
+  <section id="tools">
+    <div class="eyebrow"># tools</div>
+    <h2 class="sec">What the agent can call.</h2>
+    <p class="sub">Read tools are always on. Write tools are opt-in per project. <code>burst</code> requires a cap on every call and is refused without one.</p>
+    <div class="tblwrap"><table class="tools">
+      <tr><th>tool</th><th>does</th><th>returns</th><th>access</th></tr>
+      <tr><td><code>list_tables()</code></td><td>Tables in the catalog with size, row count and location (local or bucket)</td><td>list</td><td><span class="rw r">read</span></td></tr>
+      <tr><td><code>describe(table)</code></td><td>Columns, types, partitioning, freshness, last commit</td><td>schema</td><td><span class="rw r">read</span></td></tr>
+      <tr><td><code>sample(table, n≤5)</code></td><td>Up to five rows, values truncated to 80 chars, never executed</td><td>rows</td><td><span class="rw r">read</span></td></tr>
+      <tr><td><code>estimate(sql)</code></td><td>The gauge: bytes scanned, peak memory, local time, burst time and cost, verdict and one-line reason</td><td>verdict</td><td><span class="rw r">read</span></td></tr>
+      <tr><td><code>query(sql)</code></td><td>Runs locally if Green or Yellow; returns a Red verdict instead of running when it does not fit</td><td>rows or verdict</td><td><span class="rw r">read</span></td></tr>
+      <tr><td><code>lineage(table)</code></td><td>Upstream and downstream tables from dbt and Iceberg history</td><td>graph</td><td><span class="rw r">read</span></td></tr>
+      <tr><td><code>burst(sql, cap_usd)</code></td><td>Runs on a worker in your cloud; the worker stops at the cap and returns partial progress</td><td>rows or partial</td><td><span class="rw w">write · cap required</span></td></tr>
+      <tr><td><code>import_file(path)</code></td><td>CSV, Parquet, Excel or JSON into an Iceberg table, with the gauge on the import</td><td>table</td><td><span class="rw w">write</span></td></tr>
+      <tr><td><code>save_question(title, sql)</code></td><td>Writes a dbt model with two default checks and commits naming the agent</td><td>commit</td><td><span class="rw w">write</span></td></tr>
+      <tr><td><code>publish(table, uri)</code></td><td>Copies a local table to a bucket and registers it in the catalog</td><td>uri</td><td><span class="rw w">write</span></td></tr>
+    </table></div>
+  </section>
+
+  <section id="permissions">
+    <div class="eyebrow"># permissions &amp; budget</div>
+    <h2 class="sec">Two settings. The agent cannot change either.</h2>
+    <div class="grid2">
+      <Terminal title="lakelet.toml"><pre><span class="b">[agents]</span>
+allow         = [<span class="o">"save_question"</span>, <span class="o">"burst"</span>]   <span class="d"># write tools this project permits</span>
+daily_cap_usd = 2.00                            <span class="d"># per agent, per day; env var overrides down, never up</span>
+history       = false                           <span class="d"># keep SQL text an agent ran? default no</span>
+
+<span class="d"># read tools are always on</span>
+<span class="d"># no tool can edit this file or AGENTS.md</span></pre></Terminal>
+      <div class="panel who">
+        <h3>What a refusal looks like</h3>
+        <p>Past the cap, a call returns a structured refusal, not an error: <code>&#123;"refused": true, "reason": "daily cap", "remaining_usd": 0.00, "resets": "2026-09-08T00:00Z"&#125;</code>. Agents handle it the way they handle any tool result; loops end cleanly. A healthy number of refusals in the log is proof the cap works.</p>
+        <p style="margin-top:10px">On the Team tier each agent gets its own identity and budget, set in the team settings and enforced by the control plane rather than the laptop.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="agentsmd">
+    <div class="eyebrow"># AGENTS.md</div>
+    <h2 class="sec">The contract in the folder.</h2>
+    <p class="sub"><code>lakelet init</code> writes an AGENTS.md next to the project. Any coding agent that opens the folder reads it before touching anything. Regenerated when tables change; never editable through a tool.</p>
+    <Terminal title="~/acme-analytics/AGENTS.md · generated by lakelet init"><pre><span class="w"># acme-analytics · Lakelet project</span>
+
+This folder is a Lakelet lakehouse: DuckDB + Apache Iceberg + dbt. Data lives in
+./warehouse (local) and s3://acme-data/warehouse (published). Catalog: ./.lakelet/catalog.db.
+
+<span class="w">## Tables</span>
+orders (412 MB, local) · customers (2.1 MB, local) · events (48 GB, s3://acme-data)
+
+<span class="w">## Rules</span>
+- Call <span class="b">estimate</span> before <span class="b">query</span> on anything touching <span class="b">events</span>. Red means do not run locally.
+- <span class="b">burst</span> needs a cap. Default cap for this project: $0.50 per run. Daily budget: $2.00.
+- Save reusable questions with <span class="b">save_question</span>; they become dbt models with checks.
+- Do not modify lakelet.toml, AGENTS.md, or anything under .lakelet/.
+- Prefer SQL that reads from dbt models (stg_*, fct_*) over raw tables.
+
+<span class="w">## Conventions</span>
+dbt project at ./ (dbt-duckdb). Models in models/. Run with <span class="b">lakelet run</span>. Tests are "checks".</pre></Terminal>
+  </section>
+
+  <section id="prompts">
+    <div class="eyebrow"># prompts · copy into your editor</div>
+    <h2 class="sec">Things that work on day one.</h2>
+    <div class="grid2">
+      <div>
+        <div class="prompt">Turn <code>orders.csv</code> into a table, write three checks for it, and save a question for monthly revenue by customer.<button onclick="navigator.clipboard&&navigator.clipboard.writeText(this.parentNode.textContent.replace('copy',''));this.textContent='copied'">copy</button></div>
+        <div class="prompt">Estimate daily active users by country for the last 90 days from <code>events</code>. If it is Red, burst it with a $0.50 cap and tell me the actual cost.<button onclick="navigator.clipboard&&navigator.clipboard.writeText(this.parentNode.textContent.replace('copy',''));this.textContent='copied'">copy</button></div>
+        <div class="prompt">Read AGENTS.md, then list every table with a freshness older than 24 hours and explain which questions depend on it.<button onclick="navigator.clipboard&&navigator.clipboard.writeText(this.parentNode.textContent.replace('copy',''));this.textContent='copied'">copy</button></div>
+      </div>
+      <div>
+        <div class="prompt">Add a check to <code>monthly_revenue</code> that revenue is never negative, run the checks, and commit.<button onclick="navigator.clipboard&&navigator.clipboard.writeText(this.parentNode.textContent.replace('copy',''));this.textContent='copied'">copy</button></div>
+        <div class="prompt">Publish <code>orders</code> to <code>s3://acme-data/warehouse</code> and confirm Spark can read it through the catalog.<button onclick="navigator.clipboard&&navigator.clipboard.writeText(this.parentNode.textContent.replace('copy',''));this.textContent='copied'">copy</button></div>
+        <div class="prompt">Show me the lineage of <code>fct_daily_active</code> and estimate what a full rebuild would cost locally versus burst.<button onclick="navigator.clipboard&&navigator.clipboard.writeText(this.parentNode.textContent.replace('copy',''));this.textContent='copied'">copy</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="audit">
+    <div class="eyebrow"># audit</div>
+    <h2 class="sec">Everything an agent did, in two places.</h2>
+    <p class="sub">The log records agent, tool, verdict, cost, duration and outcome for every call. Saved questions land in git with a commit that names the agent, so the review is a diff.</p>
+    <div class="grid2">
+      <Terminal title="lakelet agents log --today"><pre><span class="p">agent:claude</span>  10:41  estimate  dau_by_country      <span class="r">●</span> Red · burst offered · cap $0.41
+<span class="p">agent:claude</span>  10:42  burst     dau_by_country      <span class="g">●</span> done · 1 min 12 s · <span class="w">$0.19</span>
+<span class="p">agent:claude</span>  10:44  query     top_customers_2026  <span class="g">●</span> Green · 1.8 s · $0.00
+<span class="p">agent:claude</span>  10:45  save      monthly_revenue     <span class="g">●</span> a41f2c9 · 2 checks added
+<span class="p">agent:claude</span>  10:52  burst     events_full_scan    <span class="r">●</span> refused · daily cap · remaining $0.00
+<span class="p">budget</span>       today $0.19 of $2.00 · 5 calls · <span class="w">1 refused</span></pre></Terminal>
+      <Terminal title="git log --oneline"><pre><span class="y">a41f2c9</span> agent:claude · save question: monthly revenue by customer
+<span class="y">7c0e1d3</span> hants · add country to fct_daily_active
+<span class="y">2b9a884</span> agent:cursor · save question: churn by cohort
+<span class="y">91ad0c0</span> hants · init project
+
+<span class="d"># diff of a41f2c9</span>
+<span class="g">+ models/monthly_revenue.sql</span>
+<span class="g">+ tests: not_null(revenue), accepted_range(revenue, min=0)</span></pre></Terminal>
+    </div>
+  </section>
+
+  <section id="platforms">
+    <div class="eyebrow"># for platforms · Team tier, 2027</div>
+    <h2 class="sec">Provision a lakehouse for your user. Never host their data.</h2>
+    <p class="sub">If you build an AI app builder, a notebook, or a BI tool, your users' apps already have data and no warehouse. A management API and a remote MCP let you create a Lakelet project for a user in their bucket, set their cap, and hand back credentials, the way AI builders provision Supabase projects today.</p>
+    <div class="grid2">
+      <Terminal title="POST https://api.lakelet.dev/v1/projects"><pre>&#123;
+  <span class="b">"name"</span>: <span class="o">"acme-analytics"</span>,
+  <span class="b">"owner"</span>: <span class="o">"user_8f3a"</span>,                        <span class="d">// your user; they own it</span>
+  <span class="b">"bucket"</span>: <span class="o">"s3://acme-data/warehouse"</span>,        <span class="d">// their storage, not yours</span>
+  <span class="b">"source"</span>: &#123; <span class="b">"postgres"</span>: <span class="o">"env:APP_DB_URL"</span> &#125;,   <span class="d">// optional: nightly Iceberg snapshot</span>
+  <span class="b">"agents"</span>: &#123; <span class="b">"daily_cap_usd"</span>: 2.00 &#125;
+&#125;
+
+<span class="d">// response</span>
+&#123; <span class="b">"project_id"</span>: <span class="o">"prj_…"</span>, <span class="b">"mcp"</span>: <span class="o">"https://mcp.lakelet.dev/prj_…"</span>, <span class="b">"install"</span>: <span class="o">"brew install lakelet"</span> &#125;</pre></Terminal>
+      <div class="panel who">
+        <h3>What your user gets</h3>
+        <p>A lakehouse on their laptop that already knows their app's tables, an ask box, the gauge, and a cap. Their data stays in their bucket. They can leave you and keep it.</p>
+        <h3 style="margin-top:14px">What you get</h3>
+        <p>An analytics layer for the apps you generate without hosting a warehouse, a white-label option, and per-user budgets you control. <a href={url("/#waitlist")}>Talk to us</a> if you want to be an early platform partner.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="security">
+    <div class="eyebrow"># security posture</div>
+    <h2 class="sec">Stated once.</h2>
+    <div class="grid2">
+      <div class="panel who"><h3>Defaults</h3><p>Read-only by default. Writes and bursts opt-in per project and always capped. SQL text an agent ran is not kept unless history is on. Sample rows are truncated and never executed. No tool can edit <code>lakelet.toml</code>, <code>AGENTS.md</code>, or anything under <code>.lakelet/</code>.</p></div>
+      <div class="panel who"><h3>Credentials</h3><p>Agents get the same short-lived, prefix-scoped storage credentials people get, vended per call by the catalog. Workers have no inbound network. Prompt injection through table contents is treated as a first-class threat: model context is data, never instructions.</p></div>
+    </div>
+  </section>
+
+  <section id="faq" class="faq">
+    <div class="eyebrow"># faq</div>
+    <h2 class="sec">Questions people ask first.</h2>
+    <div class="panel"><h3>Does the agent need my model key?</h3><p>No. The MCP server exposes tools; your agent brings its own model. The ask box inside the app is separate and uses whichever provider you configured, or a local one.</p></div>
+    <div class="panel"><h3>Can an agent run up my cloud bill?</h3><p>Not past the cap. <code>burst</code> needs a cap per call and the daily budget ends the day. The worker enforces it; the control plane refuses beyond it. The log shows every refusal.</p></div>
+    <div class="panel"><h3>Does this work with no internet?</h3><p>Yes, for everything local. Read tools, <code>query</code>, <code>import_file</code> and <code>save_question</code> run on the laptop. Only <code>burst</code> and <code>publish</code> need a network.</p></div>
+    <div class="panel"><h3>What does Lakelet see?</h3><p>Nothing, in the free tier with no bucket connected. With calibration sharing on: estimate, actual, operator counts, machine class. Never SQL, table names, column names or values.</p></div>
+  </section>
+
+  <section class="final dark" id="waitlist">
+    <h2 class="sec">Connect an agent to the beta.</h2>
+    <p class="lede">Private beta on macOS and Linux. Bring your own agent; the gauge and the cap are already there.</p>
+    <Waitlist dark />
+  </section>
+</Base>
+
+<style>
+  .doc h1{font-size:clamp(34px,5vw,50px);line-height:1.04;letter-spacing:-.03em;font-weight:800;max-width:22ch;margin-top:30px}
+  .doc .lede{margin:20px 0 28px;max-width:60ch}
+  h2.sec{max-width:24ch}
+  .sub{margin:10px 0 32px;max-width:56ch}
+  .toc{display:flex;flex-wrap:wrap;gap:8px 18px;font:500 12.5px var(--mono);margin:8px 0 10px}
+  .toc a{color:var(--lake);text-decoration:none}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+  .tabs button{font:500 12.5px var(--mono);padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer}
+  .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .cfg{display:none}.cfg.on{display:block}
+  .tools{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:14px}
+  .tools th,.tools td{padding:11px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  .tools th{font:500 12px var(--mono);color:var(--muted);background:#F6F8FA}
+  .tools tr:last-child td{border-bottom:0}
+  .tools code{font-size:12.5px;color:var(--lake)}
+  .tools .rw{font:500 11px var(--mono);border-radius:5px;padding:2px 7px;white-space:nowrap}
+  .tools .r{background:#E3F4EA;color:#1F8A5B}.tools .w{background:#FBEFD9;color:#A26A0A}
+  /* this page's faq is a list of panels, not the shared <details> faq */
+  .faq{display:block;max-width:none}
+  .faq .panel{padding:18px 20px;margin-bottom:12px}
+  .faq h3{font-size:15px;margin-bottom:6px}
+  .faq p{color:var(--muted);font-size:14px}
+  .prompt{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13.5px;margin-bottom:10px;display:flex;gap:10px;align-items:flex-start}
+  .prompt button{margin-left:auto;font:500 11px var(--mono);border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--muted);white-space:nowrap}
+  /* narrow screens: let the prompt text flow instead of splitting into flex columns (the original overflowed here) */
+  @media (max-width:480px){.prompt{display:block;overflow-wrap:anywhere}.prompt button{display:block;margin:8px 0 0 auto}}
+  /* developer-skin terminal tweaks from the original page */
+  section :global(.term){font-size:13px}
+  section :global(.term .bar em){margin-left:auto}
+  section :global(.term pre){padding:14px 16px 6px}
+</style>
+
+<script>
+  document.querySelectorAll<HTMLButtonElement>('.tabs button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.cfg').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('cfg-'+b.dataset.c)!.classList.add('on');}));
+</script>

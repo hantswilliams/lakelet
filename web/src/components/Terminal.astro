@@ -1,0 +1,23 @@
+---
+// Dark terminal shell. Put a <pre> (or anything) in the default slot; the
+// colour classes .p .w .g .y .r .b .o .d .k are global so transcripts can use
+// them from any page. `title` is the window-bar text; the `bar` slot adds
+// controls to the right of it (e.g. a replay button).
+interface Props { title?: string; class?: string; id?: string; label?: string }
+const { title = 'zsh', class: cls = '', id, label } = Astro.props;
+---
+<div class:list={['term', cls]} id={id} aria-label={label}>
+  <div class="bar"><i></i><i></i><i></i><em>{title}</em><slot name="bar" /></div>
+  <slot />
+</div>
+
+<style is:global>
+  .term{background:var(--term);border:1px solid var(--termline);border-radius:12px;color:#C9D2DC;font:12.5px/1.65 var(--mono);box-shadow:0 30px 60px -36px rgba(15,21,25,.8);overflow:hidden}
+  .term .bar{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--term2);border-bottom:1px solid var(--termline);font-size:11.5px;color:#7F8C99}
+  .term .bar i{width:10px;height:10px;border-radius:50%;background:#3A4856;display:inline-block}
+  .term .bar em{font-style:normal}
+  .term pre{padding:14px 16px;white-space:pre;overflow:auto;margin:0;background:transparent}
+  .term pre.softwrap{white-space:pre-wrap;word-break:break-word}
+  .term .p{color:#7F8C99}.term .w{color:#fff;font-weight:700}.term .g{color:#3FB06C}.term .y{color:#E0A43A}.term .r{color:#E86A5A}.term .b{color:#7FB3D5}.term .o{color:#F5A623}.term .d{color:#5C6B7A}.term .k{color:#C792EA}
+  .term h3{font-size:17px;margin:14px 16px 0;color:#fff}
+</style>
