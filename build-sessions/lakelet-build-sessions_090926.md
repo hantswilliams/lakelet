@@ -20,9 +20,22 @@ What to document, from the code and tests: install from source (uv, Python 3.13,
 
 Where: a `/docs` section in the existing Astro site, separate from the marketing pages. Astro's Starlight integration is the cheap way to get a sidebar, search and versioning; plain Astro pages with a docs layout work too. `llms.txt` should list the docs pages once they exist. The version string on every page is `lakelet 0.1.0.dev0` and the install path is "from source" until session 10 ships installers.
 
-## 3. Still open
+## 3. Developer docs, built
+
+Hants said yes to §2. Built the same afternoon, in `web/`:
+
+- `src/content.config.ts`: a `docs` content collection over `src/content/docs/*.md` with `title`, `description`, `section` (Start, Guide, Reference, Develop) and `order`.
+- `src/layouts/Docs.astro`: sidebar grouped by section, the article, prev/next, an "edit this page" link to GitHub, and the developer-preview banner. The version in the banner is read from `core/lakelet/__init__.py` at build time, so the docs cannot claim a version the package does not have.
+- `src/pages/docs.astro` (the index) and `src/pages/docs/[slug].astro` (one page per file). `astro.config.mjs` gained a small rehype plugin that prefixes root-relative markdown links with the site's base path, since the marketing pages' `url()` helper cannot reach inside markdown.
+- Ten pages: overview (what exists, what does not), install and quickstart, the gauge, tables (import matrix, the §3.7 type table, attach/refresh/discover), the catalog (serve, the four clients, the routes), saved questions, the CLI reference, `lakelet.toml` and the folder, the HTTP API, and developing Lakelet. Everything on them was read from the code and the tests, not from `docs/`; the quickstart's transcripts are the shape of the output with numbers from one machine and say so.
+- `scripts/gen-cli-reference.py` writes `cli.md` from Typer's help for every verb, so that page is generated. Typer ships its own click fork, so the walk duck-types on `list_commands` rather than `isinstance(click.Group)`.
+- `Docs` in the nav; `llms.txt` lists the pages; the nav's GitHub placeholder now points at the repo.
+
+Verified by building in a clean Ubuntu container at both base paths (`/` and `/lakelet`), a link check over every `href` in the docs pages (none broken), and screenshots at 1280 and 390 px; the first mobile render overflowed until the grid column became `minmax(0, 1fr)`. Not run: `astro check` (the package is not installed) and a real quickstart transcript (the container cannot reach `extensions.duckdb.org`).
+
+## 4. Still open
 
 1. The CI failure (`TASKS.md`, Now 1).
 2. The deck history purge decision.
 3. Trademark search.
-4. Whether to start `/docs` now (§2) and, if so, Starlight or plain pages.
+4. Docs follow-ups in `TASKS.md`: a CI check that `cli.md` is current; real quickstart output once the clean-machine run exists.

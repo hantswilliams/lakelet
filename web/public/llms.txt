@@ -9,3 +9,15 @@
 - [Medallion](/medallion): bronze / silver / gold on a laptop with a dbt project
 - [For agents](/agents): MCP server, per-agent daily caps, AGENTS.md
 - [Pricing](/pricing): Local free, Team $24/person/month, Burst cost + 15%; comparison vs Snowflake, BigQuery, Databricks, MotherDuck
+
+## Developer docs (developer preview; describes the code in the repo, install from source)
+- [Overview](/docs): what is built and what is not, versions
+- [Install and quickstart](/docs/install): uv, init, import, sql, estimate, catalog serve, question save, audit network
+- [The gauge](/docs/gauge): the verdict line, the rule, where the numbers come from, exit codes, history
+- [Tables](/docs/tables): import matrix, type coercions to Iceberg, attaching Parquet in S3 without copying
+- [The Iceberg REST catalog](/docs/catalog): catalog serve; DuckDB, pyiceberg, Spark and Trino as clients; the routes
+- [Saved questions](/docs/questions): dbt models with two checks
+- [CLI reference](/docs/cli): every verb, generated from --help
+- [lakelet.toml and the project folder](/docs/config): every setting, what init writes
+- [The local HTTP API](/docs/api): lakelet serve, bearer token, routes, Arrow streaming
+- [Developing Lakelet](/docs/develop): the suite, opt-in Docker checks, contributing
