@@ -5,6 +5,7 @@ expressions (D20), pruning through the manifest cache, the model, the verdict in
 words (D28), the burst half by arithmetic (D29), Red refused unless allowed, the 150 ms budget
 with cached manifests, and the throughput probe at init (D36). TPC-H accuracy is its own file."""
 
+import os
 import time
 
 import pytest
@@ -130,6 +131,11 @@ def test_second_estimate_is_within_the_budget(project) -> None:
     project.estimate(sql)
     second = time.perf_counter() - started
     print(f"\nestimate: first {first * 1000:.0f} ms, second {second * 1000:.0f} ms")
+    load, cores = os.getloadavg()[0], os.cpu_count() or 1
+    if load > cores:
+        pytest.skip(
+            f"machine under load ({load:.0f} on {cores} cores); the budget cannot be measured"
+        )
     assert second < 0.150
 
 

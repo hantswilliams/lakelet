@@ -640,5 +640,40 @@ def audit_network() -> None:
         raise typer.Exit(1)
 
 
+# -- serve -----------------------------------------------------------------------------
+
+
+@app.command()
+def serve(
+    port: Annotated[int, typer.Option(help="A fixed port; 0 picks a free one.")] = 0,
+    host: Annotated[str, typer.Option(help="Loopback only in v0.")] = "127.0.0.1",
+) -> None:
+    """Run the core as the app's sidecar: catalog and API on one loopback port, named in
+    .lakelet/serve.json with a per-launch token."""
+    import signal
+    import threading
+
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        _fail(f"v0 binds loopback only; {host} refused (brief D22)")
+    from lakelet import Project
+    from lakelet.project import NotAProject
+
+    try:
+        p = Project.open(_root(), serve=True, port=port)
+    except NotAProject:
+        _fail(f"not a Lakelet project: no lakelet.toml in {_root()}; run `lakelet init`")
+    out.print(
+        f"serving {p.catalog_url}: /api (bearer token in {p.serve_json}) and /v1 (the catalog)",
+        highlight=False,
+    )
+    out.print("Ctrl-C stops it.", highlight=False)
+    sys.stdout.flush()
+    stop = threading.Event()
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    stop.wait()
+    p.close()
+
+
 def run() -> None:
     app()

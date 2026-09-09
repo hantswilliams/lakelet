@@ -223,8 +223,13 @@ def test_bandwidth_probe_red_sentence_and_the_cached_second_estimate(project, ev
         p.estimate("select sum(amt) from events where id > 2500")
         second = time.perf_counter() - started
         print(f"\nsecond estimate on a bucket-metadata table: {second * 1000:.0f} ms")
-        assert second < 0.150
         assert list((p.cache_dir / "objects").rglob("*.avro")), "manifests should be cached on disk"
+        load, cores = os.getloadavg()[0], os.cpu_count() or 1
+        if load > cores:
+            pytest.skip(
+                f"machine under load ({load:.0f} on {cores} cores); the budget cannot be measured"
+            )
+        assert second < 0.150
     finally:
         p.close()
 

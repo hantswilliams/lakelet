@@ -200,6 +200,11 @@ def test_audit_network_reports_nothing_left_the_machine(project_dir) -> None:
 
 
 def test_startup_budget_gauge_line_within_a_second(project_dir, tmp_path) -> None:
+    load, cores = os.getloadavg()[0], os.cpu_count() or 1
+    if load > cores:
+        pytest.skip(
+            f"machine under load ({load:.0f} on {cores} cores); the budget cannot be measured"
+        )
     assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
     env = dict(os.environ, PYTHONWARNINGS="ignore")
     timings = []

@@ -6,8 +6,12 @@ process."""
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import secrets
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -106,6 +110,7 @@ class Project:
         self._tables: Tables | None = None
         self._history: History | None = None
         self._questions: Questions | None = None
+        self.token: str | None = None
 
     # -- on disk --------------------------------------------------------------------
 
@@ -157,12 +162,17 @@ class Project:
         return report
 
     @classmethod
-    def open(cls, path: str | Path = ".") -> Project:
+    def open(cls, path: str | Path = ".", serve: bool = False, port: int = 0) -> Project:
+        """Open the project in this process. With ``serve`` the one loopback server also
+        carries the API (brief D3) and ``.lakelet/serve.json`` names it."""
         root = Path(path).resolve()
         if not (root / "lakelet.toml").exists():
             raise NotAProject(str(root))
         project = cls(root)
-        project._start()
+        project.token = secrets.token_urlsafe(32) if serve else None
+        project._start(port=port)
+        if serve:
+            project._write_serve_json()
         return project
 
     @staticmethod
@@ -181,13 +191,24 @@ class Project:
 
     # -- in process -----------------------------------------------------------------
 
-    def _start(self) -> None:
+    def _start(self, port: int = 0) -> None:
         self.lakelet_dir.mkdir(exist_ok=True)
         self.cache_dir.mkdir(exist_ok=True)
         self._ensure_namespace(self.store)
-        self._catalog = EmbeddedCatalog(
-            create_app(self.store, warehouse=self.warehouse_url, io_properties=self.io_properties)
-        )
+        app = create_app(self.store, warehouse=self.warehouse_url, io_properties=self.io_properties)
+        if self.token:
+            from fastapi.middleware.cors import CORSMiddleware
+
+            from lakelet.api import TAURI_ORIGINS, create_router
+
+            app.include_router(create_router(self, self.token))
+            app.add_middleware(
+                CORSMiddleware,
+                allow_origins=TAURI_ORIGINS,
+                allow_methods=["*"],
+                allow_headers=["*"],
+            )
+        self._catalog = EmbeddedCatalog(app, port=port)
         url = self._catalog.start()
         self._engine = Engine(
             url,
@@ -250,6 +271,24 @@ class Project:
             self._tables = Tables(self)
         return self._tables
 
+    @property
+    def serve_json(self) -> Path:
+        return self.lakelet_dir / "serve.json"
+
+    def _write_serve_json(self) -> None:
+        """``{port, pid, token, started}`` at mode 0600 (brief D3)."""
+        port = int(self.catalog_url.rsplit(":", 1)[1])
+        data = {
+            "port": port,
+            "pid": os.getpid(),
+            "token": self.token,
+            "started": datetime.now(UTC).isoformat(),
+        }
+        tmp = self.serve_json.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        os.chmod(tmp, 0o600)
+        tmp.replace(self.serve_json)
+
     def close(self) -> None:
         if self._engine is not None:
             self._engine.close()
@@ -257,6 +296,8 @@ class Project:
         if self._catalog is not None:
             self._catalog.stop()
             self._catalog = None
+        if self.token and self.serve_json.exists():
+            self.serve_json.unlink()
 
     def __enter__(self) -> Project:
         return self
