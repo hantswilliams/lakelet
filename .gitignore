@@ -1,9 +1,19 @@
-.vscode/
+## private material, never in the public repo
 brand/
-build-sessions/
 deck/
-docs/
+old/
+docs/lakelet-financial-plan.docx
 
-## mac 
+## editors and mac
+.vscode/
 .DS_Store
 *.swp
+
+## python (core/)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/

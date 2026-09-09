@@ -277,9 +277,9 @@ $ lakelet catalog serve --port 8181   # let Spark or Trino read your tables</pre
   .hero-brand{margin:6px 0 10px}
   .hero-brand svg{width:min(300px,70vw);height:auto;display:block}
   .hero-brand svg text{font-family:var(--sans);font-weight:800}
-  @keyframes leap{0%{offset-distance:0%;opacity:0}8%{opacity:1}92%{opacity:1}100%{offset-distance:100%;opacity:0}}
+  @keyframes leap{0%{offset-distance:0%;opacity:0}5%{opacity:1}55%{opacity:1}60%,100%{offset-distance:100%;opacity:0}}
   .leaper{offset-path:path('M92 40 C120 -10, 210 -10, 238 40');offset-rotate:auto;offset-distance:50%;opacity:1}
-  .leaper.play{animation:leap 2.4s cubic-bezier(.45,.05,.55,.95) 1 forwards}
+  .leaper.play{animation:leap 4s cubic-bezier(.45,.05,.55,.95) infinite}
   @media (prefers-reduced-motion:reduce){.leaper.play{animation:none;offset-distance:50%;opacity:1}}
   .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
   .cta.small{margin-top:18px;gap:18px;font-size:14px;font-weight:600}

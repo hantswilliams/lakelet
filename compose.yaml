@@ -1,0 +1,113 @@
+# Services the default test suite does not need: `cd core && uv run pytest` runs without Docker.
+#
+# postgres  The second catalog dialect (brief D5). Start it, point LAKELET_TEST_PG_URL at it, and
+#           the Postgres variant of the step 1 suite runs:
+#             docker compose up -d --wait postgres
+#             cd core && LAKELET_TEST_PG_URL=postgresql+psycopg://lakelet:lakelet@127.0.0.1:5433/lakelet \
+#               uv run pytest tests/test_step1_postgres.py
+#             docker compose down
+#           Port 5433 on the host so a native Postgres on 5432 is left alone. Data is on tmpfs.
+#
+# s3        A self-hosted S3-compatible store (RustFS, Apache 2.0) for fidelity runs of the s3://
+#           tests beyond the in-process mock, and the shared warehouse for the Spark and Trino
+#           smoke test. The s3:// tests run against it with:
+#             docker compose up -d --wait s3
+#             cd core && LAKELET_TEST_S3_ENDPOINT=http://127.0.0.1:9000 AWS_ACCESS_KEY_ID=lakelet \
+#               AWS_SECRET_ACCESS_KEY=lakeletlakelet uv run pytest tests/test_step1_s3.py
+services:
+  s3:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: lakelet
+      RUSTFS_SECRET_KEY: lakeletlakelet
+    ports:
+      - "9000:9000"
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/ -o /dev/null || curl -s http://127.0.0.1:9000/ >/dev/null"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lakelet
+      POSTGRES_PASSWORD: lakelet
+      POSTGRES_DB: lakelet
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lakelet -d lakelet"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  # ---- engines profile: the catalog-serve smoke test (PRD F0.7 AC), opt-in --------------------
+  #   docker compose --profile engines up -d --wait
+  #   cd core && LAKELET_SMOKE=1 uv run pytest tests/smoke -s
+  #   docker compose --profile engines down
+  # catalog   Lakelet's catalog from the mounted core/, on the compose network, warehouse on s3.
+  #           Test infrastructure: binds 0.0.0.0 inside its container; the product does not (D22).
+  # spark     Spark 3.5 with the Iceberg runtime from Maven, cached in a volume after the first run.
+  # trino     Trino with the Iceberg connector against the same catalog.
+  catalog:
+    profiles: [engines]
+    image: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+    working_dir: /core
+    command: uv run --frozen python -m tests.smoke.serve_catalog
+    volumes:
+      - ./core:/core
+      - catalog-venv:/opt/venv
+      - uv-cache:/opt/uv-cache
+    environment:
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+      UV_CACHE_DIR: /opt/uv-cache
+      LAKELET_SMOKE_S3_ENDPOINT: http://s3:9000
+      AWS_ACCESS_KEY_ID: lakelet
+      AWS_SECRET_ACCESS_KEY: lakeletlakelet
+    ports:
+      - "8181:8181"
+    depends_on:
+      s3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/opt/venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8181/v1/config')"]
+      interval: 5s
+      timeout: 5s
+      retries: 90
+  spark:
+    profiles: [engines]
+    image: apache/spark:3.5.3
+    user: root
+    command: ["sleep", "infinity"]
+    volumes:
+      - ./compose/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - spark-ivy:/opt/ivy
+    environment:
+      AWS_REGION: us-east-1
+      AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+      AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+    depends_on:
+      catalog:
+        condition: service_healthy
+  trino:
+    profiles: [engines]
+    image: trinodb/trino:latest
+    volumes:
+      - ./compose/trino/lakelet.properties:/etc/trino/catalog/lakelet.properties:ro
+    environment:
+      AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+      AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+    depends_on:
+      catalog:
+        condition: service_healthy
+
+volumes:
+  s3data:
+  catalog-venv:
+  uv-cache:
+  spark-ivy:
