@@ -55,9 +55,18 @@ Hants chose the small items over the next session. Done: the §6 query-overhead 
 
 Full suite in the container under `ulimit -n 256` after these: 142 passed, 9 skipped (five env-gated, four budgets under load).
 
-## 7. Still open
+## 7. The dbt materialisation spike
+
+The largest unknown left under core v0, and under the most advertised feature. Probed the catalog first with plain SQL through the engine, five strategies: `CREATE OR REPLACE TABLE` is refused by DuckDB-Iceberg with its own message; drop-then-create inside one transaction is refused ("cannot create table deleted within a transaction"); `DELETE` then `INSERT` inside one transaction works and keeps the table, two snapshots; the dbt swap (create tmp, rename, rename) fails inside one transaction and works when each statement commits on its own, at the cost of a new table identity each run.
+
+Then a materialisation on those facts, `tests/test_step6_materialisation.py`: columns of the existing table compared with `DESCRIBE` of the compiled query; unchanged, delete and insert in one dbt transaction; changed or absent, drop (committed on its own) then create. One trap: `run_query` for the `DESCRIBE` opens dbt's transaction, so the drop must be followed by an explicit `adapter.commit()` or it lands in the same transaction as the create and the catalog refuses it. Three consecutive `dbt run`s pass through the catalog: first build (one snapshot), same-column rebuild (same location, three snapshots), column change (new table). Also tested: a root-project override of `materialization table, adapter="duckdb"` is accepted by dbt 1.12 with no warning, so users' `materialized: table` models need no Lakelet-specific config.
+
+Recorded in the brief's §7 under step 6. The decisions (strategy, override versus `lakelet_table`, ship now versus session 9) are in `decisions-for-review_090926.md` with recommendations; nothing ships until they are ticked. Either strategy leaves old data files behind; snapshot expiry is Day 1.
+
+## 8. Still open
 
 1. The clean-machine quickstart, the reference-laptop timings, the demo bucket (`TASKS.md`, Now 1 to 3).
+0. `decisions-for-review_090926.md`: three tick boxes on the dbt materialisation.
 2. The deck history purge decision.
 3. Trademark search.
 4. Docs follow-ups in `TASKS.md`: a CI check that `cli.md` is current; real quickstart output once the clean-machine run exists.

@@ -10,6 +10,10 @@
 4. [ ] **Demo-path bucket** (brief §6): a Lakelet-owned bucket with a public dataset, prepared with `tables attach` and nothing else, Red with the bandwidth sentence from a laptop, pyiceberg reading it from another process.
 5. [ ] **Trademark search** for "Lakelet" (USPTO, and the PyPI name) — PRD D4.3 says before publishing; the repo is already public, so this is overdue.
 
+## Decisions waiting on Hants
+
+- [ ] `decisions-for-review_090926.md` — three tick boxes on dbt materialisation: in-place rebuild, override `table`, ship now as a step 6 amendment.
+
 ## Steps of the brief (§4)
 
 | Step | Status | Gate, in short | Test file |
@@ -67,7 +71,7 @@ Last full local run (2026-09-08, under load): 140 passed, 8 skipped (5 env-gated
 - [ ] **Session 7, ask box** and `lakelet ask` as a CLI verb (M11).
 - [ ] **Session 8, burst end to end**: control plane, job token, cap → budget, catalog lease pushing the metadata tree for local-metadata tables (D26, open unknown in §7), `publish`. Partner intake (five questions) runs before it.
 - [ ] **Session 5, `lakelet mcp`** (after session 8, M6).
-- [ ] **Session 9, dbt + Simple/Technical**: inherits two findings from step 6: dbt's `table` materialisation renames a temp table, which the Iceberg catalog refuses in one transaction, so Lakelet builds question tables itself until session 9 chooses a Lakelet materialisation or a dbt-duckdb setting; and `tests/dbt_plugin.py` (the `configure_connection` and `configure_cursor` hooks) is to be lifted into the package. Also git auto-commit on save and table-level lineage (D30, D32).
+- [ ] **Session 9, dbt + Simple/Technical**: the materialisation question is answered by the 2026-09-09 spike (`test_step6_materialisation.py`: rebuild in place, drop-and-create on a column change; three `dbt run`s through the catalog) and waits on `decisions-for-review_090926.md`; still inherited: `tests/dbt_plugin.py` (the `configure_connection` and `configure_cursor` hooks) is to be lifted into the package. Also git auto-commit on save and table-level lineage (D30, D32).
 - [ ] **Session 10, ship**: signed installers with the extensions bundled (D33; the "under 200 MB" installer claim to be measured), brew tap, the per-operator-class correction (M7), the `catalog serve` engines smoke test through the real verb (how a loopback-only verb is reached from a container is open), instrumentation export, partner onboarding.
 
 Known unknowns still open in the brief's §7: the 150 ms gauge budget on a never-read table (PRD allows 800 ms uncached); how much of DuckDB's filter rendering the predicate parser needs for real workloads; the sidecar memory split; partner prefixes with drift or path-only partitions (fixtures pass; intake decides); the lease carrying a metadata tree.
