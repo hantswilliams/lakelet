@@ -45,9 +45,19 @@ The first version of that fix made things no better, and the new test said so on
 
 Tooling note that unblocked all of this: DuckDB's extensions are on PyPI as `duckdb-extension-<name>` wheels (`iceberg` needs `avro` too; the harness needs `tpch`). Copying the `.duckdb_extension` file out of the wheel into `~/.duckdb/extensions/v1.5.5/<platform>/` lets the suite run where `extensions.duckdb.org` is unreachable. With that, the whole suite ran in the container under `ulimit -n 256`: 141 passed and the TPC-H harness passed on a two-core machine, 8 env-gated or load-gated skips. Worth considering for CI as well, since it would remove the one network fetch from the runners.
 
-## 5. Still open
+## 5. Green
 
-1. CI `core #2` after the credential-chain fix (`TASKS.md`, Now 1).
+Hants' Mac run after the corrected fix: 145 passed, 5 skipped in 70 s, the five skips being the env-gated fixtures, with all three timing budgets running and passing on an unloaded machine. Pushed as `bb017b8`; `core #2` green on Ubuntu (3m 36s), macOS (4m 30s) and Postgres (34s). That closes the step 0 and step 1 gates in full and the "tests green on both runners" line of §6. What remains of the definition of done: the clean-machine quickstart, the reference-laptop timings, and the demo bucket.
+
+## 6. Hardening after green
+
+Hants chose the small items over the next session. Done: the §6 query-overhead budget now has its assertion (12 to 17 ms measured against 50 ms, on a loaded two-core container); the three CI actions moved to their Node 24 majors, with `setup-uv` pinned to `v9.0.0` because Astral stopped publishing major tags at v8; the `-q` addopt is out of `pyproject.toml`. Decided against, and recorded in `TASKS.md`: the PyPI extension wheels in CI. They are not DuckDB Labs' (the package metadata names an individual's repackaging project), and a public repo's CI should not run unofficial binaries; the official `INSTALL` with the cache stays. The container recipe for sandboxes: `uv pip install duckdb-extension-{iceberg,httpfs,excel,aws,avro,tpch}` and copy each `.duckdb_extension` out of the wheel into `~/.duckdb/extensions/v<duckdb>/<platform>/`.
+
+Full suite in the container under `ulimit -n 256` after these: 142 passed, 9 skipped (five env-gated, four budgets under load).
+
+## 7. Still open
+
+1. The clean-machine quickstart, the reference-laptop timings, the demo bucket (`TASKS.md`, Now 1 to 3).
 2. The deck history purge decision.
 3. Trademark search.
 4. Docs follow-ups in `TASKS.md`: a CI check that `cli.md` is current; real quickstart output once the clean-machine run exists.

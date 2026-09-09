@@ -4,7 +4,7 @@
 
 ## Now, in order
 
-1. [ ] **CI green.** `core #1` (2026-09-09) failed on both runners for one reason: `Engine.__init__` created the default-chain S3 secret at every open, and DuckDB 1.5's aws extension resolves the chain at create time and refuses on a machine with no AWS credentials anywhere (59 errors and 17 failures, all downstream of `Project.open`; step 8 passed because it sets explicit keys). Fixed 2026-09-09: the engine keeps the failure, local work proceeds, `s3://` operations ask first and refuse with the variables named; regression test `test_open_works_with_no_aws_credentials_anywhere`. The Mac run of the fix then found a second bug: `Project.close()` never disposed the SQLite pools of the catalog and the history, so a process that opens many projects (the suite) runs out of descriptors at the shell's 256 default; fixed with `Store.close()`, `History.close()` and `test_open_and_close_release_their_file_descriptors` (the first cut of `Store.close()` was misplaced inside `__init__` and the new test caught it). The full suite then passed in a Linux container under `ulimit -n 256`, TPC-H included, with the extensions taken from their PyPI wheels. Next: `uv run pytest` on the Mac, push, watch `core #2`.
+1. [x] **CI green** (2026-09-09, `core #2` on `bb017b8`: Ubuntu 3m 36s, macOS 4m 30s, Postgres 34s, all green; the Mac run before the push was 145 passed, 5 env-gated skips). Two product bugs came out of getting there: the credential chain and the descriptor leak, both below.
 2. [ ] **Clean-machine quickstart** on a Mac and an Ubuntu, under ten minutes (brief §6, step 7 gate).
 3. [ ] **Reference-laptop (16 GB) timings**: `LAKELET_PERF=1` CSV imports, the ten-thousand-file registration against RustFS, and the TPC-H SF1 time table with `LAKELET_TPCH=1`; the v0 gauge constants were tuned on an 18-thread, 64 GB machine.
 4. [ ] **Demo-path bucket** (brief §6): a Lakelet-owned bucket with a public dataset, prepared with `tables attach` and nothing else, Red with the bandwidth sentence from a laptop, pyiceberg reading it from another process.
@@ -14,8 +14,8 @@
 
 | Step | Status | Gate, in short | Test file |
 |---|---|---|---|
-| 0 | done locally 2026-09-08; CI run 2026-09-09 fails at pytest on both runners (see Now 1) | `uv run pytest` passes on macOS and Ubuntu; stale doc pointers gone; a fresh clone plus `CLAUDE.md` finds the current step | `test_step0_skeleton.py` |
-| 1 | done locally 2026-09-08 incl. Postgres and RustFS; Postgres CI job green 2026-09-09; Ubuntu/macOS suite see Now 1 | Catalog: DuckDB writes through it to `file://`, pyiceberg reads; 100 concurrent-process commits lose nothing; `s3://` via Moto; Postgres behind an env var | `test_step1_*.py` |
+| 0 | **done** 2026-09-09: CI green on macOS and Ubuntu (`core #2`) | `uv run pytest` passes on macOS and Ubuntu; stale doc pointers gone; a fresh clone plus `CLAUDE.md` finds the current step | `test_step0_skeleton.py` |
+| 1 | **done** 2026-09-09: suite green on both runners, Postgres job green, RustFS verified locally | Catalog: DuckDB writes through it to `file://`, pyiceberg reads; 100 concurrent-process commits lose nothing; `s3://` via Moto; Postgres behind an env var | `test_step1_*.py` |
 | 2 | done locally 2026-09-08 | `select * from orders` after a manual `CREATE TABLE`; profiler on; extensions installed by `init`; dbt-duckdb spike recorded | `test_step2_*.py` |
 | 3 | done locally 2026-09-08; timings to re-run on the reference laptop | Import matrix incl. every row of §3.7; 200 MB CSV ≤ 10 s; 2 GB CSV ≤ 90 s | `test_step3_*.py` |
 | 4 | done locally 2026-09-08 | A history row per run with profiler actuals and SQL text; a forced conflict retries then exits 4 | `test_step4_query.py` |
@@ -30,7 +30,7 @@ Last full local run (2026-09-08, under load): 140 passed, 8 skipped (5 env-gated
 ## Definition of done (brief §6)
 
 - [ ] **Quickstart** on a clean Mac and a clean Ubuntu under ten minutes: install, `init`, `import orders.csv`, `sql` Green with rows, `estimate` Red with its sentence, `catalog serve` read by pyiceberg from another process, `audit network` zero. The sequence passes as a test here; the fresh-machine exercise is not done.
-- [ ] **Tests green on both CI runners.** Fails as of `core #1` (Now 1). Postgres job green.
+- [x] **Tests green on both CI runners** (`core #2`, 2026-09-09) and the Postgres job.
 - [ ] **Demo path**: the Lakelet-owned bucket (Now 4). Spark read of the same table is the session 10 smoke test; the compose-network version already passes.
 - [x] **Budgets**, measured on this Mac 2026-09-08: gauge line 4 to 6 ms warm (150 ms budget); second estimate on bucket metadata 17 ms; `lakelet sql` to gauge line 0.81 s (1 s budget). Query overhead beyond DuckDB has not been measured as its own number (50 ms budget); worth one assertion.
 - [x] **Nothing hidden**: `audit network` runs the quickstart with both guards and measures zero; `/api` is 401 without the token; every server binds loopback (2026-09-08).
@@ -38,12 +38,12 @@ Last full local run (2026-09-08, under load): 140 passed, 8 skipped (5 env-gated
 ## Open items that are not steps
 
 - [ ] Re-export `deck/lakelet-executive-summary.pdf` from the edited docx (docx 2026-09-08 13:21, PDF still 2026-09-07; no LibreOffice on this machine).
-- [ ] Query overhead beyond DuckDB (§6, 50 ms): add one timed assertion, since nothing measures it today.
+- [x] Query overhead beyond DuckDB (§6, 50 ms): `test_query_overhead_beyond_duckdb_is_within_the_budget` (2026-09-09), full `query()` minus DuckDB alone on the same statement, warm, best of three; 12 to 17 ms on a two-core container. Skips under load like the other budgets.
 - [ ] `old/deck-before-090826/` (pitch deck, executive summary) has been in the public repo's history since commit `6290775`. Untracked at HEAD 2026-09-09. Purging history is `git filter-repo` plus a force push; Hants' call.
 - [ ] `docs/lakelet-financial-plan.docx` is now gitignored (2026-09-09) so it stays out of the public repo; it also still says Burrow inside. `docs/lakelet-product-spec.md` still mentions Burrow once.
-- [ ] CI: install the DuckDB extensions from their PyPI wheels (`duckdb-extension-iceberg`, `-httpfs`, `-excel`, `-aws`, `-avro`, `-tpch`) instead of fetching from `extensions.duckdb.org`, so the runners make no network fetch and the suite runs anywhere the wheels do; the container run of 2026-09-09 proved the path.
-- [ ] CI warnings: `actions/checkout@v4`, `astral-sh/setup-uv@v5` and `actions/cache@v4` target Node 20, which GitHub is retiring; bump when the failure is fixed.
-- [ ] Pytest tooling: `pyproject.toml` already sets `-q`, so `uv run pytest -q` becomes `-qq` and hides the summary; either drop the default or remember not to pass it.
+- [x] Decided 2026-09-09, not adopted: the `duckdb-extension-*` PyPI wheels are a third-party repackaging (one individual's `duckdb_extensions` project, MIT, not DuckDB Labs), so they stay out of CI for a public repo. CI keeps the official `INSTALL` with the per-version cache. The wheels remain a convenience for sandboxes that cannot reach `extensions.duckdb.org`; see the 2026-09-09 log for the recipe.
+- [x] CI actions bumped 2026-09-09 to the Node 24 runtimes: `actions/checkout@v7`, `actions/cache@v5`, `astral-sh/setup-uv@v9.0.0` (setup-uv stopped publishing major tags at v8, so it is pinned exactly). `deploy-pages.yml` still has the older majors; harmless, bump when the site workflow is next touched.
+- [x] Pytest tooling: the `-q` addopt is gone from `pyproject.toml` (2026-09-09); `uv run pytest` prints the normal summary and `-q` means one `-q`.
 - [ ] Plan filename versus internal revision number; cosmetic.
 - [ ] Sign every commit with `git commit -s` from now on (CONTRIBUTING's DCO). The commits before `7f0ff4a` are unsigned; fine for the author's own work.
 - [x] Repo hygiene (2026-09-09, commit `7f0ff4a`, signed): `.gitignore` fixed so `docs/` and `build-sessions/` are tracked; `LICENSE`, `NOTICE`, `CONTRIBUTING.md`, `CLAUDE.md`, `AGENTS.md`, `compose.yaml`, `compose/`, `core-ci.yml` and the new README committed for the first time; `.DS_Store` and `old/` untracked; Apache headers on the two `__init__.py` files that lacked them.

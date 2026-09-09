@@ -139,6 +139,38 @@ def test_second_estimate_is_within_the_budget(project) -> None:
     assert second < 0.150
 
 
+def test_query_overhead_beyond_duckdb_is_within_the_budget(project) -> None:
+    """Brief §6: what Lakelet adds around a statement (the estimate, the profile read, the
+    history row) is under 50 ms. Measured as the difference between a full ``query()``
+    consumed to exhaustion and DuckDB alone on the same statement, warm, best of three."""
+    sql = "select customer, count(*) from orders where d >= '2026-06-01' group by 1"
+    project.query(sql).to_arrow()  # warm: caches, history schema, the profile file
+
+    def raw() -> float:
+        started = time.perf_counter()
+        project.engine.execute(sql).arrow()
+        return time.perf_counter() - started
+
+    def full() -> float:
+        started = time.perf_counter()
+        project.query(sql).to_arrow()
+        return time.perf_counter() - started
+
+    duckdb_alone = min(raw() for _ in range(3))
+    lakelet = min(full() for _ in range(3))
+    overhead = lakelet - duckdb_alone
+    print(
+        f"\nquery: duckdb {duckdb_alone * 1000:.0f} ms, lakelet {lakelet * 1000:.0f} ms, "
+        f"overhead {overhead * 1000:.0f} ms"
+    )
+    load, cores = os.getloadavg()[0], os.cpu_count() or 1
+    if load > cores:
+        pytest.skip(
+            f"machine under load ({load:.0f} on {cores} cores); the budget cannot be measured"
+        )
+    assert overhead < 0.050
+
+
 def _lower_thresholds(project: Project, green: float, yellow: float) -> Project:
     toml = project.root / "lakelet.toml"
     text = toml.read_text().replace("green_max_seconds = 60", f"green_max_seconds = {green}")

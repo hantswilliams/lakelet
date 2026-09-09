@@ -21,8 +21,8 @@ jobs:
       run:
         working-directory: core
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
           cache-dependency-glob: core/uv.lock
@@ -31,7 +31,7 @@ jobs:
         run: echo "version=$(uv run python -c 'import duckdb; print(duckdb.__version__)')" >> "$GITHUB_OUTPUT"
       # The three extensions the brief names (D15, D33), cached per DuckDB version and platform so
       # the suite makes no network fetch after the first run.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.duckdb/extensions
           key: duckdb-extensions-${{ runner.os }}-${{ runner.arch }}-${{ steps.duckdb.outputs.version }}-iceberg-httpfs-excel-aws
@@ -61,8 +61,8 @@ jobs:
       run:
         working-directory: core
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
           cache-dependency-glob: core/uv.lock
