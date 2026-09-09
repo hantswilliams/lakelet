@@ -130,3 +130,49 @@ def test_reopen_sees_the_same_table(root) -> None:
         p.engine.execute("INSERT INTO t VALUES (7)")
     with Project.open(root) as p:
         assert p.engine.execute("select * from t").fetchall() == [(7,)]
+
+
+def test_open_works_with_no_aws_credentials_anywhere(root, monkeypatch, tmp_path) -> None:
+    """A laptop with no AWS account is the normal case (brief D36): opening a project and
+    local work must not depend on the default chain resolving, and the first s3://
+    operation says what to set. Found by the first CI run, where the chain resolved
+    nothing and every test that opened a project failed."""
+    from lakelet.register import NotRegistrable
+
+    for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "no-config"))
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(tmp_path / "no-credentials"))
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
+    Project.init(root)
+    with Project.open(root) as p:
+        p.engine.execute("CREATE TABLE lakelet.main.t (id BIGINT)")
+        p.engine.execute("INSERT INTO t VALUES (7)")
+        assert p.engine.execute("select * from t").fetchall() == [(7,)]
+        if p.engine.s3_error is None:
+            pytest.skip(
+                "the AWS default chain resolves on this machine; the refusal cannot be shown"
+            )
+        with pytest.raises(NotRegistrable, match="AWS_ACCESS_KEY_ID"):
+            p.tables.discover("s3://nowhere/")
+
+
+def test_open_and_close_release_their_file_descriptors(root) -> None:
+    """Opening and closing a project must hand back every file and socket it took. Found
+    by the suite on a Mac at the shell's 256-descriptor default: the SQLite pools of the
+    catalog and the history were never disposed, and the run collapsed at the 113th test
+    with "Too many open files"."""
+    import psutil
+
+    Project.init(root)
+    process = psutil.Process()
+    with Project.open(root) as p:  # warm-up: extension loads and first-use allocations
+        p.engine.execute("select 1").fetchall()
+    before = process.num_fds()
+    for _ in range(20):
+        with Project.open(root) as p:
+            p.engine.execute("CREATE TABLE IF NOT EXISTS lakelet.main.t (id BIGINT)")
+            p.query("select * from t").close()
+            p.history.recent(1)
+    after = process.num_fds()
+    assert after - before <= 6, f"{after - before} descriptors leaked over 20 open/close cycles"

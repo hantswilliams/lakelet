@@ -138,6 +138,9 @@ class History:
             ):
                 c.execute(meta.insert().values(key="schema_version", value=str(SCHEMA_VERSION)))
 
+    def close(self) -> None:
+        self.engine.dispose()
+
     def record(self, run: Run) -> int:
         values = {k: v for k, v in asdict(run).items() if k not in ("id", "ts")}
         for column in JSON_COLUMNS:

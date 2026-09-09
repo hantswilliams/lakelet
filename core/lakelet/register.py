@@ -72,6 +72,8 @@ class _Listing:
 
 def _list(project: Project, prefix: str) -> _Listing:
     scheme, root = split_uri(prefix)
+    if scheme == "s3" and (problem := project.engine.s3_problem()):
+        raise NotRegistrable(problem)
     fs = project.s3.filesystem(scheme)
     root = root.rstrip("/")
     selector = pafs.FileSelector(root, recursive=True)
@@ -193,6 +195,8 @@ def attach_prefix(
 
 def attach_metadata(project: Project, name: str, metadata_location: str) -> None:
     """Register an existing Iceberg table by its metadata location (the primitive)."""
+    if metadata_location.startswith("s3://") and (problem := project.engine.s3_problem()):
+        raise NotRegistrable(problem)
     _client(project).register_table(f"main.{name}", metadata_location)
 
 

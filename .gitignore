@@ -4,6 +4,9 @@ deck/
 old/
 docs/lakelet-financial-plan.docx
 
+## the Claude desktop app drops files it sends into the connected folder
+Claude outputs/
+
 ## editors and mac
 .vscode/
 .DS_Store

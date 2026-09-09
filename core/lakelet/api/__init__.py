@@ -185,9 +185,12 @@ def create_router(project: Project, token: str) -> APIRouter:
             return _plain(project.tables.list())
 
     @router.get("/tables/discover", dependencies=guarded)
-    def discover(prefix: str) -> list[dict[str, Any]]:
+    def discover(prefix: str):
         with lock:
-            return _plain(project.tables.discover(prefix))
+            try:
+                return _plain(project.tables.discover(prefix))
+            except NotRegistrable as e:
+                return error(400, "not_registrable", str(e))
 
     @router.get("/tables/{name}", dependencies=guarded)
     def describe(name: str):

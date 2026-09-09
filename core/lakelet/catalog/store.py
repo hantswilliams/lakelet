@@ -85,6 +85,10 @@ class Store:
             if has_version is None:
                 c.execute(meta.insert().values(key="schema_version", value=str(SCHEMA_VERSION)))
 
+    def close(self) -> None:
+        """Release the pooled connections; on SQLite each holds the db and its -wal file."""
+        self.engine.dispose()
+
     # -- namespaces -----------------------------------------------------------------
 
     def list_namespaces(self) -> list[str]:

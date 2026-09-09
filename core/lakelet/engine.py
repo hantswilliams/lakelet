@@ -16,6 +16,11 @@ import duckdb
 
 EXTENSIONS = ("iceberg", "httpfs", "excel", "aws")
 
+# The AWS default chain through the aws extension (brief D36), used when the environment
+# holds no explicit keys. DuckDB 1.5 resolves the chain when the secret is created and
+# refuses when nothing resolves, which is the normal state of a laptop with no AWS account.
+DEFAULT_CHAIN_SECRET = "CREATE OR REPLACE SECRET lakelet_s3 (TYPE s3, PROVIDER credential_chain)"
+
 PROFILE_METRICS = (
     "LATENCY",
     "ROWS_RETURNED",
@@ -96,10 +101,13 @@ class Engine:
                 "machine; `lakelet init` installs them once"
             ) from e
         # The user's own credentials (brief D36): explicit keys from the environment, else
-        # the AWS default chain through the aws extension.
-        self.con.execute(
-            s3_secret or "CREATE OR REPLACE SECRET lakelet_s3 (TYPE s3, PROVIDER credential_chain)"
-        )
+        # the AWS default chain. Local work never needs either, so a chain that resolves
+        # nothing is kept as a message for the first s3:// operation, not raised here.
+        self.s3_error: str | None = None
+        if s3_secret:
+            self.con.execute(s3_secret)
+        else:
+            self._try_default_chain()
         if memory_limit != "auto":
             self.con.execute("SET memory_limit = ?", [memory_limit])
         if threads != "auto":
@@ -117,6 +125,26 @@ class Engine:
         self.con.execute("SET custom_profiling_settings = ?", [settings])
         self.con.execute("SET enable_profiling = 'json'")
         self.con.execute("SET profiling_output = ?", [str(profile_path)])
+
+    def _try_default_chain(self) -> bool:
+        try:
+            self.con.execute(DEFAULT_CHAIN_SECRET)
+        except duckdb.Error as e:
+            self.s3_error = " ".join(line.strip() for line in str(e).splitlines() if line.strip())
+            return False
+        self.s3_error = None
+        return True
+
+    def s3_problem(self) -> str | None:
+        """Before anything touches ``s3://``: None when a secret is in place, otherwise, after
+        one more try at the default chain, a sentence naming what to set."""
+        if self.s3_error is None or self._try_default_chain():
+            return None
+        return (
+            "no AWS credentials: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and "
+            "AWS_ENDPOINT_URL for a self-hosted store), or configure the AWS default chain "
+            f"({self.s3_error})"
+        )
 
     def execute(self, sql: str, parameters: list | None = None) -> duckdb.DuckDBPyConnection:
         return self.con.execute(sql, parameters) if parameters else self.con.execute(sql)

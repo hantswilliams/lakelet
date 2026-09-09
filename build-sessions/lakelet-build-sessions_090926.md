@@ -33,9 +33,21 @@ Hants said yes to §2. Built the same afternoon, in `web/`:
 
 Verified by building in a clean Ubuntu container at both base paths (`/` and `/lakelet`), a link check over every `href` in the docs pages (none broken), and screenshots at 1280 and 390 px; the first mobile render overflowed until the grid column became `minmax(0, 1fr)`. Not run: `astro check` (the package is not installed) and a real quickstart transcript (the container cannot reach `extensions.duckdb.org`).
 
-## 4. Still open
+## 4. The CI failure, found and fixed
 
-1. The CI failure (`TASKS.md`, Now 1).
+Hants pasted the CI log. Every one of the 59 errors and 17 failures on both runners was downstream of `Project.open`: `Engine.__init__` ran `CREATE OR REPLACE SECRET lakelet_s3 (TYPE s3, PROVIDER credential_chain)` unconditionally, and DuckDB 1.5's aws extension resolves the chain when the secret is created, failing with `Secret Validation Failure … Credential Chain: 'config'` on a machine with no AWS credentials at all. The Mac has AWS configuration, so it never showed there; step 8's tests passed on CI because they set explicit keys for Moto. The suite's result string mapped onto the collected test order confirmed it: step 1 (no engine) and step 8 (explicit keys) green, everything else red.
+
+The fix is in the engine, since a laptop with no AWS account is the normal case (brief D36): the chain failure is kept as a message rather than raised, local work proceeds, and `register._list` and `attach_metadata` ask `engine.s3_problem()` before touching `s3://`, refusing with `NotRegistrable` and a sentence naming `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_ENDPOINT_URL`. The API's `discover` route maps that to a 400 like `attach` already did. Regression test `test_open_works_with_no_aws_credentials_anywhere` clears the AWS environment, points `AWS_CONFIG_FILE` and `AWS_SHARED_CREDENTIALS_FILE` at missing files and disables the metadata probe, then opens a project, runs a local query, and expects `discover s3://` to be refused; it skips that last assertion on a machine where the chain still resolves. Recorded in the brief's §7 under step 8. Not run here: the container cannot load DuckDB extensions; Hants runs the suite on the Mac and CI on push.
+
+The Mac run of that fix passed the new test and the first 112 tests, then collapsed from the TPC-H test on with `OSError: [Errno 24] Too many open files`. A second, older bug: `Project.close()` closed the DuckDB connection and stopped the catalog server but never disposed the SQLAlchemy engines of the catalog store and the history, whose pooled SQLite connections each hold the database, its `-wal` and its `-shm`. A hundred opens later the shell's 256-descriptor default on macOS is gone; yesterday's runs came from a shell with a higher limit, which is why 140 passed. `Store.close()` and `History.close()` dispose the pools, `Project.close()` calls them and drops the manifest cache, and `test_open_and_close_release_their_file_descriptors` opens and closes a project twenty times and asserts, with psutil, that at most six descriptors are left over. A product-side consequence worth noting: the sidecar (`lakelet serve`) opens one project for its life and was never affected; the CLI opens one per process, same.
+
+The first version of that fix made things no better, and the new test said so on the Mac before anything else did: `Store.close()` had been inserted in the middle of `__init__`, so it swallowed the schema-version block, and every close disposed the pool and then opened a fresh connection. Found by listing `/proc/self/fd` across five open/close cycles in the container: two descriptors per cycle, `catalog.db` and `catalog.db-wal`, and the pool status showing one connection *after* dispose. Placing `close()` after `__init__` ends it.
+
+Tooling note that unblocked all of this: DuckDB's extensions are on PyPI as `duckdb-extension-<name>` wheels (`iceberg` needs `avro` too; the harness needs `tpch`). Copying the `.duckdb_extension` file out of the wheel into `~/.duckdb/extensions/v1.5.5/<platform>/` lets the suite run where `extensions.duckdb.org` is unreachable. With that, the whole suite ran in the container under `ulimit -n 256`: 141 passed and the TPC-H harness passed on a two-core machine, 8 env-gated or load-gated skips. Worth considering for CI as well, since it would remove the one network fetch from the runners.
+
+## 5. Still open
+
+1. CI `core #2` after the credential-chain fix (`TASKS.md`, Now 1).
 2. The deck history purge decision.
 3. Trademark search.
 4. Docs follow-ups in `TASKS.md`: a CI check that `cli.md` is current; real quickstart output once the clean-machine run exists.

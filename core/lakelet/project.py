@@ -290,12 +290,19 @@ class Project:
         tmp.replace(self.serve_json)
 
     def close(self) -> None:
+        """Everything that holds a file or a socket, so a process can open and close projects
+        without running out of descriptors (found by the suite on a Mac at the 256 default)."""
         if self._engine is not None:
             self._engine.close()
             self._engine = None
         if self._catalog is not None:
             self._catalog.stop()
             self._catalog = None
+        if self._history is not None:
+            self._history.close()
+            self._history = None
+        self._manifests = None
+        self.store.close()
         if self.token and self.serve_json.exists():
             self.serve_json.unlink()
 
