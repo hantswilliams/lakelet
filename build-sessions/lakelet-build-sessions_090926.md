@@ -63,6 +63,8 @@ Then a materialisation on those facts, `tests/test_step6_materialisation.py`: co
 
 Recorded in the brief's §7 under step 6. The decisions (strategy, override versus `lakelet_table`, ship now versus session 9) are in `decisions-for-review_090926.md` with recommendations; nothing ships until they are ticked. Either strategy leaves old data files behind; snapshot expiry is Day 1.
 
+Hants asked for the transactional edge to be spelled out for developers, since it will come up for anyone pointing an engine at the catalog. Added `web/src/content/docs/transactions.md`: the refused list with the error text verbatim (so a search lands there), the reason in Iceberg's commit model, the patterns that work and what each costs, the storage-growth caveat, and the dbt explanation. Confirmed on Hants' Mac with the official extension: the same `CREATE OR REPLACE` refusal.
+
 ## 8. Still open
 
 1. The clean-machine quickstart, the reference-laptop timings, the demo bucket (`TASKS.md`, Now 1 to 3).

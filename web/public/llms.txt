@@ -17,6 +17,7 @@
 - [Tables](/docs/tables): import matrix, type coercions to Iceberg, attaching Parquet in S3 without copying
 - [The Iceberg REST catalog](/docs/catalog): catalog serve; DuckDB, pyiceberg, Spark and Trino as clients; the routes
 - [Saved questions](/docs/questions): dbt models with two checks
+- [Transactions and the catalog](/docs/transactions): what DuckDB-Iceberg refuses inside one transaction (CREATE OR REPLACE, drop-then-create, create-then-rename), why, and what it means for dbt
 - [CLI reference](/docs/cli): every verb, generated from --help
 - [lakelet.toml and the project folder](/docs/config): every setting, what init writes
 - [The local HTTP API](/docs/api): lakelet serve, bearer token, routes, Arrow streaming

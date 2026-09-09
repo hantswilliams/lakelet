@@ -33,7 +33,7 @@ CREATE TABLE big AS SELECT * FROM orders WHERE amount > 100;
 INSERT INTO orders SELECT * FROM read_csv('more.csv');
 ```
 
-`CREATE TABLE`, `CREATE TABLE AS`, `INSERT`, `MERGE INTO`, `ALTER TABLE … RENAME`, `DROP TABLE`, `CREATE SCHEMA` and `USE` all work through it. `DEFAULT_SCHEMA 'main'` is needed before DuckDB will create tables at all. DuckDB does not retry a commit conflict on its own; Lakelet's own engine retries three times, a bare DuckDB gets a `TransactionException` and a consistent table. A long-lived attach sees tables committed by other processes without re-attaching.
+`CREATE TABLE`, `CREATE TABLE AS`, `INSERT`, `MERGE INTO`, `ALTER TABLE … RENAME`, `DROP TABLE`, `CREATE SCHEMA` and `USE` all work through it; `CREATE OR REPLACE`, and a drop-then-create or a create-then-rename inside one transaction, do not, and [Transactions and the catalog](/docs/transactions) says why. `DEFAULT_SCHEMA 'main'` is needed before DuckDB will create tables at all. DuckDB does not retry a commit conflict on its own; Lakelet's own engine retries three times, a bare DuckDB gets a `TransactionException` and a consistent table. A long-lived attach sees tables committed by other processes without re-attaching.
 
 ### pyiceberg
 
