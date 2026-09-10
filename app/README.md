@@ -19,7 +19,10 @@ new window; the recent ten are in `recent.json` under the app's data directory (
 Screen 1: drop a file or a folder on the window (or "Choose files…", or type a path), see
 the columns and the first rows, import on a click. Screen 2: SQL in the box, ⌘/Ctrl+Enter,
 the verdict before any row, rows streaming into the grid, Esc to stop, Red as a refusal
-until "Run anyway". Every action shows the `lakelet` line it is, with a copy button
+until "Run anyway"; a result of one categorical and one numeric column draws a bar chart, a
+date and a numeric a line. Settings (⌘/Ctrl+,) are `lakelet config set` on `lakelet.toml`.
+If the core stops, the shell restarts it once; twice in a minute shows its last lines and a
+button. Every action shows the `lakelet` line it is, with a copy button
 (`src/lib/command.ts`).
 
 Tests: `cargo test` in `src-tauri/` (the supervisor, projects and windows against a fake

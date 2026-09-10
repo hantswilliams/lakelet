@@ -11,6 +11,7 @@ import { sqlCommand } from '../lib/command';
 import type { Session } from '../lib/session';
 import { Command } from '../components/Command';
 import { GaugeLine, type RunState } from '../components/GaugeLine';
+import { Chart } from '../components/Chart';
 import { Grid } from '../components/Grid';
 import { SqlEditor } from '../components/SqlEditor';
 
@@ -119,6 +120,7 @@ export function Query({ session, tables }: { session: Session; tables: TableInfo
         <Command line={sql.trim() ? sqlCommand(sql.trim(), allowRed) : 'lakelet sql <sql>'} />
       </div>
       <GaugeLine state={state} onRunAnyway={() => { setAllowRed(true); void run(sql, true); }} />
+      <Chart columns={columns} rows={rows} done={state.kind === 'done'} />
       <Grid columns={columns} rows={rows} />
     </section>
   );

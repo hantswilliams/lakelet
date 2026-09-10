@@ -22,7 +22,11 @@
     "@tauri-apps/api": "^2.0.0",
     "apache-arrow": "^21.2.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "vega": "^6.4.0",
+    "vega-embed": "^7.2.0",
+    "vega-interpreter": "^2.3.2",
+    "vega-lite": "^6.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",

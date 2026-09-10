@@ -19,6 +19,9 @@ export interface Started { project: string; port: number; token: string; pid: nu
 
 export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean }
 
+// Each spec file owns what it imports into a sidecar; the files run in parallel outside CI.
+// step 0 → the first; step 2 → the second (and counts its tables); steps 3 and 4 → the
+// third (big) and the fourth (Red); step 4's settings → the second's lakelet.toml only.
 export const SIDECARS: SidecarSpec[] = [
   { memoryLimit: '2GB' },
   { memoryLimit: '1GB' },

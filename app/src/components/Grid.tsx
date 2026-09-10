@@ -9,14 +9,16 @@ import type { Column, Row } from '../lib/arrow';
 
 const ROW = 30;
 
-const cell = (v: unknown): string => {
+const cell = (v: unknown, type: string): string => {
   if (v === null || v === undefined) return '∅';
+  if (typeof v === 'string' && type.startsWith('Decimal') && /^-?\d+(\.\d+)?$/.test(v)) return decimalText(v);
   if (typeof v === 'number') return Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 6 });
   if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
 };
 
 const numeric = (type: string) => /^(Int|Uint|Float|Decimal)/.test(type);
+const decimalText = (v: string) => { const [i, f] = v.split('.'); const sign = i.startsWith('-') ? '-' : ''; const whole = Number(sign ? i.slice(1) : i).toLocaleString(); return f === undefined ? `${sign}${whole}` : `${sign}${whole}.${f}`; };
 
 export function Grid({ columns, rows }: { columns: Column[]; rows: Row[] }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -46,7 +48,7 @@ export function Grid({ columns, rows }: { columns: Column[]; rows: Row[] }) {
               style={{ transform: `translateY(${item.start}px)`, gridTemplateColumns: `repeat(${columns.length}, minmax(120px, 1fr))` }}
             >
               {row.map((v, i) => (
-                <div key={i} className={numeric(columns[i].type) ? 'num' : ''}>{cell(v)}</div>
+                <div key={i} className={numeric(columns[i].type) ? 'num' : ''}>{cell(v, columns[i].type)}</div>
               ))}
             </div>
           );

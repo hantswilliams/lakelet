@@ -46,6 +46,8 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 | `POST /questions` | `{title, sql}` | The saved question. 400 `sql_error`. |
 | `POST /questions/{slug}/run` | `{allow_red}` | An Arrow IPC stream, and the question's `last_run` is updated when it completes. 404 `no_such_question`. |
 | `GET /history?last=50` | | Recent runs from `.lakelet/history.db`, newest first. |
+| `GET /settings` | | `settings` (`engine.memory_limit`, `engine.threads`, `gauge.share_calibration` with their values), the `path` of `lakelet.toml`, and a `note` that the engine reads them at start. |
+| `PUT /settings` | `{key, value}` with `value` a string as `lakelet config set` takes it | The same as `GET`, after the one line in `lakelet.toml` is rewritten in place (comments and other sections kept). 400 `not_settable` for any other key or a value of the wrong shape. |
 
 Errors are `{"error": "<code>", "message": "…"}` with the HTTP status in the table; a malformed body is a 422 from the framework.
 

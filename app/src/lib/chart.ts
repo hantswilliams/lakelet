@@ -1,0 +1,86 @@
+// Copyright 2026 Lakelet contributors
+// SPDX-License-Identifier: Apache-2.0
+// The auto-chart's one rule (app brief A5): a result of exactly two columns, one
+// categorical and one numeric, is a bar chart; a date or timestamp and a numeric is a line;
+// anything else is no chart and no error. Built from the first 5,000 rows, in the order
+// the query returned them. Pure, so it is tested without a renderer.
+
+import type { Column, Row } from './arrow';
+
+export const CHART_ROWS = 5_000;
+export const MAX_BARS = 40;
+
+export type ChartKind = 'bar' | 'line';
+
+export interface ChartPlan {
+  kind: ChartKind;
+  x: string;
+  y: string;
+  values: Array<Record<string, unknown>>;
+}
+
+const numeric = (t: string) => /^(Int|Uint|Float|Decimal)/.test(t);
+const asNumber = (t: string) => (t.startsWith('Decimal') ? (v: unknown) => (v == null ? null : Number(v)) : (v: unknown) => v);
+const temporal = (t: string) => /^(Date|Timestamp)/.test(t);
+const categorical = (t: string) => /^(Utf8|LargeUtf8|Bool)/.test(t);
+
+/** The plan for these columns and rows, or null when the rule gives no chart. */
+export function planChart(columns: Column[], rows: Row[]): ChartPlan | null {
+  if (columns.length !== 2) return null;
+  const [a, b] = columns;
+  let x: Column | undefined;
+  let y: Column | undefined;
+  let kind: ChartKind | undefined;
+  for (const [cat, num] of [[a, b], [b, a]] as const) {
+    if (numeric(num.type) && categorical(cat.type)) { x = cat; y = num; kind = 'bar'; break; }
+    if (numeric(num.type) && temporal(cat.type)) { x = cat; y = num; kind = 'line'; break; }
+  }
+  if (!x || !y || !kind) return null;
+  const xi = columns.indexOf(x);
+  const yi = columns.indexOf(y);
+  const slice = rows.slice(0, CHART_ROWS);
+  if (kind === 'bar') {
+    const distinct = new Set(slice.map((r) => String(r[xi])));
+    if (distinct.size > MAX_BARS || distinct.size < 2) return null;
+  }
+  const num = asNumber(y.type);
+  const values = slice.map((r) => ({ [x!.name]: r[xi], [y!.name]: num(r[yi]) }));
+  return { kind, x: x.name, y: y.name, values };
+}
+
+// The site's tokens (tokens.css): the lake for the one series, muted ink for text, the
+// line colour for hairlines. Text never wears the series colour.
+const LAKE = '#2E6E9E';
+const MUTED = '#5C6B7A';
+const LINE = '#D5DBE2';
+const GRID = '#EEF1F4';
+const FONT = 'Manrope, system-ui, -apple-system, "Segoe UI", sans-serif';
+
+/** A Vega-Lite spec for the plan: thin marks, rounded data-ends, 2px line with markers,
+ *  a hairline grid, a tooltip on every mark, and no legend (one series; the title names it). */
+export function vegaLiteSpec(plan: ChartPlan): Record<string, unknown> {
+  const mark = plan.kind === 'bar'
+    ? { type: 'bar', cornerRadiusEnd: 4, color: LAKE, tooltip: true, width: { band: 0.6 } } // thin: the band's leftover is air
+    : { type: 'line', strokeWidth: 2, color: LAKE, point: { size: 64, filled: true, color: LAKE, stroke: '#FFFFFF', strokeWidth: 2 }, tooltip: true, interpolate: 'monotone' };
+  const x = plan.kind === 'bar'
+    ? { field: plan.x, type: 'nominal', sort: null, axis: { labelAngle: 0, labelLimit: 120, title: null } }
+    : { field: plan.x, type: 'temporal', axis: { title: null, grid: false } };
+  return {
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    width: 'container',
+    height: 240,
+    background: 'transparent',
+    data: { values: plan.values },
+    mark,
+    encoding: {
+      x,
+      y: { field: plan.y, type: 'quantitative', axis: { title: plan.y, format: ',~f', tickCount: 5 } },
+    },
+    config: {
+      font: FONT,
+      view: { stroke: null },
+      axis: { labelColor: MUTED, titleColor: MUTED, domainColor: LINE, tickColor: LINE, gridColor: GRID, gridWidth: 1, labelFontSize: 12, titleFontSize: 12, titleFontWeight: 500 },
+      scale: { bandPaddingInner: 0.25 },
+    },
+  };
+}

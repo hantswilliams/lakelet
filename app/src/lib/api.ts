@@ -41,6 +41,14 @@ export interface Preview {
 
 export type ImportMode = 'create' | 'replace' | 'append';
 
+export type SettingKey = 'engine.memory_limit' | 'engine.threads' | 'gauge.share_calibration';
+
+export interface Settings {
+  settings: Record<SettingKey, string | number | boolean>;
+  path: string;
+  note: string;
+}
+
 /** An error the core answered with: `{error, message}` and the HTTP status. */
 export class ApiError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string) {
@@ -100,6 +108,20 @@ export class Api {
   async preview(path: string, name?: string): Promise<Preview[]> {
     const p = await this.post<Preview | Preview[]>('/preview', name ? { path, name } : { path });
     return Array.isArray(p) ? p : [p];
+  }
+
+  settings(): Promise<Settings> {
+    return this.get<Settings>('/settings');
+  }
+
+  /** `lakelet config set <key> <value>`: one line of lakelet.toml rewritten in place. */
+  async setSetting(key: SettingKey, value: string): Promise<Settings> {
+    const r = await fetch(`${this.base}/settings`, {
+      method: 'PUT',
+      headers: this.headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ key, value }),
+    });
+    return this.answer<Settings>(r, '/settings');
   }
 
   import(path: string, mode: ImportMode, name?: string): Promise<TableInfo[]> {

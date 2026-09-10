@@ -73,6 +73,26 @@ def test_import_preview_import_and_tables(project_dir, tmp_path) -> None:
     assert invoke(project_dir, "tables", "describe", "nope").exit_code == 1
 
 
+def test_config_set_writes_the_file_and_the_next_open_reads_it(project_dir) -> None:
+    shown = invoke(project_dir, "config", "show")
+    assert shown.exit_code == 0 and "engine.memory_limit = auto" in shown.output
+    assert invoke(project_dir, "config", "set", "engine.memory_limit", "1GB").exit_code == 0
+    assert invoke(project_dir, "config", "set", "engine.threads", "2").exit_code == 0
+    refused = invoke(project_dir, "config", "set", "engine.threads", "many")
+    assert refused.exit_code == 1 and "positive integer" in refused.output
+    shown = invoke(project_dir, "config", "show")
+    assert "engine.memory_limit = 1GB" in shown.output and "engine.threads = 2" in shown.output
+    # the CLI reads them: the engine of the next open runs with that limit and thread count
+    from lakelet import Project
+
+    with Project.open(project_dir) as p:
+        assert p.config.engine.memory_limit == "1GB" and p.config.engine.threads == 2
+        limit = p.engine.execute("select current_setting('memory_limit')").fetchone()[0]
+        threads = p.engine.execute("select current_setting('threads')").fetchone()[0]
+        assert limit.endswith("MiB") and 900 <= float(limit[:-3]) <= 1100, limit
+        assert int(threads) == 2
+
+
 def test_sql_pipes_csv_with_the_gauge_line_on_stderr(project_dir, tmp_path) -> None:
     assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
     sql = "select customer, count(*) as n from orders group by 1 order by 1"

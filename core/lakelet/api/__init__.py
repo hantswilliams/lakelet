@@ -69,6 +69,11 @@ class EstimateBody(BaseModel):
     sql: str
 
 
+class SettingBody(BaseModel):
+    key: str
+    value: str
+
+
 class QuestionBody(BaseModel):
     title: str
     sql: str
@@ -314,6 +319,37 @@ def create_router(project: Project, token: str) -> APIRouter:
                 return error(404, "no_such_table", f"no table named {name}")
             except (NotRegistrable, MissingFiles) as e:
                 return error(409, "refresh_failed", str(e))
+
+    # -- settings (the panel is `lakelet config set`) ---------------------------------
+
+    def _settings() -> dict[str, Any]:
+        from lakelet.config import current_settings
+
+        return {
+            "settings": current_settings(project.config),
+            "path": str(project.root / "lakelet.toml"),
+            "note": "read at start; a running core keeps its values until it restarts",
+        }
+
+    @router.get("/settings", dependencies=guarded)
+    def settings() -> dict[str, Any]:
+        return _settings()
+
+    @router.put("/settings", dependencies=guarded)
+    def set_setting(body: SettingBody):
+        from lakelet.config import Config, NotSettable, parse_setting, set_value
+
+        try:
+            parsed = parse_setting(body.key, body.value)
+        except NotSettable as e:
+            return error(400, "not_settable", str(e))
+        toml = project.root / "lakelet.toml"
+        with lock:
+            toml.write_text(
+                set_value(toml.read_text(encoding="utf-8"), body.key, parsed), encoding="utf-8"
+            )
+            project.config = Config.load(toml)
+        return _settings()
 
     # -- the gauge and queries ------------------------------------------------------
 

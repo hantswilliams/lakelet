@@ -87,6 +87,36 @@ def test_config_carries_unknown_keys_and_sections_through(tmp_path) -> None:
     assert config.extra == {"burst": {"default": "auto"}, "newer": {"thing": True}}
 
 
+def test_a_setting_is_rewritten_in_place_with_the_comments_kept(root) -> None:
+    """`lakelet config set` and the app's settings panel: one line changes, nothing else."""
+    from lakelet.config import NotSettable, parse_setting, render_default, set_value
+
+    before = render_default("acme")
+    after = set_value(before, "engine.memory_limit", parse_setting("engine.memory_limit", "8GB"))
+    after = set_value(after, "engine.threads", parse_setting("engine.threads", "4"))
+    after = set_value(
+        after, "gauge.share_calibration", parse_setting("gauge.share_calibration", "true")
+    )
+    loaded = tomllib.loads(after)
+    assert loaded["engine"] == {"memory_limit": "8GB", "threads": 4}
+    assert loaded["gauge"]["share_calibration"] is True
+    assert "# DuckDB default, 80% of RAM" in after, "the comment on the line stays"
+    assert "[burst]" in after and 'default = "prompt"' in after, "other sections untouched"
+    assert after.count("\n") == before.count("\n"), "no line added or lost"
+    assert set(tomllib.loads(after)) == set(tomllib.loads(before))
+    # a key the file does not have yet lands in its section; a missing section is added
+    grown = set_value('[project]\nname = "x"\n', "engine.threads", 2)
+    assert tomllib.loads(grown) == {"project": {"name": "x"}, "engine": {"threads": 2}}
+    for key, value in (
+        ("engine.memory_limit", "lots"),
+        ("engine.threads", "-1"),
+        ("gauge.share_calibration", "maybe"),
+        ("gauge.green_max_seconds", "1"),
+    ):
+        with pytest.raises(NotSettable):
+            parse_setting(key, value)
+
+
 def test_gate_bare_names_and_the_profiler(root) -> None:
     Project.init(root)
     with Project.open(root) as p:

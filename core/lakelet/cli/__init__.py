@@ -27,12 +27,14 @@ catalog_app = typer.Typer(no_args_is_help=True, help="The Iceberg REST catalog."
 question_app = typer.Typer(no_args_is_help=True, help="Saved questions: dbt models with checks.")
 gauge_app = typer.Typer(no_args_is_help=True, help="The gauge's record.")
 audit_app = typer.Typer(no_args_is_help=True, help="Prove what leaves the machine.")
+config_app = typer.Typer(no_args_is_help=True, help="The settings in lakelet.toml.")
 for name, sub in (
     ("tables", tables_app),
     ("catalog", catalog_app),
     ("question", question_app),
     ("gauge", gauge_app),
     ("audit", audit_app),
+    ("config", config_app),
 ):
     app.add_typer(sub, name=name)
 
@@ -608,6 +610,45 @@ def question_run(
 
 
 # -- gauge history and audit -----------------------------------------------------
+
+
+# -- config -------------------------------------------------------------------------
+
+
+@config_app.command("show")
+def config_show() -> None:
+    """The settings a hand or the app may change, with their current values."""
+    from lakelet.config import Config, current_settings
+
+    root = _root()
+    toml = root / "lakelet.toml"
+    if not toml.is_file():
+        _fail(f"{root} is not a Lakelet project (no lakelet.toml)")
+    for key, value in current_settings(Config.load(toml)).items():
+        out.print(f"{key} = {value}", highlight=False)
+
+
+@config_app.command("set")
+def config_set(
+    key: Annotated[
+        str, typer.Argument(help="engine.memory_limit, engine.threads or gauge.share_calibration.")
+    ],
+    value: Annotated[str, typer.Argument(help="auto or a size; auto or a count; true or false.")],
+) -> None:
+    """Set one setting in lakelet.toml, leaving the rest of the file as it was. The engine
+    reads its settings at start, so a running `lakelet serve` keeps the old ones."""
+    from lakelet.config import NotSettable, parse_setting, set_value
+
+    root = _root()
+    toml = root / "lakelet.toml"
+    if not toml.is_file():
+        _fail(f"{root} is not a Lakelet project (no lakelet.toml)")
+    try:
+        parsed = parse_setting(key, value)
+    except NotSettable as e:
+        _fail(str(e))
+    toml.write_text(set_value(toml.read_text(encoding="utf-8"), key, parsed), encoding="utf-8")
+    out.print(f"{key} = {parsed}  (in {toml}; applies from the next start)", highlight=False)
 
 
 @gauge_app.command("history")

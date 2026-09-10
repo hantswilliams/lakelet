@@ -37,6 +37,7 @@ Commands:
   question  Saved questions: dbt models with checks.
   gauge     The gauge's record.
   audit     Prove what leaves the machine.
+  config    The settings in lakelet.toml.
 ```
 
 ### `lakelet init`
@@ -363,6 +364,48 @@ Commands:
 Usage: lakelet audit network [OPTIONS]
 
   Run the quickstart with outbound connections blocked and report every attempt.
+
+Options:
+  --help  Show this message and exit.
+```
+
+### `lakelet config`
+
+```text
+Usage: lakelet config [OPTIONS] COMMAND [ARGS]...
+
+  The settings in lakelet.toml.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  show  The settings a hand or the app may change, with their current values.
+  set   Set one setting in lakelet.toml, leaving the rest of the file as it was.
+```
+
+#### `lakelet config show`
+
+```text
+Usage: lakelet config show [OPTIONS]
+
+  The settings a hand or the app may change, with their current values.
+
+Options:
+  --help  Show this message and exit.
+```
+
+#### `lakelet config set`
+
+```text
+Usage: lakelet config set [OPTIONS] {key} {value}
+
+  Set one setting in lakelet.toml, leaving the rest of the file as it was. The engine
+  reads its settings at start, so a running `lakelet serve` keeps the old ones.
+
+Arguments:
+  key    engine.memory_limit, engine.threads or gauge.share_calibration.  [required]
+  value  auto or a size; auto or a count; true or false.  [required]
 
 Options:
   --help  Show this message and exit.

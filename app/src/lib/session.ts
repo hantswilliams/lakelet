@@ -69,6 +69,12 @@ export async function openProject(path: string): Promise<void> {
   return invoke<void>('open_project', { path });
 }
 
+/** A11: after two exits in a minute the shell stops restarting; this asks it to try again. */
+export async function restartSidecar(): Promise<void> {
+  if (!inTauri()) throw new Error('restarting the core is only in the app');
+  return invoke<void>('restart_sidecar');
+}
+
 /** The native file dialog, many files allowed; [] when cancelled. Only the app has one. */
 export async function pickFiles(): Promise<string[]> {
   if (!inTauri()) throw new Error('the file dialog is only in the app; in a browser, type the path');

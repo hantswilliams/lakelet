@@ -4,7 +4,7 @@
 // row, then Arrow record batches as the core produces them, each handed to the caller as it
 // lands. Esc aborts the fetch, which closes the response and the core's result.
 
-import { RecordBatchReader, type RecordBatch } from 'apache-arrow';
+import { DataType, RecordBatchReader, type RecordBatch } from 'apache-arrow';
 import { ApiError, type Api } from './api';
 
 export type Verdict = 'green' | 'yellow' | 'red';
@@ -60,13 +60,66 @@ export function plain(v: unknown): unknown {
   return v;
 }
 
+const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+
+/** A 128-bit two's-complement decimal, as Arrow JS hands it over (four little-endian
+ *  32-bit words), as the number it is, with its scale applied. */
+export function decimalText(words: ArrayLike<number>, scale: number): string {
+  let n = 0n;
+  for (let i = 3; i >= 0; i--) n = (n << 32n) | BigInt(words[i] >>> 0);
+  if (n >= 1n << 127n) n -= 1n << 128n;
+  const negative = n < 0n;
+  let digits = (negative ? -n : n).toString();
+  if (scale > 0) {
+    digits = digits.padStart(scale + 1, '0');
+    digits = `${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
+  }
+  return (negative ? '-' : '') + digits;
+}
+
+/** How one column's cells become plain values: dates as `YYYY-MM-DD`, timestamps as ISO
+ *  text (with the zone when they have one), times as `HH:MM:SS`, decimals as their digits;
+ *  Arrow JS returns those as milliseconds, microseconds and words otherwise. */
+export function cellConverter(type: DataType): (v: unknown) => unknown {
+  if (DataType.isDate(type)) {
+    return (v) => (v == null ? null : new Date(Number(v)).toISOString().slice(0, 10));
+  }
+  if (DataType.isTimestamp(type)) {
+    const zoned = Boolean((type as { timezone?: string | null }).timezone);
+    return (v) => {
+      if (v == null) return null;
+      const iso = new Date(Number(v)).toISOString();
+      const text = iso.endsWith('.000Z') ? iso.slice(0, 19) : iso.slice(0, 23);
+      return zoned ? `${text}Z` : text;
+    };
+  }
+  if (DataType.isTime(type)) {
+    const unit = (type as { unit: number }).unit; // 0 s, 1 ms, 2 µs, 3 ns
+    const perSecond = [1n, 1_000n, 1_000_000n, 1_000_000_000n][unit] ?? 1_000_000n;
+    return (v) => {
+      if (v == null) return null;
+      const n = BigInt(v as bigint | number);
+      const seconds = n / perSecond;
+      const fraction = n % perSecond;
+      const base = `${pad(Number(seconds / 3600n))}:${pad(Number((seconds / 60n) % 60n))}:${pad(Number(seconds % 60n))}`;
+      return fraction === 0n ? base : `${base}.${fraction.toString().padStart(Number(perSecond.toString().length - 1), '0').replace(/0+$/, '')}`;
+    };
+  }
+  if (DataType.isDecimal(type)) {
+    const scale = (type as { scale: number }).scale;
+    return (v) => (v == null ? null : decimalText(v as ArrayLike<number>, scale));
+  }
+  return plain;
+}
+
 function rowsOf(batch: RecordBatch): Row[] {
   const n = batch.numRows;
   const columns = batch.schema.fields.map((_, i) => batch.getChildAt(i)!);
+  const convert = batch.schema.fields.map((f) => cellConverter(f.type));
   const rows: Row[] = new Array(n);
   for (let r = 0; r < n; r++) {
     const row: Row = new Array(columns.length);
-    for (let c = 0; c < columns.length; c++) row[c] = plain(columns[c].get(r));
+    for (let c = 0; c < columns.length; c++) row[c] = convert[c](columns[c].get(r));
     rows[r] = row;
   }
   return rows;

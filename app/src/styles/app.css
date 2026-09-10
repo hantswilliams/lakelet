@@ -98,3 +98,23 @@ button.quiet{font:500 12px var(--mono);color:var(--muted);background:var(--bg);b
 .grid-body{position:relative;width:100%}
 .grid-row{display:grid;position:absolute;top:0;left:0;width:100%;border-bottom:1px solid var(--line)}
 .grid .num{text-align:right;font-variant-numeric:tabular-nums}
+/* the auto-chart */
+.chart{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px 6px}
+.chart figcaption{font-size:12px;color:var(--muted);margin-bottom:4px}
+.chart-host{width:100%}
+.chart-host .vega-embed{width:100%}
+.chart-host .vega-embed svg{max-width:100%}
+/* settings */
+.settings{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:grid;gap:14px}
+.settings header{display:flex;align-items:center;justify-content:space-between}
+.settings h2{font-size:16px}
+.settings .setting{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:16px;align-items:start;padding-top:12px;border-top:1px solid var(--line)}
+.settings label{display:grid;gap:4px;font-size:14px}
+.settings label span{font-size:12.5px}
+.settings .control{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.settings .control input[type=text]{width:120px;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.settings .control input[type=checkbox]{width:18px;height:18px}
+.settings .keys h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 6px}
+.settings dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px;margin:0}
+.settings dt{font:500 12.5px var(--mono);color:var(--ink)} .settings dd{margin:0;color:var(--muted)}
+@media (max-width:760px){.settings .setting{grid-template-columns:minmax(0,1fr)}}

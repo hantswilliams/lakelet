@@ -160,6 +160,15 @@ async fn pick_files(app: AppHandle) -> Vec<String> {
         .collect()
 }
 
+/// A11: the shell gave up after two exits in a minute; the window asks for one more start.
+#[tauri::command]
+fn restart_sidecar(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>) -> Result<(), String> {
+    let label = window.label().to_string();
+    let project = shell.open.project_of(&label).ok_or_else(|| "this window has no project".to_string())?;
+    start_in_window(app, shell.inner().clone(), label, project);
+    Ok(())
+}
+
 /// A10: open a folder as a project, running `lakelet init` first when it needs it.
 #[tauri::command]
 async fn open_project(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>, path: String) -> Result<(), String> {
@@ -213,7 +222,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![get_session, window_project, recent_projects, pick_folder, pick_files, open_project])
+        .invoke_handler(tauri::generate_handler![get_session, window_project, recent_projects, pick_folder, pick_files, open_project, restart_sidecar])
         .build(tauri::generate_context!())
         .expect("error while building the Lakelet shell")
         .run(|app, event| {

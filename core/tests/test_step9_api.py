@@ -89,6 +89,27 @@ def test_tables_over_http(served) -> None:
     assert client.post("/api/tables/nope/refresh").status_code == 404
 
 
+def test_settings_over_http_write_lakelet_toml(served) -> None:
+    p, client, tmp_path = served
+    got = client.get("/api/settings").json()
+    assert got["settings"] == {
+        "engine.memory_limit": "auto",
+        "engine.threads": "auto",
+        "gauge.share_calibration": False,
+    }
+    assert got["path"].endswith("lakelet.toml")
+    put = client.put("/api/settings", json={"key": "gauge.share_calibration", "value": "true"})
+    assert put.status_code == 200 and put.json()["settings"]["gauge.share_calibration"] is True
+    put = client.put("/api/settings", json={"key": "engine.memory_limit", "value": "2GB"})
+    assert put.json()["settings"]["engine.memory_limit"] == "2GB"
+    bad = client.put("/api/settings", json={"key": "project.name", "value": "x"})
+    assert bad.status_code == 400 and bad.json()["error"] == "not_settable"
+    text = (p.root / "lakelet.toml").read_text()
+    assert 'memory_limit = "2GB"' in text and "share_calibration = true" in text
+    assert "# DuckDB default, 80% of RAM" in text, "the file is edited, not regenerated"
+    assert p.config.engine.memory_limit == "2GB", "the running project re-read its config"
+
+
 def test_a_client_that_goes_away_stops_the_statement_and_history_shows_the_run(served) -> None:
     """The app's Esc aborts the fetch. The engine is interrupted at once (not left running for
     nobody), the lock is free within a moment, and the run is in history as stopped early."""

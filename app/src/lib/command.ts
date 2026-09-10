@@ -30,8 +30,34 @@ export const previewCommand = (path: string): string => `${importCommand(path)} 
 
 export const initCommand = (folder: string): string => `lakelet init ${shellArg(folder)}`;
 
+/** `--` comments outside string literals removed, so folding the SQL onto one line for the
+ *  terminal cannot comment out what followed them. */
+export function stripComments(sql: string): string {
+  let out = '';
+  let quote: string | null = null;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (quote) {
+      out += ch;
+      if (ch === quote) quote = null;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      out += ch;
+    } else if (ch === '-' && sql[i + 1] === '-') {
+      while (i < sql.length && sql[i] !== '\n') i++;
+      out += '\n';
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+/** `lakelet config set <key> <value>`: the settings panel's line. */
+export const configCommand = (key: string, value: string): string => `lakelet config set ${key} ${shellArg(value)}`;
+
 /** `lakelet sql '<sql>' [--run-anyway]`: the query screen's line. */
 export function sqlCommand(sql: string, runAnyway = false): string {
-  const one = sql.replace(/\s+/g, ' ').trim();
+  const one = stripComments(sql).replace(/\s+/g, ' ').trim();
   return `lakelet sql ${shellArg(one)}${runAnyway ? ' --run-anyway' : ''}`;
 }

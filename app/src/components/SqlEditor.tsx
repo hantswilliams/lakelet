@@ -54,6 +54,8 @@ export function SqlEditor({ value, onChange, onRun, onCancel, schema, autoFocus 
         EditorView.theme({
           '&': { fontSize: '13.5px', fontFamily: 'var(--mono)' },
           '.cm-content': { fontFamily: 'var(--mono)', minHeight: '96px', padding: '8px 0' },
+          '.cm-line': { padding: '0 8px' },
+          '.cm-gutter.cm-lineNumbers .cm-gutterElement': { padding: '0 6px 0 10px' },
           '.cm-gutters': { background: 'var(--bg)', color: 'var(--muted)', border: 'none' },
           '&.cm-focused': { outline: 'none' },
         }),
