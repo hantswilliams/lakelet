@@ -1,14 +1,27 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
-// Step 0 of the app brief: one window, the status dot, and what health says. Screens 1 and
-// 2 replace the body in steps 2 and 3.
+// Step 1 of the app brief: a window is either the welcome screen (no project) or a project
+// with its own sidecar; the status dot, what health says, the time the core took to be
+// ready. Screens 1 and 2 replace the body in steps 2 and 3.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Api, humanBytes, type Health, type TableInfo } from './lib/api';
-import { getSession, onSidecarEvent, type Session } from './lib/session';
+import {
+  getSession, inTauri, onSidecarEvent, openProject, pickFolder, recentProjects, windowProject,
+  type RecentProject, type Session,
+} from './lib/session';
 import { StatusDot, type Status } from './components/StatusDot';
+import { Welcome } from './screens/Welcome';
+
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e)); // Tauri rejects with a string
+
+const baseName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
 
 export default function App() {
+  const [project, setProject] = useState<string | null>();
+  const [recent, setRecent] = useState<RecentProject[]>([]);
+  const [busy, setBusy] = useState<string>();
+  const [openError, setOpenError] = useState<string>();
   const [status, setStatus] = useState<Status>('starting');
   const [detail, setDetail] = useState<string>();
   const [session, setSession] = useState<Session>();
@@ -24,8 +37,23 @@ export default function App() {
     setStatus((prev) => (prev === 'restarted' ? prev : 'ready'));
   }
 
+  // Which project this window has; asked again after opening one into this window.
+  const refreshProject = useCallback(async () => {
+    const [p, r] = await Promise.all([windowProject(), recentProjects()]);
+    setRecent(r);
+    setProject(p);
+  }, []);
+
   useEffect(() => {
+    refreshProject().catch((e: unknown) => { setProject(null); setOpenError(message(e)); });
+  }, [refreshProject]);
+
+  // With a project: the session (the shell waits for the sidecar), then health and tables.
+  useEffect(() => {
+    if (project == null) return;
     let cancelled = false;
+    setStatus('starting');
+    setError(undefined);
     getSession()
       .then((s) => {
         if (cancelled) return;
@@ -33,69 +61,110 @@ export default function App() {
         return load(s);
       })
       .catch((e: unknown) => {
-        // Tauri rejects a failed command with a string, not an Error
+        if (cancelled) return;
         setStatus('down');
-        setError(e instanceof Error ? e.message : String(e));
+        setError(message(e));
       });
     const off = onSidecarEvent((e) => {
       if (e.kind === 'down') {
         setStatus('down');
         setDetail(e.stderr);
+        setError(e.stderr);
       } else {
         if (e.kind === 'restarted') setStatus('restarted');
         setSession(e.session);
-        load(e.session).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+        load(e.session).catch((err: unknown) => setError(message(err)));
       }
     });
     return () => {
       cancelled = true;
       off.then((f) => f());
     };
-  }, []);
+  }, [project]);
+
+  // A10: the dialog, then the shell opens the folder here (no project yet) or in a new window.
+  async function open(path?: string) {
+    setOpenError(undefined);
+    try {
+      const folder = path ?? (await pickFolder());
+      if (!folder) return;
+      setBusy(`opening ${baseName(folder)}…`);
+      await openProject(folder);
+      await refreshProject();
+    } catch (e: unknown) {
+      setOpenError(message(e));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  if (project === undefined) return <div className="app" />; // the first paint, before the shell answers
 
   return (
     <div className="app">
       <header className="bar">
         <span className="wordmark">lakelet</span>
-        <span className="project" data-testid="project">{health?.project ?? session?.project ?? ''}</span>
-        <StatusDot status={status} detail={detail} />
+        <span className="project" data-testid="project">{health?.project ?? (project ? baseName(project) : '')}</span>
+        {project !== null && <StatusDot status={status} detail={detail} />}
+        {inTauri() && project !== null && (
+          <button type="button" className="quiet" onClick={() => open()} disabled={!!busy} title="Open another folder in a new window">
+            Open…
+          </button>
+        )}
       </header>
       <main>
-        {error && (
-          <section className="error" data-testid="error">
-            <b>The core did not start.</b>
-            <pre>{error}</pre>
-            <p>In development, export <code>LAKELET_SIDECAR</code> (the <code>lakelet</code> executable, for example <code>core/.venv/bin/lakelet</code>) and <code>LAKELET_PROJECT</code> (a folder with a <code>lakelet.toml</code>, or one to <code>lakelet init</code>) before <code>npm run tauri dev</code>.</p>
-          </section>
+        {project === null ? (
+          <Welcome recent={recent} canPick={inTauri()} busy={busy} error={openError} onPick={() => open()} onOpen={(p) => open(p)} />
+        ) : (
+          <>
+            {openError && <section className="error" data-testid="open-error"><b>That folder could not be opened.</b><pre>{openError}</pre></section>}
+            {error && (
+              <section className="error" data-testid="error">
+                <b>The core did not start.</b>
+                <pre>{error}</pre>
+                <p>
+                  In development, export <code>LAKELET_SIDECAR</code> (the <code>lakelet</code> executable, for example <code>core/.venv/bin/lakelet</code>)
+                  before <code>npm run tauri dev</code>; <code>LAKELET_PROJECT</code> names the folder to open.
+                </p>
+              </section>
+            )}
+            {session?.initialised && (
+              <section className="notice" data-testid="initialised">
+                <b>Set up {baseName(session.project)} as a lakehouse.</b>
+                <pre>{session.initialised}</pre>
+              </section>
+            )}
+            {health && (
+              <section className="health" data-testid="health">
+                <div><b>{health.lakelet}</b><span>lakelet</span></div>
+                <div><b>{health.duckdb}</b><span>DuckDB</span></div>
+                <div><b>{health.machine.memory_limit_text ?? '—'}</b><span>memory limit, this window</span></div>
+                <div><b>{health.throughput_local_mbps ? `${Math.round(health.throughput_local_mbps)} MB/s` : '—'}</b><span>local disk</span></div>
+                <div data-testid="ready-ms"><b>{session?.ready_ms ? `${session.ready_ms} ms` : '—'}</b><span>core ready in</span></div>
+              </section>
+            )}
+            <section className="tables" data-testid="tables">
+              <h2>Tables</h2>
+              {tables.length === 0 ? (
+                <p className="muted">No tables yet. Drop a CSV, Parquet, Excel or JSON file here, or run <code>lakelet import &lt;file&gt;</code>.</p>
+              ) : (
+                <table>
+                  <thead><tr><th>Table</th><th>Rows</th><th>Size</th><th>Columns</th></tr></thead>
+                  <tbody>
+                    {tables.map((t) => (
+                      <tr key={t.name}>
+                        <td className="mono">{t.name}</td>
+                        <td>{t.rows.toLocaleString()}</td>
+                        <td>{humanBytes(t.bytes)}</td>
+                        <td>{t.columns.length}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+          </>
         )}
-        {health && (
-          <section className="health" data-testid="health">
-            <div><b>{health.lakelet}</b><span>lakelet</span></div>
-            <div><b>{health.duckdb}</b><span>DuckDB</span></div>
-            <div><b>{health.machine.memory_limit_text ?? '—'}</b><span>memory limit</span></div>
-            <div><b>{health.throughput_local_mbps ? `${Math.round(health.throughput_local_mbps)} MB/s` : '—'}</b><span>local disk</span></div>
-          </section>
-        )}
-        <section className="tables" data-testid="tables">
-          <h2>Tables</h2>
-          {tables.length === 0 ? (
-            <p className="muted">No tables yet. Drop a CSV, Parquet, Excel or JSON file here, or run <code>lakelet import &lt;file&gt;</code>.</p>
-          ) : (
-            <table>
-              <thead><tr><th>Table</th><th>Rows</th><th>Size</th><th>Columns</th></tr></thead>
-              <tbody>
-                {tables.map((t) => (
-                  <tr key={t.name}>
-                    <td className="mono">{t.name}</td>
-                    <td>{t.rows.toLocaleString()}</td>
-                    <td>{humanBytes(t.bytes)}</td>
-                    <td>{t.columns.length}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
       </main>
     </div>
   );

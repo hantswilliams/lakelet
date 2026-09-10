@@ -1,14 +1,25 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
-// Where the sidecar is (app brief A7). Inside Tauri the shell hands the session over once;
-// in a browser (development, Playwright) it comes from the URL: ?port=…&token=…, against
-// a `lakelet serve` started with LAKELET_DEV_ORIGIN (A12).
+// The shell's commands (app brief A7, A10). Inside Tauri each window asks the shell for its
+// project and its session once, and opens folders through it; in a browser (development,
+// Playwright) the session comes from the URL, ?port=…&token=…, against a `lakelet serve`
+// started with LAKELET_DEV_ORIGIN (A12), and there is no folder dialog.
 
 export interface Session {
   port: number;
   token: string;
   pid: number;
   project: string;
+  /** Spawn to `serving` line and serve.json read, as the shell measured it (§3.2). */
+  ready_ms: number;
+  /** `lakelet init`'s output when opening this folder initialised it. */
+  initialised: string | null;
+}
+
+export interface RecentProject {
+  path: string;
+  name: string;
+  opened: number;
 }
 
 export type SidecarEvent =
@@ -18,16 +29,44 @@ export type SidecarEvent =
 
 export const inTauri = (): boolean => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
+async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  const tauri = await import('@tauri-apps/api/core');
+  return tauri.invoke<T>(command, args);
+}
+
+const params = () => new URLSearchParams(window.location.search);
+
+/** The window's project, or null for the welcome screen. */
+export async function windowProject(): Promise<string | null> {
+  if (inTauri()) return invoke<string | null>('window_project');
+  const p = params();
+  return p.get('port') ? (p.get('project') ?? '') : null;
+}
+
+/** The session; inside Tauri this waits while the sidecar starts. */
 export async function getSession(): Promise<Session> {
-  if (inTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<Session>('get_session');
-  }
-  const params = new URLSearchParams(window.location.search);
-  const port = Number(params.get('port'));
-  const token = params.get('token') ?? '';
+  if (inTauri()) return invoke<Session>('get_session');
+  const p = params();
+  const port = Number(p.get('port'));
+  const token = p.get('token') ?? '';
   if (!port || !token) throw new Error('no session: open through the Lakelet app, or pass ?port=&token= from serve.json');
-  return { port, token, pid: 0, project: params.get('project') ?? '' };
+  return { port, token, pid: 0, project: p.get('project') ?? '', ready_ms: Number(p.get('ready_ms') ?? 0), initialised: null };
+}
+
+export async function recentProjects(): Promise<RecentProject[]> {
+  return inTauri() ? invoke<RecentProject[]>('recent_projects') : [];
+}
+
+/** The native folder dialog; null when cancelled. Only the app has one. */
+export async function pickFolder(): Promise<string | null> {
+  if (!inTauri()) throw new Error('the folder dialog is only in the app; in a browser, pass ?port=&token= from serve.json');
+  return invoke<string | null>('pick_folder');
+}
+
+/** Open a folder as a project: this window when it has none, else a new one (A10). */
+export async function openProject(path: string): Promise<void> {
+  if (!inTauri()) throw new Error('opening a project is only in the app');
+  return invoke<void>('open_project', { path });
 }
 
 export async function onSidecarEvent(handler: (e: SidecarEvent) => void): Promise<() => void> {

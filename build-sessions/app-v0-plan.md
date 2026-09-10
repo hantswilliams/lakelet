@@ -1,6 +1,6 @@
 # Lakelet — desktop shell, build brief (app v0, revision 1)
 
-> **Decided September 10, 2026: A1 to A14 accepted** (Hants, in conversation). §4 is the build order from here; step 0 started the same day.
+> **Decided September 10, 2026: A1 to A14 accepted** (Hants, in conversation). §4 is the build order from here; steps 0 and 1 were built the same day.
 
 *September 10, 2026 · Session 6 of `lakelet-build-sessions.md` · Follows `core-v0.5-plan.md`, which it does not change · The A block at the top is for review: tick a box on each, write a line under "Change" if you disagree. Nothing in §4 is built until the A block is decided.*
 
@@ -144,7 +144,7 @@ Each step ends with a test that stays in the suite.
 | Step | Builds | Gate |
 |---|---|---|
 | 0 | `app/` scaffold: Tauri 2, React, Vite, the tokens; the three core additions (`serve --memory-limit`, the `serving` line, `LAKELET_DEV_ORIGIN`) with their pytest tests; the supervisor in Rust; the status dot; `app-ci.yml` | `cargo test` passes (the supervisor finds `serve.json`, restarts once, stops after two); `npm run tauri dev` with `LAKELET_SIDECAR` opens a window whose dot goes green; Playwright: health renders versions; window paint to green dot measured and recorded (§7); CI green on both runners |
-| 1 | Projects: open folder, init if needed, recent list, one window per project, memory limit per window, close stops the sidecar | Rust and Playwright: a folder without `lakelet.toml` is initialised and opened; two windows get two sidecars with halved limits (`/api/health` reports the limit); closing kills the sidecar (no orphan process) |
+| 1 | Projects: open folder, init if needed, recent list, one window per project, memory limit per window, close stops the sidecar. *Built September 10:* `projects.rs` (recent list, memory share, `init`, the window registry), the welcome screen, "Open…" in the bar, `ready_ms` on the session and the panel | Rust and Playwright: a folder without `lakelet.toml` is initialised and opened; two windows get two sidecars with halved limits (`/api/health` reports the limit); closing kills the sidecar (no orphan process). *Met:* four Rust tests (share, recent list, init, two windows and close), three Vitest, two Playwright against two real sidecars |
 | 2 | Screen 1: tables panel, drop zone with the terminal command beside it, preview, import, "Copy as command" | Playwright: drop a generated CSV, the preview shows the columns and notes, import lands, the panel shows the table with rows and size; a folder drop lists three files; the copied command is the exact CLI line |
 | 3 | Screen 2 without the chart: CodeMirror input, Cmd/Ctrl+Enter, the gauge line from headers, streaming grid, Red refusal and "Run anyway", Esc cancels | Playwright: on a 20 M-row table the first rows are on screen before the query completes (timestamped); a lowered-threshold project shows Red with the sentence and runs on "Run anyway"; Esc during a slow query leaves the app responsive and history shows the closed run |
 | 4 | The auto-chart (A5); crash recovery (A11); settings panel; keyboard polish | Playwright: bar chart for a group-by; killing the sidecar's pid shows "core restarted" and the tables refresh; settings write `lakelet.toml` and the CLI reads them |

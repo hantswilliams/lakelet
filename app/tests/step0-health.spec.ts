@@ -34,9 +34,9 @@ test('a table imported through the CLI appears in the panel', async ({ page }) =
   await expect(row).toContainText('3');
 });
 
-test('without a session the window says why, not just "core stopped"', async ({ page }) => {
-  await page.goto('/');  // no ?port=&token=: the browser-mode equivalent of a sidecar that did not start
-  await expect(page.getByRole('status')).toHaveText('core stopped');
-  await expect(page.getByTestId('error')).toContainText('The core did not start');
-  await expect(page.getByTestId('error')).toContainText('LAKELET_SIDECAR');
+test('without a session the window is the welcome screen and says how to get one', async ({ page }) => {
+  await page.goto('/');  // no ?port=&token=: no project, as a fresh app launch is (step 1)
+  await expect(page.getByTestId('welcome')).toContainText('Open a folder');
+  await expect(page.getByTestId('hint')).toContainText('LAKELET_SIDECAR');
+  await expect(page.getByRole('status')).toHaveCount(0);
 });

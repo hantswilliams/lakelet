@@ -48,6 +48,8 @@ jobs:
         working-directory: app
       - run: npm run build
         working-directory: app
+      - run: npm test
+        working-directory: app
       - run: npx playwright install --with-deps chromium
         working-directory: app
       - run: npx playwright test

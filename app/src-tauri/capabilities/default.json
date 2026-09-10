@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: the shell's own commands and Tauri's core events only.",
-  "windows": ["main"],
+  "description": "Every project window: the shell's own commands and Tauri's core events only; the folder dialog is opened from Rust.",
+  "windows": ["project-*"],
   "permissions": ["core:default", "core:event:default", "core:window:default"]
 }

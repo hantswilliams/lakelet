@@ -49,11 +49,11 @@ cd app
 npm install                                       # Node 22
 export LAKELET_SIDECAR=$PWD/../core/.venv/bin/lakelet
 LAKELET_PROJECT=~/acme npm run tauri dev          # Rust stable; on Ubuntu also libwebkit2gtk-4.1-dev, librsvg2-dev, libayatana-appindicator3-dev
-cd src-tauri && cargo test                        # the supervisor against a fake sidecar
-cd .. && npm run e2e                              # Playwright against a real sidecar
+cd src-tauri && cargo test                        # the supervisor, projects and windows against a fake sidecar
+cd .. && npm test && npm run e2e                  # Vitest for the screens; Playwright against real sidecars
 ```
 
-The shell spawns `lakelet serve --port 0 -C <project> --memory-limit <n>`, waits for its `serving` line, reads the port and token from `.lakelet/serve.json`, and hands them to the window; the window calls `/api` itself. `LAKELET_SIDECAR` names the executable in development; a bundle carries its own (session 10). Under `tauri dev` the window's origin is the Vite server, so the shell passes `LAKELET_DEV_ORIGIN` to the sidecar in debug builds only.
+Each window is one project with one sidecar. The shell spawns `lakelet serve --port 0 -C <project> --memory-limit <n>`, waits for its `serving` line, reads the port and token from `.lakelet/serve.json`, and hands them to the window with the milliseconds that took; the window calls `/api` itself. The limit is 60% of RAM for the first window and half that for each further window open at the same time, so two projects side by side cannot together ask for more than the machine has; closing a window kills its sidecar. Opening a folder without a `lakelet.toml` runs `lakelet init` on it first and shows what it created; the recent ten projects are `recent.json` in the app's data directory. `LAKELET_SIDECAR` names the executable in development; a bundle carries its own (session 10). Under `tauri dev` the window's origin is the Vite server, so the shell passes `LAKELET_DEV_ORIGIN` to the sidecar in debug builds only.
 
 ## Making a change
 

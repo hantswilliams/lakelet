@@ -1,5 +1,7 @@
-import { readState } from './sidecar';
+import { readStates } from './sidecar';
 
 export default async function globalTeardown() {
-  try { process.kill(readState().pid, 'SIGTERM'); } catch { /* already gone */ }
+  for (const s of readStates()) {
+    try { process.kill(s.pid, 'SIGTERM'); } catch { /* already gone */ }
+  }
 }

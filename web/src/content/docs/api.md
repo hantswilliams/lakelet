@@ -5,14 +5,14 @@ section: Reference
 order: 3
 ---
 
-`lakelet serve` runs the core as a sidecar: one loopback HTTP server that carries the [Iceberg REST catalog](/docs/catalog) under `/v1` and the API under `/api`. It exists for the desktop app, which is not built yet; today it is how anything that is not a shell talks to a project. The API does the same operations as the CLI verbs, so nothing is reachable one way and not the other.
+`lakelet serve` runs the core as a sidecar: one loopback HTTP server that carries the [Iceberg REST catalog](/docs/catalog) under `/v1` and the API under `/api`. The desktop app runs one per window; it is also how anything that is not a shell talks to a project. The API does the same operations as the CLI verbs, so nothing is reachable one way and not the other.
 
 ## Starting it
 
 ```bash
 lakelet serve                        # a free port
 lakelet serve --port 8765            # a fixed one
-lakelet serve --memory-limit 6GB     # DuckDB's limit for this process only; the app sets one per window
+lakelet serve --memory-limit 6GB     # DuckDB's limit for this process only; the app gives each window its share
 ```
 
 While it runs, `.lakelet/serve.json` names it, mode 0600, removed on exit:

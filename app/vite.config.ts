@@ -7,5 +7,5 @@ export default defineConfig({
   clearScreen: false,
   server: { port: 5173, strictPort: true },
   build: { target: ['es2022', 'safari16'], sourcemap: false },
-  test: { environment: 'jsdom', include: ['src/**/*.test.tsx'] },
+  test: { environment: 'jsdom', include: ['src/**/*.test.tsx'], setupFiles: ['src/test-setup.ts'] },
 });

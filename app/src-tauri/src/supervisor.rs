@@ -16,13 +16,17 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 /// What the webview needs to call `/api`: the loopback port and the per-launch token,
-/// from `serve.json` (core step 9), plus the sidecar's pid for the status line.
+/// from `serve.json` (core step 9), plus the sidecar's pid for the status line, how long
+/// spawn to ready took (the launch budget, §3.2, measured rather than eyeballed), and
+/// `lakelet init`'s output when opening this folder initialised it (A10).
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Session {
     pub port: u16,
     pub token: String,
     pub pid: u32,
     pub project: PathBuf,
+    pub ready_ms: u64,
+    pub initialised: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -112,6 +116,10 @@ impl Supervisor {
         &self.session
     }
 
+    pub fn session_mut(&mut self) -> &mut Session {
+        &mut self.session
+    }
+
     /// Poll: `None` while the sidecar runs; on exit, restart once and report it, or give up
     /// after two exits inside a minute and report the stderr tail.
     pub fn check(&mut self) -> Option<SidecarEvent> {
@@ -166,6 +174,7 @@ impl Drop for Supervisor {
 }
 
 fn spawn(config: &SidecarConfig) -> Result<(Child, Session, mpsc::Receiver<String>), SidecarError> {
+    let t0 = Instant::now();
     let mut command = Command::new(&config.executable);
     command
         .arg("-C")
@@ -227,7 +236,8 @@ fn spawn(config: &SidecarConfig) -> Result<(Child, Session, mpsc::Receiver<Strin
 
     match ready_rx.recv_timeout(config.ready_timeout) {
         Ok(line) if line.starts_with("serving ") => {
-            let session = read_serve_json(&config.project, child.id())?;
+            let mut session = read_serve_json(&config.project, child.id())?;
+            session.ready_ms = t0.elapsed().as_millis() as u64;
             Ok((child, session, rx))
         }
         Ok(output) => {
@@ -253,17 +263,18 @@ fn read_serve_json(project: &Path, pid: u32) -> Result<Session, SidecarError> {
     let path = project.join(".lakelet").join("serve.json");
     let text = std::fs::read_to_string(&path).map_err(|e| SidecarError::ServeJson(format!("{}: {e}", path.display())))?;
     let parsed: ServeJson = serde_json::from_str(&text).map_err(|e| SidecarError::ServeJson(e.to_string()))?;
-    Ok(Session { port: parsed.port, token: parsed.token, pid, project: project.to_path_buf() })
+    Ok(Session { port: parsed.port, token: parsed.token, pid, project: project.to_path_buf(), ready_ms: 0, initialised: None })
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    /// A stand-in for `lakelet serve`: writes serve.json, prints the `serving` line, then
-    /// lives for `LAKELET_FAKE_LIFETIME` seconds (or until killed). Python so it runs on
-    /// every platform the shell does.
-    fn fake_sidecar(dir: &Path, lifetime_secs: u32) -> SidecarConfig {
+    /// A stand-in for the `lakelet` executable (`tests/fake_sidecar.py`): `init` writes a
+    /// `lakelet.toml`; `serve` writes serve.json, prints the `serving` line, then lives for
+    /// `LAKELET_FAKE_LIFETIME` seconds (or until killed). Python so it runs on every
+    /// platform the shell does; the launcher is a tiny wrapper written into the temp dir.
+    pub(crate) fn fake_executable(dir: &Path, lifetime_secs: u32) -> OsString {
         let script = std::env::current_dir().unwrap().join("tests").join("fake_sidecar.py");
         let python = std::env::var_os("PYTHON").unwrap_or_else(|| OsString::from("python3"));
         // The fake takes the same arguments as the real thing; the launcher is python plus
@@ -280,10 +291,14 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
+        wrapper.into_os_string()
+    }
+
+    fn fake_sidecar(dir: &Path, lifetime_secs: u32) -> SidecarConfig {
         let project = dir.join("proj");
         std::fs::create_dir_all(project.join(".lakelet")).unwrap();
         SidecarConfig {
-            executable: wrapper.into_os_string(),
+            executable: fake_executable(dir, lifetime_secs),
             project,
             memory_limit: Some("1GB".into()),
             dev_origin: Some("http://localhost:5173".into()),
@@ -291,7 +306,7 @@ mod tests {
         }
     }
 
-    fn temp_dir(name: &str) -> PathBuf {
+    pub(crate) fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("lakelet-supervisor-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -306,6 +321,7 @@ mod tests {
         let session = sup.session().clone();
         assert_eq!(session.project, config.project);
         assert!(session.port > 0 && session.token.len() > 10);
+        assert!(session.ready_ms > 0, "spawn to ready is measured");
         assert!(sup.check().is_none(), "healthy sidecar reports nothing");
         // the fake records the arguments it was given, so the memory limit is checkable
         let args = std::fs::read_to_string(config.project.join(".lakelet").join("fake-args.txt")).unwrap();

@@ -1,6 +1,5 @@
-import { startSidecar } from './sidecar';
+import { startAll } from './sidecar';
 
 export default async function globalSetup() {
-  const { child } = await startSidecar();
-  child.unref();
+  for (const child of await startAll()) child.unref();
 }
