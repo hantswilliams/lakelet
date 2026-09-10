@@ -1,0 +1,56 @@
+# The desktop shell (app brief §3.4): the supervisor's Rust tests, the frontend's type check
+# and build, and the Playwright screens against a real sidecar from core/, on both platforms.
+name: app
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', 'core/**', '.github/workflows/app-ci.yml']
+  pull_request:
+    paths: ['app/**', 'core/**', '.github/workflows/app-ci.yml']
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Linux webkit dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: core/uv.lock
+      # The sidecar the screens run against: the core from this checkout, with its extensions.
+      - run: uv sync --locked
+        working-directory: core
+      - run: uv run python -c "import duckdb; duckdb.connect().execute('INSTALL iceberg; INSTALL httpfs; INSTALL excel; INSTALL aws')"
+        working-directory: core
+      - run: cargo test
+        working-directory: app/src-tauri
+      - run: npm ci
+        working-directory: app
+      - run: npm run build
+        working-directory: app
+      - run: npx playwright install --with-deps chromium
+        working-directory: app
+      - run: npx playwright test
+        working-directory: app
+        env:
+          LAKELET_SIDECAR: ${{ github.workspace }}/core/.venv/bin/lakelet

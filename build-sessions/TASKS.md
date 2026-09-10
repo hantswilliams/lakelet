@@ -12,7 +12,7 @@
 
 ## Decisions waiting on Hants
 
-- [ ] `app-v0-plan.md` (2026-09-10) — the session 6 brief for the desktop shell: fourteen tick boxes, A1 to A14 (Tauri 2 confirmed against the alternatives, CodeMirror over Monaco, sidecar discovery, the token, per-window memory, preview-before-import, the chart in session 6, testing with Playwright against a real sidecar, dev-runnable only until session 10, Windows built not promised). Nothing in its §4 is built until they are ticked.
+- [x] `app-v0-plan.md` — A1 to A14 accepted 2026-09-10 (in conversation); step 0 built the same day.
 - [x] `decisions-for-review_090926.md` — all three accepted and shipped 2026-09-09: `init` writes `macros/lakelet.sql` (an override of dbt's `table`), `dbt run` builds saved questions through the catalog, `test_step6_materialisation.py` is the gate.
 
 ## Steps of the brief (§4)
@@ -49,6 +49,7 @@ Last full local run (2026-09-08, under load): 140 passed, 8 skipped (5 env-gated
 - [x] Decided 2026-09-09, not adopted: the `duckdb-extension-*` PyPI wheels are a third-party repackaging (one individual's `duckdb_extensions` project, MIT, not DuckDB Labs), so they stay out of CI for a public repo. CI keeps the official `INSTALL` with the per-version cache. The wheels remain a convenience for sandboxes that cannot reach `extensions.duckdb.org`; see the 2026-09-09 log for the recipe.
 - [x] CI actions bumped 2026-09-09 to the Node 24 runtimes: `actions/checkout@v7`, `actions/cache@v5`, `astral-sh/setup-uv@v9.0.0` (setup-uv stopped publishing major tags at v8, so it is pinned exactly). `deploy-pages.yml` still has the older majors; harmless, bump when the site workflow is next touched.
 - [x] Pytest tooling: the `-q` addopt is gone from `pyproject.toml` (2026-09-09); `uv run pytest` prints the normal summary and `-q` means one `-q`.
+- [ ] The disk-throughput probe (core D36) measures the page cache, not the disk: on a 64 GB Mac it reported 84,914 MB/s, because `init` reads back the 512 MB file it just wrote. The gauge divides bytes by this number, so local I/O time is estimated as roughly zero on any machine with more RAM than the probe. Fix candidates: read with the cache bypassed (`F_NOCACHE` on macOS, `O_DIRECT` on Linux), or a file larger than RAM, or cap the recorded figure at a plausible NVMe ceiling and say so. Found by the app's health tile on 2026-09-10.
 - [ ] Snapshot expiry and orphan-file removal (Day 1): every dbt rebuild and every `import --replace` leaves the previous snapshot's data files in place, so a table rebuilt nightly grows nightly. Needs `expire_snapshots` through pyiceberg plus a file sweep, and a `lakelet tables compact` or similar verb.
 - [ ] Plan filename versus internal revision number; cosmetic.
 - [ ] Sign every commit with `git commit -s` from now on (CONTRIBUTING's DCO). The commits before `7f0ff4a` are unsigned; fine for the author's own work.
@@ -70,7 +71,7 @@ Last full local run (2026-09-08, under load): 140 passed, 8 skipped (5 env-gated
 ## After core v0: the session plan (`lakelet-build-sessions.md`) and what each inherits
 
 - [ ] **Session 3, Fargate worker spike** (throwaway, any time in parallel): cold start, 10 GB and 100 GB scans, real cost; makes the landing page's receipt numbers real. Spike 2 (TPC-H at SF10 and SF100, local and from S3) can run alongside now that step 8 exists; the SF1 bytes number is near-tautological (§7).
-- [ ] **Session 6, desktop shell**: brief written 2026-09-10 (`app-v0-plan.md`), waiting on the A block. Closes the per-sidecar memory unknown with A8.
+- [ ] **Session 6, desktop shell** (`app-v0-plan.md`): step 0 done 2026-09-10 — `app/` scaffold (Tauri 2, React, Vite, the site's tokens), the Rust supervisor with three `cargo test`s against a fake sidecar (start and read `serve.json`, restart once then stop, early exit surfaces stderr), `get_session`, the status dot and health panel, Playwright gate against a real sidecar (dot green in 433 ms from page open in a browser; a CLI-imported table appears), `app-ci.yml` for both runners. Core additions: `serve --memory-limit`, `LAKELET_DEV_ORIGIN`; the `serving` line already existed. Next: step 1, projects (open, init, recent, one window each, memory per window). Verified in the real Tauri window on the Mac 2026-09-10 (green dot, project name, health tiles, empty tables panel) after one fix: under `tauri dev` the window's origin is the Vite server, so the shell passes `LAKELET_DEV_ORIGIN` in debug builds (A12 amended). Still to measure: spawn-to-ready in milliseconds, which step 1 adds to the session and the health panel.
 - [ ] **Session 7, ask box** and `lakelet ask` as a CLI verb (M11).
 - [ ] **Session 8, burst end to end**: control plane, job token, cap → budget, catalog lease pushing the metadata tree for local-metadata tables (D26, open unknown in §7), `publish`. Partner intake (five questions) runs before it.
 - [ ] **Session 5, `lakelet mcp`** (after session 8, M6).

@@ -647,6 +647,12 @@ def audit_network() -> None:
 def serve(
     port: Annotated[int, typer.Option(help="A fixed port; 0 picks a free one.")] = 0,
     host: Annotated[str, typer.Option(help="Loopback only in v0.")] = "127.0.0.1",
+    memory_limit: Annotated[
+        str | None,
+        typer.Option(
+            help="DuckDB memory limit for this process, e.g. 8GB; the app sets one per window."
+        ),
+    ] = None,
 ) -> None:
     """Run the core as the app's sidecar: catalog and API on one loopback port, named in
     .lakelet/serve.json with a per-launch token."""
@@ -659,7 +665,7 @@ def serve(
     from lakelet.project import NotAProject
 
     try:
-        p = Project.open(_root(), serve=True, port=port)
+        p = Project.open(_root(), serve=True, port=port, memory_limit=memory_limit)
     except NotAProject:
         _fail(f"not a Lakelet project: no lakelet.toml in {_root()}; run `lakelet init`")
     out.print(

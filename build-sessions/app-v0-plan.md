@@ -1,5 +1,7 @@
 # Lakelet — desktop shell, build brief (app v0, revision 1)
 
+> **Decided September 10, 2026: A1 to A14 accepted** (Hants, in conversation). §4 is the build order from here; step 0 started the same day.
+
 *September 10, 2026 · Session 6 of `lakelet-build-sessions.md` · Follows `core-v0.5-plan.md`, which it does not change · The A block at the top is for review: tick a box on each, write a line under "Change" if you disagree. Nothing in §4 is built until the A block is decided.*
 
 ## 0. The idea in one paragraph
@@ -14,72 +16,72 @@ The docs (build spec §3, PRD F0.8, brief D2 and D3) already decided: Tauri 2 sh
 
 **A1. Tauri 2, confirmed against the alternatives.**
 *Recommend:* Tauri 2. The shell is the OS webview (WKWebView, WebKitGTK, WebView2), a few MB, paints in well under a second; one bundler config produces a DMG, an AppImage, a `.deb` and an MSI; sidecars are first class (`externalBin` per target triple, spawned and supervised by the shell). *Not chosen:* Electron (a bundled Chromium, 150 MB and a slow cold start, before the sidecar is counted); Wails (Go plus webview, sidecar hand-rolled, a third language in the repo); Flutter (own renderer, no sharing with the web app the build spec wants); Qt via PySide (the core could run in-process, but the bundle is as large as the sidecar, UI iteration is slower, and it forecloses one frontend for desktop and browser); Dioxus, Slint, egui (too young to carry a demo). *Known cost:* the installer's size is the sidecar's, 150 to 200 MB with pyarrow and the extensions, whichever shell; session 10 measures it.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A2. React 19, TypeScript, Vite; no UI framework, the site's tokens.**
 *Recommend:* yes. The build spec's reason holds: one frontend codebase for the desktop app and the later browser app. Styling reuses `web/src/styles/tokens.css` (same colours, type and verdict words as the site and the mockups) rather than a component library, so the app looks like the marketing pages promised. *Not chosen:* Svelte or Solid (fine, but nothing to gain against a codebase of this size and the mockups are already React-shaped in the build spec).
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A3. CodeMirror 6 for the SQL editor, not Monaco.**
 *Recommend:* CodeMirror 6. Monaco is several megabytes of JavaScript and loads in hundreds of milliseconds, which fights the 1.5 s launch budget (F0.8.2) for an editor that in v0 holds one statement. CodeMirror 6 with the SQL language package is a tenth of the size, has DuckDB dialect support, and does everything screen 2 needs (highlighting, Cmd/Ctrl+Enter, a status line). This amends the build spec's §3 frontend row.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A4. The grid: TanStack Table with TanStack Virtual over Arrow JS batches.**
 *Recommend:* yes, as the build spec says, with two rules: rows render from `apache-arrow` record batches as they arrive from `/api/query`, so the first batch is on screen before the query finishes (the core's step 4 promise), and the grid keeps at most 100,000 rows in memory with a footer saying "showing the first N of a stream; `lakelet sql --format parquet` for all of it".
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A5. The auto-chart is in session 6.**
 *Recommend:* yes, small. Screen 2 is "ask, Green, chart"; the ask box is session 7 but the chart is an afternoon: Vega-Lite, one rule (one categorical plus one numeric column gives a bar chart; a date plus a numeric gives a line; otherwise no chart, no error), from the first 5,000 rows. *If no:* screen 2 ships as grid only and the chart joins in session 7.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A6. How the shell finds and runs the sidecar.**
 *Recommend:* in a bundle, the Tauri sidecar `lakelet-<target-triple>` from `externalBin` (session 10 produces it); in development and in tests, the `LAKELET_SIDECAR` environment variable naming an executable (for example `core/.venv/bin/lakelet`), and when neither is present, `lakelet` on `PATH`. The shell runs `lakelet serve --port 0 -C <project>` and learns the port and token from `<project>/.lakelet/serve.json`, which step 9 already writes at mode 0600; it also watches the sidecar's stdout for the `serving` line as a readiness signal so it does not poll the file. *Not chosen:* passing the token over stdin or an environment variable (the file already exists and is the CLI's contract too).
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A7. The token reaches the webview through one Tauri command, and the webview calls `/api` directly.**
 *Recommend:* yes. The Rust side keeps `{port, token}` per window; the webview asks `get_session()` once and calls `fetch` against `http://127.0.0.1:<port>/api/...` with the bearer header. The core already grants CORS to the Tauri origins (step 9). *Not chosen:* proxying every request through Rust commands (more code, and Arrow streaming through Tauri's IPC would copy every batch).
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A8. A per-window memory limit, set by the shell.**
 *Recommend:* the core gains `lakelet serve --memory-limit <size>`, overriding `[engine] memory_limit` for that process only, and the shell passes 60% of RAM to the first window and halves it for each further window open at the same time, re-sending nothing to windows already open (DuckDB's limit is fixed at connect). This closes the §7 unknown in the core brief ("two windows mean two sidecars each defaulting to 80% of RAM"). The CLI keeps `lakelet.toml`'s value.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A9. Dropping a file shows the preview first; import is a click.**
 *Recommend:* yes. The preview is where the type-coercion promise lives (core D24: the Iceberg type each column becomes, and the notes); an import that skips it silently turns an `INTERVAL` into a string. The panel shows the `/api/preview` result with the table name editable and one button, and a folder drop lists one row per file. *Not chosen:* import on drop with the preview afterwards (faster to demo, but the demo's point is that Lakelet says what it is about to do).
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A10. Projects: open a folder, `init` it if needed, remember it.**
 *Recommend:* a native folder dialog; if the folder has no `lakelet.toml`, the shell runs `lakelet init <folder>` as a sidecar command first, showing its output; recent projects are a JSON list in the app's data directory (Tauri's app-data path), most recent first, ten entries. One window per project; opening a second project opens a second window and a second sidecar. Closing the window stops the sidecar.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A11. Crash recovery is in session 6.**
 *Recommend:* yes (F0.8's acceptance criterion). The shell supervises the sidecar: on exit it restarts it once, shows "core restarted" in the status area, re-reads `serve.json`, and the webview refetches the tables list; state is on disk anyway (the catalog, history, the question files). Two exits inside a minute show the sidecar's last stderr lines and stop restarting.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A12. Testing: Rust unit tests for the supervisor, Vitest for components, Playwright for the screens against a real sidecar, in CI on both runners.**
-*Recommend:* yes. The frontend is a web app, so Playwright drives it in a headless browser against the Vite dev server and a real `lakelet serve`; to allow that, the core accepts a dev-only `LAKELET_DEV_ORIGIN` (for example `http://localhost:5173`) added to the CORS list when set, documented as development only and never set by the shell. tauri-driver (the WebDriver route) runs on Linux and Windows only, so it is not the basis. *Gate for every step* is a Playwright or Rust test, as the core's steps were pytest.
-- [ ] Agree
+*Recommend:* yes. The frontend is a web app, so Playwright drives it in a headless browser against the Vite dev server and a real `lakelet serve`; to allow that, the core accepts a dev-only `LAKELET_DEV_ORIGIN` (for example `http://localhost:5173`) added to the CORS list when set, documented as development only. *Amended September 10 from step 0:* the shell does set it, in debug builds only, because under `tauri dev` the window's origin is the Vite dev server rather than `tauri://localhost`; a release build passes nothing, so a bundle's sidecar allows only the Tauri origins. tauri-driver (the WebDriver route) runs on Linux and Windows only, so it is not the basis. *Gate for every step* is a Playwright or Rust test, as the core's steps were pytest.
+- [x] Agree
 - [ ] Change:
 
 **A13. Session 6 ships a development-runnable app; bundles and signing are session 10.**
 *Recommend:* yes. `npm run tauri dev` from `app/` with `LAKELET_SIDECAR` set runs the real thing; `npm run tauri build` produces an unsigned bundle that still expects `lakelet` on `PATH`, so it is for us, not for partners. The sidecar binary (PyInstaller one-dir or python-build-standalone plus a venv, with the four extensions inside), notarisation, the AppImage, and the "fresh machine to first query in three minutes with no terminal" acceptance criterion are session 10, as the session plan already says.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **A14. Windows: build it, do not promise it.**
 *Recommend:* the Tauri config includes the Windows target and CI does not build it; the PRD's Day 0 says macOS 13+ and Ubuntu 22.04+, Windows CLI only. Nothing in the code should assume a POSIX path, and one Windows build in session 10 tells us how far off it is.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 ---

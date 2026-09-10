@@ -4,7 +4,7 @@
 
 ## Start here
 
-1. Read the current build brief: the highest-numbered `build-sessions/core-v0.N-plan.md` (today: `core-v0.5-plan.md`). It is the authority. Where it conflicts with anything in `docs/`, the brief wins; its §8 lists the edits `docs/` still needs.
+1. Read the current build brief. For the core, the highest-numbered `build-sessions/core-v0.N-plan.md` (today: `core-v0.5-plan.md`); for the desktop shell, `build-sessions/app-v0-plan.md`. The brief is the authority. Where it conflicts with anything in `docs/`, the brief wins; its §8 lists the edits `docs/` still needs.
 2. Find the step you are on in §4 of the brief. The step's gate is the definition of done for the session. Do not build ahead of it.
 3. Read the most recent `build-sessions/lakelet-build-sessions_<MMDDYY>.md` for what happened last time and what is open.
 
@@ -22,6 +22,7 @@
 - `build-sessions/` the plans (`core-v0.N-plan.md`; highest N is current) and one log per session
 - `docs/` product spec, Day 0 PRD, architecture, build spec, facts, agent strategy; the brief amends them
 - `core/` the Python package `lakelet`, created in step 0; `cd core && uv run pytest` runs the suite
+- `app/` the desktop shell (Tauri 2, React); `cargo test` in `app/src-tauri`, `npm run e2e` in `app/` against a real sidecar; see `app/README.md`
 - `web/` the Astro site; `deck/` and `brand/` are gitignored; `old/` holds retired files
 - `compose.yaml` services the default suite does not need: Postgres for the second catalog dialect, RustFS as a self-hosted S3 store, and an opt-in `engines` profile with the catalog, Spark and Trino for the smoke test in `core/tests/smoke/`
 - `claude/karpathy.md` the coding rules imported at the top of this file

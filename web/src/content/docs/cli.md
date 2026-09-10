@@ -118,9 +118,11 @@ Usage: lakelet serve [OPTIONS]
   .lakelet/serve.json with a per-launch token.
 
 Options:
-  --port <int>  A fixed port; 0 picks a free one.  [default: 0]
-  --host <str>  Loopback only in v0.  [default: 127.0.0.1]
-  --help        Show this message and exit.
+  --port <int>          A fixed port; 0 picks a free one.  [default: 0]
+  --host <str>          Loopback only in v0.  [default: 127.0.0.1]
+  --memory-limit <str>  DuckDB memory limit for this process, e.g. 8GB; the app sets one
+                        per window.
+  --help                Show this message and exit.
 ```
 
 ### `lakelet tables`

@@ -233,15 +233,23 @@ class Project:
         return report
 
     @classmethod
-    def open(cls, path: str | Path = ".", serve: bool = False, port: int = 0) -> Project:
+    def open(
+        cls,
+        path: str | Path = ".",
+        serve: bool = False,
+        port: int = 0,
+        memory_limit: str | None = None,
+    ) -> Project:
         """Open the project in this process. With ``serve`` the one loopback server also
-        carries the API (brief D3) and ``.lakelet/serve.json`` names it."""
+        carries the API (brief D3) and ``.lakelet/serve.json`` names it. ``memory_limit``
+        overrides ``[engine]`` for this process only: the app sets one per window (app brief
+        A8), the CLI keeps the file's value."""
         root = Path(path).resolve()
         if not (root / "lakelet.toml").exists():
             raise NotAProject(str(root))
         project = cls(root)
         project.token = secrets.token_urlsafe(32) if serve else None
-        project._start(port=port)
+        project._start(port=port, memory_limit=memory_limit)
         if serve:
             project._write_serve_json()
         return project
@@ -262,7 +270,7 @@ class Project:
 
     # -- in process -----------------------------------------------------------------
 
-    def _start(self, port: int = 0) -> None:
+    def _start(self, port: int = 0, memory_limit: str | None = None) -> None:
         self.lakelet_dir.mkdir(exist_ok=True)
         self.cache_dir.mkdir(exist_ok=True)
         self._ensure_namespace(self.store)
@@ -273,9 +281,12 @@ class Project:
             from lakelet.api import TAURI_ORIGINS, create_router
 
             app.include_router(create_router(self, self.token))
+            # LAKELET_DEV_ORIGIN lets the app's frontend be driven from a browser against a
+            # real sidecar in development and tests (app brief A12); the shell never sets it.
+            dev_origin = os.environ.get("LAKELET_DEV_ORIGIN")
             app.add_middleware(
                 CORSMiddleware,
-                allow_origins=TAURI_ORIGINS,
+                allow_origins=TAURI_ORIGINS + ([dev_origin] if dev_origin else []),
                 allow_methods=["*"],
                 allow_headers=["*"],
             )
@@ -284,7 +295,7 @@ class Project:
         self._engine = Engine(
             url,
             self.lakelet_dir / "last-profile.json",
-            memory_limit=self.config.engine.memory_limit,
+            memory_limit=memory_limit or self.config.engine.memory_limit,
             threads=self.config.engine.threads,
             s3_secret=self.s3.duckdb_secret(),
         )

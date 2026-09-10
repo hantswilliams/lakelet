@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import time
+import tomllib
 
 import duckdb
 import httpx
@@ -208,3 +209,32 @@ def test_the_cli_serve_from_another_process(tmp_path) -> None:
     assert not (root / ".lakelet/serve.json").exists()
     refused = CliRunner().invoke(app, ["-C", str(root), "serve", "--host", "0.0.0.0"])
     assert refused.exit_code == 1 and "loopback" in refused.output
+
+
+def test_serve_memory_limit_and_the_dev_origin(tmp_path, monkeypatch) -> None:
+    """App brief A8 and A12 (September 10): ``serve --memory-limit`` overrides ``[engine]``
+    for this process only, and ``LAKELET_DEV_ORIGIN`` joins the CORS list when set, so the
+    frontend can be driven from a browser against a real sidecar; the shell never sets it."""
+    root = tmp_path / "proj"
+    Project.init(root, probe_mb=8)
+    monkeypatch.setenv("LAKELET_DEV_ORIGIN", "http://localhost:5173")
+    with Project.open(root, serve=True, memory_limit="1GB") as p:
+        token = json.loads(p.serve_json.read_text())["token"]
+        health = httpx.get(
+            f"{p.catalog_url}/api/health", headers={"Authorization": f"Bearer {token}"}
+        )
+        limit = health.json()["machine"]["memory_limit"]  # DuckDB reports 1GB as 953.6 MiB
+        assert 900_000_000 <= limit <= 1_100_000_000, health.json()["machine"]
+        headers = {"Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST"}
+        allowed = httpx.options(f"{p.catalog_url}/api/query", headers=headers)
+        assert allowed.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    monkeypatch.delenv("LAKELET_DEV_ORIGIN")
+    with Project.open(root, serve=True) as p:
+        refused = httpx.options(
+            f"{p.catalog_url}/api/query",
+            headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST"},
+        )
+        assert "access-control-allow-origin" not in refused.headers
+        assert (
+            tomllib.loads((root / "lakelet.toml").read_text())["engine"]["memory_limit"] == "auto"
+        )

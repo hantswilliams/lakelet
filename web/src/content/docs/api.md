@@ -10,8 +10,9 @@ order: 3
 ## Starting it
 
 ```bash
-lakelet serve                 # a free port
-lakelet serve --port 8765     # a fixed one
+lakelet serve                        # a free port
+lakelet serve --port 8765            # a fixed one
+lakelet serve --memory-limit 6GB     # DuckDB's limit for this process only; the app sets one per window
 ```
 
 While it runs, `.lakelet/serve.json` names it, mode 0600, removed on exit:
@@ -20,7 +21,7 @@ While it runs, `.lakelet/serve.json` names it, mode 0600, removed on exit:
 {"port": 8765, "pid": 41022, "token": "…", "started": "2026-09-09T13:02:11+00:00"}
 ```
 
-Every `/api` route requires `Authorization: Bearer <token>` with the token from that file; a request without it is a 401. `/v1` stays open on loopback, as it does under `catalog serve`. The server binds `127.0.0.1` and refuses any other host. Cross-origin requests are allowed from the Tauri origins (`tauri://localhost`, `http://tauri.localhost`, `https://tauri.localhost`) and nothing else.
+Every `/api` route requires `Authorization: Bearer <token>` with the token from that file; a request without it is a 401. `/v1` stays open on loopback, as it does under `catalog serve`. The server binds `127.0.0.1` and refuses any other host. Cross-origin requests are allowed from the Tauri origins (`tauri://localhost`, `http://tauri.localhost`, `https://tauri.localhost`) and nothing else, except that setting `LAKELET_DEV_ORIGIN` (for example `http://localhost:5173`) before `serve` adds that one origin, which is how the app's frontend is developed and tested in a browser against a real sidecar. The app sets it only in debug builds, where its window is the Vite dev server; a released app's window is `tauri://localhost` and it passes nothing.
 
 The engine is one DuckDB connection, so requests that touch it are serialised by a lock, held for the life of a streamed result. That is fine for one app window; a second window is meant to run a second sidecar.
 
