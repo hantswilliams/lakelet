@@ -1,129 +1,84 @@
 # Copyright 2026 Lakelet contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Spike for session 9 (brief §7, step 6): can dbt build a table model through the Iceberg
-catalog? dbt-duckdb's ``table`` materialisation creates ``<model>__dbt_tmp`` and renames it
-over the target inside one transaction, which DuckDB-Iceberg refuses. Measured against the
-catalog on September 9: ``CREATE OR REPLACE`` and drop-then-create in one transaction are
-refused too; ``DELETE`` then ``INSERT`` in one transaction works and keeps the table's
-identity (two snapshots); the swap works when every statement is its own transaction.
-
-The materialisation below is the candidate: rebuild in place when the columns are unchanged,
-drop and create in separate transactions when they are not. Whether it ships as
-``lakelet_table`` or overrides ``table`` for the project is a decision for the brief."""
+"""Step 6 amendment (brief §7, September 9; decisions-for-review_090926.md, all three
+accepted): dbt builds a table model through the Iceberg catalog with the materialisation
+``init`` writes into ``macros/lakelet.sql``, which overrides dbt's built-in ``table`` for
+the project. dbt-duckdb's own ``table`` swaps a temp table into place by renames inside one
+transaction, which DuckDB-Iceberg refuses, as it refuses ``CREATE OR REPLACE`` and a
+drop-then-create in one transaction (confirmed in the extension's source and on the official
+build). What works: ``DELETE`` then ``INSERT`` in one transaction, keeping the table; and
+drop-then-create as separate transactions."""
 
 from pathlib import Path
 
+import yaml
+
 from lakelet import Project
+from lakelet.project import LAKELET_MACROS
 from tests.test_step2_dbt_spike import dbt_main, profiles_yml
 
-MATERIALISATION = """
-{#- Lakelet's table materialisation for the Iceberg catalog. DuckDB-Iceberg refuses
-    CREATE OR REPLACE, and a rename or a drop-then-create inside one transaction, so a
-    rebuild keeps the table and replaces its rows (one transaction, two snapshots), and
-    falls back to drop-then-create in separate transactions when the columns changed. -#}
 
-{% macro lakelet__columns_of_query(sql) -%}
-  {%- set rows = run_query("DESCRIBE (" ~ sql ~ ")") -%}
-  {%- set cols = [] -%}
-  {%- for row in rows.rows -%}{%- do cols.append((row[0] | lower, row[1] | upper)) -%}{%- endfor -%}
-  {{ return(cols) }}
-{%- endmacro %}
-
-{% macro lakelet__columns_of_relation(relation) -%}
-  {%- set cols = [] -%}
-  {%- for c in adapter.get_columns_in_relation(relation) -%}
-    {%- do cols.append((c.name | lower, c.dtype | upper)) -%}
-  {%- endfor -%}
-  {{ return(cols) }}
-{%- endmacro %}
-
-{% materialization lakelet_table, adapter="duckdb" %}
-  {%- set target_relation = this.incorporate(type='table') -%}
-  {%- set existing_relation = load_cached_relation(this) -%}
-  {{ run_hooks(pre_hooks, inside_transaction=False) }}
-
-  {%- set in_place = existing_relation is not none
-        and existing_relation.is_table
-        and lakelet__columns_of_relation(existing_relation)
-            == lakelet__columns_of_query(compiled_code) -%}
-
-  {% if in_place %}
-    {{ run_hooks(pre_hooks, inside_transaction=True) }}
-    {% call statement('delete') -%}
-      delete from {{ target_relation }}
-    {%- endcall %}
-    {% call statement('main') -%}
-      insert into {{ target_relation }} {{ compiled_code }}
-    {%- endcall %}
-    {{ run_hooks(post_hooks, inside_transaction=True) }}
-    {{ adapter.commit() }}
-  {% else %}
-    {#- the column check above opened dbt's transaction; the drop must commit on its own
-        before the create, or the catalog refuses to create a table deleted in the same one -#}
-    {% if existing_relation is not none %}
-      {% call statement('drop') -%}
-        drop table {{ existing_relation }}
-      {%- endcall %}
-      {{ adapter.commit() }}
-    {% endif %}
-    {% call statement('main') -%}
-      create table {{ target_relation }} as {{ compiled_code }}
-    {%- endcall %}
-    {{ run_hooks(post_hooks, inside_transaction=True) }}
-    {{ adapter.commit() }}
-  {% endif %}
-
-  {{ run_hooks(post_hooks, inside_transaction=False) }}
-  {{ return({'relations': [target_relation]}) }}
-{% endmaterialization %}
-"""
-
-CONFIG = "{{ config(materialized='lakelet_table') }}\n"
-MODEL_V1 = CONFIG + "select c, count(*) as n from src group by 1"
-MODEL_V2 = CONFIG + "select c, count(*) * 2 as n from src group by 1"
-MODEL_V3 = CONFIG + "select c, count(*) as n, sum(id) as total from src group by 1"
-
-
-def _run(root: Path) -> None:
+def _dbt(root: Path, verb: str) -> dict[str, str]:
     result = dbt_main.dbtRunner().invoke(
-        ["run", "--project-dir", str(root), "--profiles-dir", str(root), "--no-use-colors"]
+        [verb, "--project-dir", str(root), "--profiles-dir", str(root), "--no-use-colors"]
     )
     assert result.success, result.exception
-    statuses = {r.node.name: str(r.status) for r in result.result.results}
-    assert statuses == {"q": "success"}, statuses
+    return {r.node.name: str(r.status) for r in result.result.results}
 
 
-def test_dbt_builds_and_rebuilds_a_table_through_the_catalog(tmp_path) -> None:
+def test_init_writes_the_materialisation_and_leaves_an_existing_one_alone(tmp_path) -> None:
     root = tmp_path / "proj"
-    Project.init(root)
-    (root / "macros").mkdir()
-    (root / "macros" / "lakelet.sql").write_text(MATERIALISATION)
-    model = root / "models" / "q.sql"
-    model.write_text(MODEL_V1)
+    report = Project.init(root, probe_mb=0)
+    assert "macros/lakelet.sql" in report.created
+    assert (root / "macros" / "lakelet.sql").read_text() == LAKELET_MACROS
+    assert 'materialization table, adapter="duckdb"' in LAKELET_MACROS
+    assert "macros/lakelet.sql" in (root / "AGENTS.md").read_text()
+
+    other = tmp_path / "other"
+    (other / "macros").mkdir(parents=True)
+    (other / "macros" / "lakelet.sql").write_text("-- mine\n")
+    report = Project.init(other, probe_mb=0)
+    assert "macros/lakelet.sql" not in report.created
+    assert (other / "macros" / "lakelet.sql").read_text() == "-- mine\n"
+
+
+def test_dbt_builds_a_saved_question_and_rebuilds_it_in_place(tmp_path) -> None:
+    """A saved question is ``materialized: table`` in its ``schema.yml`` (step 6); with the
+    override in place, ``dbt run`` builds it through the catalog, ``dbt test`` passes its two
+    checks, a second run with the same columns keeps the table's identity and history, and a
+    run with a changed column list drops and recreates it."""
+    root = tmp_path / "proj"
+    Project.init(root, probe_mb=8)
     with Project.open(root) as p:
         (root / "profiles.yml").write_text(profiles_yml(p.catalog_url))
         p.engine.execute(
             "CREATE TABLE lakelet.main.src AS "
             "SELECT range AS id, 'c' || (range % 3) AS c FROM range(90)"
         )
+        q = p.questions.save("Count by c", "select c, count(*) as n from src group by 1")
+        entry = yaml.safe_load((root / "models/questions/schema.yml").read_text())["models"][0]
+        assert entry["config"] == {"materialized": "table"}  # nothing Lakelet-specific
 
-        _run(root)  # first build: create table as
-        assert p.engine.execute("select sum(n) from q").fetchone()[0] == 90
-        first = p.tables.describe("q")
+        assert _dbt(root, "run") == {q.slug: "success"}  # first build: create table as
+        assert p.engine.execute(f"select sum(n) from {q.slug}").fetchone()[0] == 90
+        first = p.tables.describe(q.slug)
         assert first.snapshots == 1
+        assert set(_dbt(root, "test").values()) == {"pass"}  # returns_rows and not_null
 
-        model.write_text(MODEL_V2)
-        _run(root)  # same columns: rows replaced, the table keeps its identity and history
-        assert p.engine.execute("select sum(n) from q").fetchone()[0] == 180
-        second = p.tables.describe("q")
-        assert second.location == first.location
+        p.questions.save("Count by c", "select c, count(*) * 2 as n from src group by 1")
+        assert _dbt(root, "run") == {q.slug: "success"}  # same columns: rows replaced
+        assert p.engine.execute(f"select sum(n) from {q.slug}").fetchone()[0] == 180
+        second = p.tables.describe(q.slug)
+        assert second.location == first.location  # same table, its history kept
         assert second.snapshots == 3  # a delete snapshot and an append snapshot
 
-        model.write_text(MODEL_V3)
-        _run(root)  # a new column: drop and create, separate transactions
-        assert p.engine.execute("select sum(total) from q").fetchone()[0] == sum(range(90))
-        third = p.tables.describe("q")
+        p.questions.save(
+            "Count by c", "select c, count(*) as n, sum(id) as total from src group by 1"
+        )
+        assert _dbt(root, "run") == {q.slug: "success"}  # a new column: drop and create
+        assert p.engine.execute(f"select sum(total) from {q.slug}").fetchone()[0] == sum(range(90))
+        third = p.tables.describe(q.slug)
         assert [c[0] for c in third.columns] == ["c", "n", "total"]
         assert third.snapshots == 1
 
-        assert [t.name for t in p.tables.list()] == ["q", "src"]
+        assert [t.name for t in p.tables.list()] == [q.slug, "src"]

@@ -121,12 +121,15 @@ def test_dbt_parse_accepts_the_generated_project(project) -> None:
 
 
 def test_the_generated_checks_are_real_dbt_tests_that_pass(project) -> None:
-    """The two default checks run through dbt against the question's table. The table is
-    built by Lakelet here: dbt's own table materialisation renames a temp table, which the
-    Iceberg catalog refuses inside one transaction; that is session 9's problem (brief §7)."""
-    q = project.questions.save("Revenue by customer", SQL)
-    project.engine.execute(f"CREATE TABLE lakelet.main.revenue_by_customer AS {q.sql}")
+    """The two default checks run through dbt against the question's table, which ``dbt run``
+    builds through the catalog with the materialisation ``init`` wrote (step 6 amendment,
+    September 9; ``test_step6_materialisation.py`` covers the rebuild paths)."""
+    project.questions.save("Revenue by customer", SQL)
     (project.root / "profiles.yml").write_text(profiles_yml(project.catalog_url))
+    built = dbt_main.dbtRunner().invoke(
+        ["run", "--project-dir", str(project.root), "--profiles-dir", str(project.root)]
+    )
+    assert built.success, built.exception
     result = dbt_main.dbtRunner().invoke(
         [
             "test",

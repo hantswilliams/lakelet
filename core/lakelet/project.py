@@ -69,7 +69,77 @@ No tables yet. `lakelet import <file>` adds one; this block is regenerated on ev
 
 ## Conventions
 dbt project at `./` (dbt-duckdb). Models in `models/`; saved questions in `models/questions/`.
+`macros/lakelet.sql` is Lakelet's `table` materialisation for the catalog; leave it in place.
 Tests are "checks".
+"""
+
+
+# dbt's built-in ``table`` materialisation swaps a temp table into place by renames inside one
+# transaction, which DuckDB-Iceberg refuses (brief §7, step 6, September 9). This override,
+# written by ``init`` into ``macros/lakelet.sql``, asks the catalog only for what it does:
+# rebuild in place when the columns are unchanged (one transaction, the table keeps its
+# identity and history), drop and create in separate transactions when they changed.
+LAKELET_MACROS = """\
+{#- Lakelet's table materialisation for the Iceberg catalog, written by `lakelet init`.
+    DuckDB-Iceberg refuses CREATE OR REPLACE, and a rename or a drop-then-create inside one
+    transaction, so a rebuild keeps the table and replaces its rows (one transaction, two
+    snapshots) and falls back to drop-then-create in separate transactions when the columns
+    changed. Overrides dbt's built-in `table` for this project; models need no config. -#}
+
+{% macro lakelet__columns_of_query(sql) -%}
+  {%- set rows = run_query("DESCRIBE (" ~ sql ~ ")") -%}
+  {%- set cols = [] -%}
+  {%- for row in rows.rows -%}{%- do cols.append((row[0] | lower, row[1] | upper)) -%}{%- endfor -%}
+  {{ return(cols) }}
+{%- endmacro %}
+
+{% macro lakelet__columns_of_relation(relation) -%}
+  {%- set cols = [] -%}
+  {%- for c in adapter.get_columns_in_relation(relation) -%}
+    {%- do cols.append((c.name | lower, c.dtype | upper)) -%}
+  {%- endfor -%}
+  {{ return(cols) }}
+{%- endmacro %}
+
+{% materialization table, adapter="duckdb" %}
+  {%- set target_relation = this.incorporate(type='table') -%}
+  {%- set existing_relation = load_cached_relation(this) -%}
+  {{ run_hooks(pre_hooks, inside_transaction=False) }}
+
+  {%- set in_place = existing_relation is not none
+        and existing_relation.is_table
+        and lakelet__columns_of_relation(existing_relation)
+            == lakelet__columns_of_query(compiled_code) -%}
+
+  {% if in_place %}
+    {{ run_hooks(pre_hooks, inside_transaction=True) }}
+    {% call statement('delete') -%}
+      delete from {{ target_relation }}
+    {%- endcall %}
+    {% call statement('main') -%}
+      insert into {{ target_relation }} {{ compiled_code }}
+    {%- endcall %}
+    {{ run_hooks(post_hooks, inside_transaction=True) }}
+    {{ adapter.commit() }}
+  {% else %}
+    {#- the column check above opened dbt's transaction; the drop must commit on its own
+        before the create, or the catalog refuses to create a table deleted in the same one -#}
+    {% if existing_relation is not none %}
+      {% call statement('drop') -%}
+        drop table {{ existing_relation }}
+      {%- endcall %}
+      {{ adapter.commit() }}
+    {% endif %}
+    {% call statement('main') -%}
+      create table {{ target_relation }} as {{ compiled_code }}
+    {%- endcall %}
+    {{ run_hooks(post_hooks, inside_transaction=True) }}
+    {{ adapter.commit() }}
+  {% endif %}
+
+  {{ run_hooks(post_hooks, inside_transaction=False) }}
+  {{ return({'relations': [target_relation]}) }}
+{% endmaterialization %}
 """
 
 
@@ -137,6 +207,7 @@ class Project:
         write_if_absent("AGENTS.md", agents_md(name))
         write_if_absent("dbt_project.yml", dbt_project_yml(name))
         write_if_absent("models/.gitkeep", "")
+        write_if_absent("macros/lakelet.sql", LAKELET_MACROS)
         gitignore = root / ".gitignore"
         text = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
         missing = [line for line in GITIGNORE_LINES if line not in text.splitlines()]

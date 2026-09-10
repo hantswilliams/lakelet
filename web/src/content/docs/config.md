@@ -81,6 +81,7 @@ Written so the file is already valid for the sessions that will read them; the c
 | `AGENTS.md` | `init`, refreshed by `import` and `tables attach` | A short guide for coding agents working in the folder, with one block per table between markers that Lakelet rewrites. Edit anything outside the markers. |
 | `dbt_project.yml` | `init` (only if absent) | A minimal dbt project with `+database: lakelet`, so dbt-duckdb builds models into the catalog. |
 | `models/` | `init` | dbt models. Saved questions land in `models/questions/`. |
+| `macros/lakelet.sql` | `init` (only if absent) | Lakelet's `table` materialisation for the Iceberg catalog, overriding dbt's built-in one for the project. See [Transactions and the catalog](/docs/transactions). |
 | `tests/generic/returns_rows.sql` | first `question save` | The generic test every saved question carries. |
 | `.gitignore` | `init` (lines appended, never overwritten) | `warehouse/`, `.lakelet/` and `.DS_Store`. |
 | `warehouse/main/<table>/` | the catalog, on every write | The Iceberg tables: `data/*.parquet` and `metadata/*.metadata.json`, manifests and manifest lists. Format version 2. |

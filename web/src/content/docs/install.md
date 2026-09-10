@@ -34,6 +34,7 @@ uv run --project ~/lakelet/core lakelet init
   AGENTS.md
   dbt_project.yml
   models/.gitkeep
+  macros/lakelet.sql
   .gitignore
   .lakelet/catalog.db
   installed DuckDB extensions iceberg, httpfs, excel, aws into ~/.duckdb/extensions/… (the one download; nothing else fetches at query time)
@@ -41,7 +42,7 @@ uv run --project ~/lakelet/core lakelet init
 lakehouse ready in /Users/you/acme
 ```
 
-`init` writes the [project layout](/docs/config), creates the `main` namespace in a SQLite catalog, downloads the four DuckDB extensions if they are not already in `~/.duckdb`, and times a 512 MB read of local disk for the gauge (`--probe-mb 0` skips it). It refuses to run twice in the same folder and never overwrites a `dbt_project.yml`, `.gitignore` or `AGENTS.md` that is already there.
+`init` writes the [project layout](/docs/config), creates the `main` namespace in a SQLite catalog, downloads the four DuckDB extensions if they are not already in `~/.duckdb`, and times a 512 MB read of local disk for the gauge (`--probe-mb 0` skips it). It refuses to run twice in the same folder and never overwrites a `dbt_project.yml`, `macros/lakelet.sql`, `.gitignore` or `AGENTS.md` that is already there.
 
 ### 2. Import a file
 
@@ -137,6 +138,7 @@ acme/
   AGENTS.md               a block per table, refreshed on import, for coding agents
   dbt_project.yml         a dbt project pointed at the catalog
   models/questions/       saved questions as dbt models, with schema.yml
+  macros/lakelet.sql      the table materialisation dbt uses against the catalog
   warehouse/main/<table>/ the Iceberg tables: data/ and metadata/
   .lakelet/catalog.db     the catalog, SQLite
   .lakelet/history.db     every run

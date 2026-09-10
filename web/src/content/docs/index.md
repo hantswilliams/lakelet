@@ -16,7 +16,7 @@ Lakelet is a local-first lakehouse: Apache Iceberg tables on Parquet in a folder
 | Importing files and folders into Iceberg, with the type coercion table | Built; six file types | [Tables](/docs/tables) |
 | `tables attach`, `refresh`, `discover` for Parquet already in S3 | Built, tested against an in-process S3 mock and RustFS | [Tables](/docs/tables) |
 | The Iceberg REST catalog, `catalog serve`; DuckDB, pyiceberg, Spark 3.5 and Trino as clients | Built; Spark and Trino verified through Docker Compose | [Catalog](/docs/catalog) |
-| Saved questions as dbt models with two checks | Built; `dbt parse` and `dbt test` pass on the generated project | [Questions](/docs/questions) |
+| Saved questions as dbt models with two checks; `dbt run` builds them through the catalog | Built; `dbt run` and `dbt test` pass on the generated project | [Questions](/docs/questions) |
 | `lakelet serve`: the local HTTP API with a bearer token and Arrow results | Built; for the app that does not exist yet | [HTTP API](/docs/api) |
 | `lakelet audit network` | Built; measures zero outbound attempts on the quickstart | [Quickstart](/docs/install) |
 | Installers, brew tap, a PyPI release | Not yet | |

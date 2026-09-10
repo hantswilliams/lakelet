@@ -65,10 +65,13 @@ Recorded in the brief's §7 under step 6. The decisions (strategy, override vers
 
 Hants asked for the transactional edge to be spelled out for developers, since it will come up for anyone pointing an engine at the catalog. Added `web/src/content/docs/transactions.md`: the refused list with the error text verbatim (so a search lands there), the reason in Iceberg's commit model, the patterns that work and what each costs, the storage-growth caveat, and the dbt explanation. Confirmed on Hants' Mac with the official extension: the same `CREATE OR REPLACE` refusal.
 
-## 8. Still open
+## 8. The materialisation, shipped
+
+Hants accepted all three decisions in `decisions-for-review_090926.md`. Shipped as a step 6 amendment: `LAKELET_MACROS` in `project.py` next to the other templates, written by `init` as `macros/lakelet.sql` through the same `write_if_absent` as the rest, so an existing file is left alone; the macro overrides `materialization table, adapter="duckdb"` for the project; `AGENTS.md` names the file. `test_step6_materialisation.py` is the gate: `init` writes and respects the file; a saved question, `materialized: table` in its `schema.yml` with nothing Lakelet-specific, is built by `dbt run` through the catalog, passes `dbt test`, keeps its identity and gains two snapshots on a same-column rebuild, and is dropped and recreated on a column change. The step 6 checks test now builds its table with `dbt run` instead of by hand. Docs: the questions, transactions, config, install and index pages updated. Full suite in the container: 144 passed, 9 skipped. A Day 1 item recorded in `TASKS.md`: snapshot expiry, since rebuilds accumulate data files.
+
+## 9. Still open
 
 1. The clean-machine quickstart, the reference-laptop timings, the demo bucket (`TASKS.md`, Now 1 to 3).
-0. `decisions-for-review_090926.md`: three tick boxes on the dbt materialisation.
 2. The deck history purge decision.
 3. Trademark search.
 4. Docs follow-ups in `TASKS.md`: a CI check that `cli.md` is current; real quickstart output once the clean-machine run exists.

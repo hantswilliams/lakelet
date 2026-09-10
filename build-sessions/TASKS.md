@@ -12,7 +12,8 @@
 
 ## Decisions waiting on Hants
 
-- [ ] `decisions-for-review_090926.md` — three tick boxes on dbt materialisation: in-place rebuild, override `table`, ship now as a step 6 amendment.
+- [ ] `app-v0-plan.md` (2026-09-10) — the session 6 brief for the desktop shell: fourteen tick boxes, A1 to A14 (Tauri 2 confirmed against the alternatives, CodeMirror over Monaco, sidecar discovery, the token, per-window memory, preview-before-import, the chart in session 6, testing with Playwright against a real sidecar, dev-runnable only until session 10, Windows built not promised). Nothing in its §4 is built until they are ticked.
+- [x] `decisions-for-review_090926.md` — all three accepted and shipped 2026-09-09: `init` writes `macros/lakelet.sql` (an override of dbt's `table`), `dbt run` builds saved questions through the catalog, `test_step6_materialisation.py` is the gate.
 
 ## Steps of the brief (§4)
 
@@ -48,6 +49,7 @@ Last full local run (2026-09-08, under load): 140 passed, 8 skipped (5 env-gated
 - [x] Decided 2026-09-09, not adopted: the `duckdb-extension-*` PyPI wheels are a third-party repackaging (one individual's `duckdb_extensions` project, MIT, not DuckDB Labs), so they stay out of CI for a public repo. CI keeps the official `INSTALL` with the per-version cache. The wheels remain a convenience for sandboxes that cannot reach `extensions.duckdb.org`; see the 2026-09-09 log for the recipe.
 - [x] CI actions bumped 2026-09-09 to the Node 24 runtimes: `actions/checkout@v7`, `actions/cache@v5`, `astral-sh/setup-uv@v9.0.0` (setup-uv stopped publishing major tags at v8, so it is pinned exactly). `deploy-pages.yml` still has the older majors; harmless, bump when the site workflow is next touched.
 - [x] Pytest tooling: the `-q` addopt is gone from `pyproject.toml` (2026-09-09); `uv run pytest` prints the normal summary and `-q` means one `-q`.
+- [ ] Snapshot expiry and orphan-file removal (Day 1): every dbt rebuild and every `import --replace` leaves the previous snapshot's data files in place, so a table rebuilt nightly grows nightly. Needs `expire_snapshots` through pyiceberg plus a file sweep, and a `lakelet tables compact` or similar verb.
 - [ ] Plan filename versus internal revision number; cosmetic.
 - [ ] Sign every commit with `git commit -s` from now on (CONTRIBUTING's DCO). The commits before `7f0ff4a` are unsigned; fine for the author's own work.
 - [x] Repo hygiene (2026-09-09, commit `7f0ff4a`, signed): `.gitignore` fixed so `docs/` and `build-sessions/` are tracked; `LICENSE`, `NOTICE`, `CONTRIBUTING.md`, `CLAUDE.md`, `AGENTS.md`, `compose.yaml`, `compose/`, `core-ci.yml` and the new README committed for the first time; `.DS_Store` and `old/` untracked; Apache headers on the two `__init__.py` files that lacked them.
@@ -68,11 +70,11 @@ Last full local run (2026-09-08, under load): 140 passed, 8 skipped (5 env-gated
 ## After core v0: the session plan (`lakelet-build-sessions.md`) and what each inherits
 
 - [ ] **Session 3, Fargate worker spike** (throwaway, any time in parallel): cold start, 10 GB and 100 GB scans, real cost; makes the landing page's receipt numbers real. Spike 2 (TPC-H at SF10 and SF100, local and from S3) can run alongside now that step 8 exists; the SF1 bytes number is near-tautological (§7).
-- [ ] **Session 6, desktop shell** (Tauri + sidecar): needs an explicit `memory_limit` per sidecar, since two windows mean two sidecars each defaulting to 80% of RAM (§7); the API's engine lock is adequate for one window.
+- [ ] **Session 6, desktop shell**: brief written 2026-09-10 (`app-v0-plan.md`), waiting on the A block. Closes the per-sidecar memory unknown with A8.
 - [ ] **Session 7, ask box** and `lakelet ask` as a CLI verb (M11).
 - [ ] **Session 8, burst end to end**: control plane, job token, cap → budget, catalog lease pushing the metadata tree for local-metadata tables (D26, open unknown in §7), `publish`. Partner intake (five questions) runs before it.
 - [ ] **Session 5, `lakelet mcp`** (after session 8, M6).
-- [ ] **Session 9, dbt + Simple/Technical**: the materialisation question is answered by the 2026-09-09 spike (`test_step6_materialisation.py`: rebuild in place, drop-and-create on a column change; three `dbt run`s through the catalog) and waits on `decisions-for-review_090926.md`; still inherited: `tests/dbt_plugin.py` (the `configure_connection` and `configure_cursor` hooks) is to be lifted into the package. Also git auto-commit on save and table-level lineage (D30, D32).
+- [ ] **Session 9, dbt + Simple/Technical**: the materialisation shipped 2026-09-09 as a step 6 amendment (`macros/lakelet.sql`); still inherited: `tests/dbt_plugin.py` (the `configure_connection` and `configure_cursor` hooks) is to be lifted into the package. Also git auto-commit on save and table-level lineage (D30, D32).
 - [ ] **Session 10, ship**: signed installers with the extensions bundled (D33; the "under 200 MB" installer claim to be measured), brew tap, the per-operator-class correction (M7), the `catalog serve` engines smoke test through the real verb (how a loopback-only verb is reached from a container is open), instrumentation export, partner onboarding.
 
 Known unknowns still open in the brief's §7: the 150 ms gauge budget on a never-read table (PRD allows 800 ms uncached); how much of DuckDB's filter rendering the predicate parser needs for real workloads; the sidecar memory split; partner prefixes with drift or path-only partitions (fixtures pass; intake decides); the lease carrying a metadata tree.
