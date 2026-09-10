@@ -32,6 +32,11 @@ if TYPE_CHECKING:
 CONFLICT_ATTEMPTS = 3
 
 
+class Interrupted(Exception):
+    """The statement was stopped before it produced its first batch (``Engine.interrupt``);
+    the run is in history as stopped early, with no error."""
+
+
 class RedRefused(Exception):
     """The gauge said Needs more machine and the caller did not allow it (exit 2)."""
 
@@ -137,6 +142,9 @@ class Result:
             try:
                 cursor = self.project.engine.execute(self.sql)
                 break
+            except duckdb.InterruptException as e:
+                self._finish(complete=False)
+                raise Interrupted() from e
             except duckdb.Error as e:
                 if not is_conflict(e):
                     self._finish(error=str(e))
@@ -155,6 +163,10 @@ class Result:
             for batch in self._reader:
                 self._rows += batch.num_rows
                 yield batch
+        except duckdb.InterruptException:
+            # stopped mid-stream (the app's Esc): what is known is recorded, as close() does
+            self._finish(complete=False)
+            return
         except duckdb.Error as e:
             self._finish(error=str(e))
             raise

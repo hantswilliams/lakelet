@@ -17,8 +17,10 @@ window and half that for each further one (A8). "Open…" in the bar opens anoth
 new window; the recent ten are in `recent.json` under the app's data directory (A10).
 
 Screen 1: drop a file or a folder on the window (or "Choose files…", or type a path), see
-the columns and the first rows, import on a click; every action shows the `lakelet` line it
-is, with a copy button (`src/lib/command.ts`).
+the columns and the first rows, import on a click. Screen 2: SQL in the box, ⌘/Ctrl+Enter,
+the verdict before any row, rows streaming into the grid, Esc to stop, Red as a refusal
+until "Run anyway". Every action shows the `lakelet` line it is, with a copy button
+(`src/lib/command.ts`).
 
 Tests: `cargo test` in `src-tauri/` (the supervisor, projects and windows against a fake
 sidecar), `npm test` (Vitest, the screens and the command lines), `npm run e2e` (Playwright

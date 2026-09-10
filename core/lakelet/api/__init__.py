@@ -9,12 +9,15 @@ The engine is one DuckDB connection, so requests that touch it are serialised.""
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import threading
-from collections.abc import Iterator
+import time
+from collections.abc import AsyncIterator, Iterator
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+import anyio
 import duckdb
 import pyarrow as pa
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -24,7 +27,7 @@ from pydantic import BaseModel
 from lakelet import __version__
 from lakelet.engine import CatalogConflict
 from lakelet.gauge import inputs
-from lakelet.query import RedRefused
+from lakelet.query import Interrupted, RedRefused
 from lakelet.questions import NoSuchQuestion
 from lakelet.register import MissingFiles, NotRegistrable
 from lakelet.tables import NoSuchTable, TableExists, UnsupportedFile
@@ -34,6 +37,9 @@ if TYPE_CHECKING:
 
 ARROW_STREAM = "application/vnd.apache.arrow.stream"
 TAURI_ORIGINS = ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]
+#: The verdict travels in headers so a window shows it before the first row (brief D3);
+#: a browser only lets a cross-origin page read headers the server names.
+VERDICT_HEADERS = ["X-Lakelet-Verdict", "X-Lakelet-Words", "X-Lakelet-Reason"]
 
 
 class ImportBody(BaseModel):
@@ -144,6 +150,52 @@ def _arrow_stream(result, lock: threading.Lock) -> Iterator[bytes]:
     finally:
         result.close()
         lock.release()
+
+
+async def _stream_until_gone(
+    batches: Iterator[bytes], interrupt: Any, request: Request
+) -> AsyncIterator[bytes]:
+    """Feed the sync Arrow stream to the response; when the client goes away mid-query
+    (the app's Esc closes the fetch), interrupt the engine so the statement stops now
+    rather than running to completion for nobody, and the result closes as stopped early."""
+    try:
+        while True:
+            chunk = await anyio.to_thread.run_sync(next, batches, None, abandon_on_cancel=True)
+            if chunk is None:
+                return
+            yield chunk
+    except (asyncio.CancelledError, GeneratorExit):
+        # The abandoned thread may still be inside next(); the interrupt makes DuckDB
+        # return, then the generator can be closed, which closes the result and frees
+        # the lock. Done on a thread so the cancelled response is not held up.
+        threading.Thread(target=_stop, args=(batches, interrupt), daemon=True).start()
+        raise
+
+
+def _stop(batches: Iterator[bytes], interrupt: Any) -> None:
+    interrupt()
+    for _ in range(600):  # up to a minute for DuckDB to notice; it takes milliseconds
+        try:
+            batches.close()
+            return
+        except ValueError:  # generator already executing: the thread has not returned yet
+            time.sleep(0.1)
+
+
+async def _query_watching_disconnect(request: Request, start: Any, interrupt: Any) -> Any:
+    """Run ``start`` (the estimate and the statement's first execution) on a thread while
+    watching for the client to disconnect; a disconnect interrupts the engine."""
+    task = asyncio.ensure_future(anyio.to_thread.run_sync(start))
+    try:
+        while not task.done():
+            if await request.is_disconnected():
+                interrupt()
+                break
+            await asyncio.sleep(0.05)
+        return await task
+    except asyncio.CancelledError:
+        interrupt()
+        raise
 
 
 def create_router(project: Project, token: str) -> APIRouter:
@@ -273,10 +325,23 @@ def create_router(project: Project, token: str) -> APIRouter:
             except duckdb.Error as e:
                 return error(400, "sql_error", str(e).splitlines()[0])
 
-    def _run(sql: str, allow_red: bool, batch_rows: int, question_slug: str | None = None):
-        lock.acquire()
+    async def _run(
+        request: Request,
+        sql: str,
+        allow_red: bool,
+        batch_rows: int,
+        question_slug: str | None = None,
+    ):
+        await anyio.to_thread.run_sync(lock.acquire)
         try:
-            result = project.query(sql, allow_red=allow_red, batch_rows=batch_rows)
+            result = await _query_watching_disconnect(
+                request,
+                lambda: project.query(sql, allow_red=allow_red, batch_rows=batch_rows),
+                project.engine.interrupt,
+            )
+        except Interrupted:
+            lock.release()
+            return error(499, "stopped", "the client went away before the first row")
         except RedRefused as e:
             lock.release()
             return error(409, "red_refused", e.estimate.reason, estimate=_estimate_json(e.estimate))
@@ -296,12 +361,14 @@ def create_router(project: Project, token: str) -> APIRouter:
                 "X-Lakelet-Reason": result.estimate.reason,
             }
         return StreamingResponse(
-            _arrow_stream(result, lock), media_type=ARROW_STREAM, headers=headers
+            _stream_until_gone(_arrow_stream(result, lock), project.engine.interrupt, request),
+            media_type=ARROW_STREAM,
+            headers=headers,
         )
 
     @router.post("/query", dependencies=guarded)
-    def query(body: SqlBody):
-        return _run(body.sql, body.allow_red, body.batch_rows)
+    async def query(body: SqlBody, request: Request):
+        return await _run(request, body.sql, body.allow_red, body.batch_rows)
 
     # -- questions --------------------------------------------------------------------
 
@@ -318,12 +385,14 @@ def create_router(project: Project, token: str) -> APIRouter:
                 return error(400, "sql_error", str(e).splitlines()[0])
 
     @router.post("/questions/{slug}/run", dependencies=guarded)
-    def run_question(slug: str, body: RunBody | None = None):
+    async def run_question(slug: str, request: Request, body: RunBody | None = None):
         try:
             question = project.questions.get(slug)
         except NoSuchQuestion:
             return error(404, "no_such_question", f"no question named {slug}")
-        return _run(question.sql, body.allow_red if body else False, 1000, question_slug=slug)
+        return await _run(
+            request, question.sql, body.allow_red if body else False, 1000, question_slug=slug
+        )
 
     # -- history ----------------------------------------------------------------------
 

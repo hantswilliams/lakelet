@@ -8,8 +8,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { pageUrl, readStates, sidecarExecutable } from './sidecar';
+import { join } from 'node:path';
+import { pageUrl, readStates, venvPython } from './sidecar';
 
 // The second sidecar: nothing imported into it by the earlier steps.
 const sidecar = () => readStates()[1];
@@ -26,9 +26,8 @@ async function previewPath(page: Page, path: string) {
 }
 
 function writeParquet(path: string) {
-  // The venv's python beside the sidecar; a UTINYINT column carries a coercion note.
-  const python = join(dirname(sidecarExecutable()), 'python');
-  const r = spawnSync(python, ['-c', `import duckdb; duckdb.sql("COPY (SELECT 1::UTINYINT AS tiny, 'x' AS name) TO '${path}' (FORMAT parquet)")`], { encoding: 'utf8' });
+  // A UTINYINT column carries a coercion note.
+  const r = spawnSync(venvPython(), ['-c', `import duckdb; duckdb.sql("COPY (SELECT 1::UTINYINT AS tiny, 'x' AS name) TO '${path}' (FORMAT parquet)")`], { encoding: 'utf8' });
   expect(r.status, r.stderr).toBe(0);
 }
 

@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Start real sidecars for the tests: `lakelet init` on a temp folder, then `lakelet serve`
 // with the dev origin allowed; the session comes from serve.json exactly as the shell reads
-// it, and spawn-to-ready is measured the way the shell measures it. Two are started, the
-// second with half the first's memory limit, as the shell gives a second window (A8).
+// it, and spawn-to-ready is measured the way the shell measures it. Four are started: the
+// second with half the first's memory limit, as the shell gives a second window (A8); the
+// third with a 20 M-row table for the streaming gate; the fourth with the gauge thresholds
+// lowered so every query is Red.
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -15,7 +17,21 @@ export const STATE_FILE = join(tmpdir(), 'lakelet-app-e2e.json');
 
 export interface Started { project: string; port: number; token: string; pid: number; readyMs: number; memoryLimit: string }
 
-export const LIMITS = ['2GB', '1GB'] as const;
+export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean }
+
+export const SIDECARS: SidecarSpec[] = [
+  { memoryLimit: '2GB' },
+  { memoryLimit: '1GB' },
+  { memoryLimit: '2GB', big: true },
+  { memoryLimit: '1GB', red: true },
+];
+
+export const BIG_ROWS = 20_000_000;
+
+/** The venv's python beside the sidecar, for generating fixtures with DuckDB. */
+export function venvPython(): string {
+  return join(dirname(sidecarExecutable()), 'python');
+}
 
 export function sidecarExecutable(): string {
   if (process.env.LAKELET_SIDECAR) return process.env.LAKELET_SIDECAR;
@@ -24,11 +40,33 @@ export function sidecarExecutable(): string {
   return existsSync(venv) ? venv : 'lakelet';
 }
 
-export async function startSidecar(memoryLimit: string): Promise<{ started: Started; child: ChildProcess }> {
+export async function startSidecar({ memoryLimit, big, red }: SidecarSpec): Promise<{ started: Started; child: ChildProcess }> {
   const exe = sidecarExecutable();
   const project = mkdtempSync(join(tmpdir(), 'lakelet-e2e-'));
   const init = spawnSync(exe, ['init', project, '--probe-mb', '0'], { encoding: 'utf8' });
   if (init.status !== 0) throw new Error(`lakelet init failed:\n${init.stdout}\n${init.stderr}`);
+  if (red) {
+    // the thresholds the core's own Red test uses: everything is Red here
+    const toml = join(project, 'lakelet.toml');
+    writeFileSync(toml, readFileSync(toml, 'utf8')
+      .replace('green_max_seconds = 60', 'green_max_seconds = 0.0000001')
+      .replace('yellow_max_seconds = 600', 'yellow_max_seconds = 0.0000002'));
+    writeFileSync(join(project, 'orders.csv'), 'id,customer,amt\n1,c1,1.5\n2,c2,3.0\n3,c1,4.5\n');
+    const imported = spawnSync(exe, ['-C', project, 'import', join(project, 'orders.csv')], { encoding: 'utf8' });
+    if (imported.status !== 0) throw new Error(`import failed:\n${imported.stdout}\n${imported.stderr}`);
+  }
+  if (big) {
+    // 20 M rows through DuckDB into Parquet, then imported as an Iceberg table
+    const parquet = join(project, 'big.parquet');
+    const gen = spawnSync(venvPython(), ['-c',
+      `import duckdb; duckdb.sql("COPY (SELECT range AS id, random() AS x, 'c' || (range % 97) AS c, range * 3 AS y FROM range(${BIG_ROWS})) TO '${parquet}' (FORMAT parquet)")`,
+    ], { encoding: 'utf8' });
+    if (gen.status !== 0) throw new Error(`could not generate big.parquet:\n${gen.stderr}`);
+    const t = Date.now();
+    const imported = spawnSync(exe, ['-C', project, 'import', parquet], { encoding: 'utf8' });
+    if (imported.status !== 0) throw new Error(`import of big.parquet failed:\n${imported.stdout}\n${imported.stderr}`);
+    console.log(`big: ${BIG_ROWS.toLocaleString()} rows imported in ${((Date.now() - t) / 1000).toFixed(1)} s`);
+  }
   const t0 = Date.now();
   const child = spawn(exe, ['-C', project, 'serve', '--port', '0', '--memory-limit', memoryLimit], {
     env: { ...process.env, LAKELET_DEV_ORIGIN: 'http://localhost:5173' },
@@ -49,8 +87,8 @@ export async function startSidecar(memoryLimit: string): Promise<{ started: Star
 export async function startAll(): Promise<ChildProcess[]> {
   const children: ChildProcess[] = [];
   const states: Started[] = [];
-  for (const limit of LIMITS) {
-    const { started, child } = await startSidecar(limit);
+  for (const spec of SIDECARS) {
+    const { started, child } = await startSidecar(spec);
     children.push(child);
     states.push(started);
   }

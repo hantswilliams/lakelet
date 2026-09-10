@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // The window (app brief steps 0 to 2): the welcome screen when it has no project, else the
 // project with its own sidecar: the status dot, what health says, the time the core took to
-// be ready, and screen 1 (tables, drop zone, preview, import). Screen 2 joins in step 3.
+// be ready, screen 2 (SQL, the verdict, the streaming grid) once there is a table to ask,
+// and screen 1 (tables, drop zone, preview, import).
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Api, type Health, type TableInfo } from './lib/api';
 import {
   getSession, inTauri, onSidecarEvent, openProject, pickFolder, recentProjects, windowProject,
@@ -12,6 +13,9 @@ import {
 } from './lib/session';
 import { OpenMenu } from './components/OpenMenu';
 import { StatusDot, type Status } from './components/StatusDot';
+// Screen 2 carries Arrow and CodeMirror; loaded once there is a table to ask, so the first
+// paint (the launch budget, §3.2) does not wait for them.
+const Query = lazy(() => import('./screens/Query').then((m) => ({ default: m.Query })));
 import { Tables } from './screens/Tables';
 import { Welcome } from './screens/Welcome';
 
@@ -146,6 +150,9 @@ export default function App() {
                 <div><b>{health.throughput_local_mbps ? `${Math.round(health.throughput_local_mbps)} MB/s` : '—'}</b><span>local disk</span></div>
                 <div data-testid="ready-ms"><b>{session?.ready_ms ? `${session.ready_ms} ms` : '—'}</b><span>core ready in</span></div>
               </section>
+            )}
+            {session && status !== 'down' && tables.length > 0 && (
+              <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} /></Suspense>
             )}
             {session && status !== 'down' && <Tables session={session} tables={tables} onChanged={refreshTables} />}
           </>

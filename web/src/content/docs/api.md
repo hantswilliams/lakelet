@@ -63,6 +63,8 @@ The body is an Arrow IPC stream, one record batch per `batch_rows` rows (1,000 b
 
 A Red verdict is refused with a 409 `red_refused` carrying the full estimate in the body, the same JSON as `/estimate`; send `allow_red: true` to run it anyway. A catalog conflict that survives the retries is a 409 `catalog_conflict`; SQL that fails to bind is a 400 `sql_error` with DuckDB's first line.
 
+A client that closes the connection mid-query (the app's Esc aborts its `fetch`) stops the statement: the engine is interrupted at once rather than left running for nobody, the connection is free for the next request within a moment, and the run is in history as stopped early, with what was measured and no error. The three `X-Lakelet-*` headers are named in `Access-Control-Expose-Headers`, so a page on an allowed origin can read the verdict before the first row arrives.
+
 ```python
 import httpx, json, pyarrow as pa
 from pathlib import Path

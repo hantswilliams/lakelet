@@ -13,6 +13,7 @@ dependencies = [
   "pyarrow",
   "sqlalchemy>=2,<3",
   "fastapi",
+  "anyio>=4",
   "uvicorn",
   "pydantic>=2,<3",
   "typer",

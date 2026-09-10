@@ -278,7 +278,7 @@ class Project:
         if self.token:
             from fastapi.middleware.cors import CORSMiddleware
 
-            from lakelet.api import TAURI_ORIGINS, create_router
+            from lakelet.api import TAURI_ORIGINS, VERDICT_HEADERS, create_router
 
             app.include_router(create_router(self, self.token))
             # LAKELET_DEV_ORIGIN lets the app's frontend be driven from a browser against a
@@ -289,6 +289,7 @@ class Project:
                 allow_origins=TAURI_ORIGINS + ([dev_origin] if dev_origin else []),
                 allow_methods=["*"],
                 allow_headers=["*"],
+                expose_headers=VERDICT_HEADERS,
             )
         self._catalog = EmbeddedCatalog(app, port=port)
         url = self._catalog.start()

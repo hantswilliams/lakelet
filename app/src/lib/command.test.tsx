@@ -3,7 +3,7 @@
 // Step 2 gate, the CLI-first rule: the line the app shows is the line the CLI takes.
 
 import { describe, expect, it } from 'vitest';
-import { defaultName, importCommand, initCommand, previewCommand, shellArg } from './command';
+import { defaultName, importCommand, initCommand, previewCommand, shellArg, sqlCommand } from './command';
 
 describe('Copy as command', () => {
   it('builds the exact lakelet import line', () => {
@@ -15,6 +15,12 @@ describe('Copy as command', () => {
     expect(importCommand('/data/2026 exports')).toBe("lakelet import '/data/2026 exports'");
     expect(previewCommand('/data/orders.csv')).toBe('lakelet import /data/orders.csv --preview');
     expect(initCommand('/Users/h/acme')).toBe('lakelet init /Users/h/acme');
+  });
+
+  it('builds the lakelet sql line on one line, with --run-anyway when Red was overridden', () => {
+    expect(sqlCommand('select *\n  from orders')).toBe("lakelet sql 'select * from orders'");
+    expect(sqlCommand('select count(*) from orders', true)).toBe("lakelet sql 'select count(*) from orders' --run-anyway");
+    expect(sqlCommand("select 'a' as s")).toBe("lakelet sql 'select '\\''a'\\'' as s'");
   });
 
   it('names a table the way the core does', () => {

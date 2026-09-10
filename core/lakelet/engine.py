@@ -155,5 +155,11 @@ class Engine:
             return None
         return json.loads(self.profile_path.read_text(encoding="utf-8"))
 
+    def interrupt(self) -> None:
+        """Stop the statement running on the connection, if any (the app's Esc, a client
+        that went away). DuckDB raises InterruptException in the thread running it; with
+        nothing running this is a no-op and the next statement is unaffected."""
+        self.con.interrupt()
+
     def close(self) -> None:
         self.con.close()

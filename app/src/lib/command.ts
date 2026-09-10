@@ -29,3 +29,9 @@ export function importCommand(path: string, mode: ImportMode = 'create', name?: 
 export const previewCommand = (path: string): string => `${importCommand(path)} --preview`;
 
 export const initCommand = (folder: string): string => `lakelet init ${shellArg(folder)}`;
+
+/** `lakelet sql '<sql>' [--run-anyway]`: the query screen's line. */
+export function sqlCommand(sql: string, runAnyway = false): string {
+  const one = sql.replace(/\s+/g, ' ').trim();
+  return `lakelet sql ${shellArg(one)}${runAnyway ? ' --run-anyway' : ''}`;
+}

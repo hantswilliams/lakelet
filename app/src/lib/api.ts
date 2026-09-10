@@ -55,6 +55,10 @@ export class Api {
     return `http://127.0.0.1:${this.session.port}/api`;
   }
 
+  get token(): string {
+    return this.session.token;
+  }
+
   private headers(extra: Record<string, string> = {}): Record<string, string> {
     return { Authorization: `Bearer ${this.session.token}`, ...extra };
   }

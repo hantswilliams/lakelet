@@ -89,6 +89,34 @@ def test_tables_over_http(served) -> None:
     assert client.post("/api/tables/nope/refresh").status_code == 404
 
 
+def test_a_client_that_goes_away_stops_the_statement_and_history_shows_the_run(served) -> None:
+    """The app's Esc aborts the fetch. The engine is interrupted at once (not left running for
+    nobody), the lock is free within a moment, and the run is in history as stopped early."""
+    p, client, tmp_path = served
+    slow = "select count(*) as n from range(100000) a, range(100000) b"  # 10^10 rows: minutes
+    t0 = time.perf_counter()
+    with client.stream("POST", "/api/query", json={"sql": slow}, timeout=30) as r:
+        assert r.status_code == 200 and r.headers["x-lakelet-verdict"]
+        # go away before the first (and only) row exists
+    health = client.get("/api/health", timeout=10)  # would wait for the lock otherwise
+    assert health.status_code == 200 and time.perf_counter() - t0 < 10
+    for _ in range(50):
+        runs = [run for run in client.get("/api/history").json() if run["sql_text"] == slow]
+        if runs:
+            break
+        time.sleep(0.1)
+    [run] = runs
+    assert run["ran"] and run["error"] is None and run["actual_wall"] is not None
+    assert run["actual_bytes"] is None, "stopped early: no profile was read"
+    # mid-stream too: rows are flowing when the client closes
+    streaming = "select range as i, random() as x from range(50000000)"
+    with client.stream("POST", "/api/query", json={"sql": streaming}, timeout=30) as r:
+        assert r.status_code == 200
+        next(r.iter_bytes())
+    assert client.get("/api/health", timeout=10).status_code == 200
+    assert client.post("/api/query", json={"sql": "select 1 as one"}).status_code == 200
+
+
 def _rows(response: httpx.Response) -> pa.Table:
     assert response.headers["content-type"].startswith("application/vnd.apache.arrow.stream")
     return pa.ipc.open_stream(response.content).read_all()
@@ -232,6 +260,15 @@ def test_serve_memory_limit_and_the_dev_origin(tmp_path, monkeypatch) -> None:
         headers = {"Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST"}
         allowed = httpx.options(f"{p.catalog_url}/api/query", headers=headers)
         assert allowed.headers.get("access-control-allow-origin") == "http://localhost:5173"
+        # the verdict headers are readable from the window, not just present on the wire
+        run = httpx.post(
+            f"{p.catalog_url}/api/query",
+            json={"sql": "select 1 as one"},
+            headers={"Authorization": f"Bearer {token}", "Origin": "http://localhost:5173"},
+        )
+        assert run.status_code == 200 and run.headers["x-lakelet-verdict"] == "green"
+        exposed = run.headers.get("access-control-expose-headers", "").lower()
+        assert "x-lakelet-verdict" in exposed and "x-lakelet-reason" in exposed
     monkeypatch.delenv("LAKELET_DEV_ORIGIN")
     with Project.open(root, serve=True) as p:
         refused = httpx.options(
