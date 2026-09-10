@@ -143,6 +143,23 @@ async fn pick_folder(app: AppHandle) -> Option<String> {
     picked.and_then(|p| p.into_path().ok()).map(|p| p.display().to_string())
 }
 
+/// A9: the native file dialog for the drop zone's "Choose files…"; empty when cancelled.
+#[tauri::command]
+async fn pick_files(app: AppHandle) -> Vec<String> {
+    let picked = app
+        .dialog()
+        .file()
+        .set_title("Files to import")
+        .add_filter("Data files", &["csv", "tsv", "parquet", "json", "jsonl", "xlsx"])
+        .blocking_pick_files();
+    picked
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|p| p.into_path().ok())
+        .map(|p| p.display().to_string())
+        .collect()
+}
+
 /// A10: open a folder as a project, running `lakelet init` first when it needs it.
 #[tauri::command]
 async fn open_project(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>, path: String) -> Result<(), String> {
@@ -196,7 +213,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![get_session, window_project, recent_projects, pick_folder, open_project])
+        .invoke_handler(tauri::generate_handler![get_session, window_project, recent_projects, pick_folder, pick_files, open_project])
         .build(tauri::generate_context!())
         .expect("error while building the Lakelet shell")
         .run(|app, event| {

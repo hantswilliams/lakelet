@@ -16,6 +16,10 @@ Each window is one project with its own `lakelet serve`, given 60% of RAM for th
 window and half that for each further one (A8). "Open…" in the bar opens another folder in a
 new window; the recent ten are in `recent.json` under the app's data directory (A10).
 
+Screen 1: drop a file or a folder on the window (or "Choose files…", or type a path), see
+the columns and the first rows, import on a click; every action shows the `lakelet` line it
+is, with a copy button (`src/lib/command.ts`).
+
 Tests: `cargo test` in `src-tauri/` (the supervisor, projects and windows against a fake
-sidecar), `npm test` (Vitest, the screens), `npm run e2e` (Playwright against real
-`lakelet serve`s; needs `LAKELET_SIDECAR` or `../core/.venv`).
+sidecar), `npm test` (Vitest, the screens and the command lines), `npm run e2e` (Playwright
+against real `lakelet serve`s; needs `LAKELET_SIDECAR` or `../core/.venv`).

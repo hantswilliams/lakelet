@@ -136,7 +136,7 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  list      Tables in the catalog with rows, size and location.
+  list      Tables in the catalog with rows, size, when they were last written, and...
   describe  Columns, types, partitioning, freshness and the last commit of a table.
   sample    The first rows of a table.
   attach    Register remote data as a read-only Iceberg table without copying it.
@@ -149,7 +149,7 @@ Commands:
 ```text
 Usage: lakelet tables list [OPTIONS]
 
-  Tables in the catalog with rows, size and location.
+  Tables in the catalog with rows, size, when they were last written, and location.
 
 Options:
   --help  Show this message and exit.

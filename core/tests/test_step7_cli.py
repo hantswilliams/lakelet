@@ -56,6 +56,8 @@ def test_import_preview_import_and_tables(project_dir, tmp_path) -> None:
     preview = invoke(project_dir, "import", csv, "--preview")
     assert preview.exit_code == 0, preview.output
     assert "iceberg type" in preview.output and "orders" in preview.output
+    folder_preview = invoke(project_dir, "import", str(tmp_path), "--preview")
+    assert folder_preview.exit_code == 0 and "orders" in folder_preview.output
     imported = invoke(project_dir, "import", csv)
     assert imported.exit_code == 0 and "orders: 1,000 rows" in imported.output
     again = invoke(project_dir, "import", csv)

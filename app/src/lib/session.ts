@@ -69,6 +69,25 @@ export async function openProject(path: string): Promise<void> {
   return invoke<void>('open_project', { path });
 }
 
+/** The native file dialog, many files allowed; [] when cancelled. Only the app has one. */
+export async function pickFiles(): Promise<string[]> {
+  if (!inTauri()) throw new Error('the file dialog is only in the app; in a browser, type the path');
+  return invoke<string[]>('pick_files');
+}
+
+/** Paths dropped on the window (Tauri's drag-drop event, A9); nothing in a browser, where a
+ *  drop has no path. `over` and `leave` drive the drop zone's highlight. */
+export async function onDrop(handler: (e: { kind: 'over' | 'leave' | 'drop'; paths: string[] }) => void): Promise<() => void> {
+  if (!inTauri()) return () => {};
+  const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+  return getCurrentWebview().onDragDropEvent((event) => {
+    const p = event.payload;
+    if (p.type === 'drop') handler({ kind: 'drop', paths: p.paths });
+    else if (p.type === 'leave') handler({ kind: 'leave', paths: [] });
+    else handler({ kind: 'over', paths: 'paths' in p ? p.paths : [] });
+  });
+}
+
 export async function onSidecarEvent(handler: (e: SidecarEvent) => void): Promise<() => void> {
   if (!inTauri()) return () => {};
   const { listen } = await import('@tauri-apps/api/event');

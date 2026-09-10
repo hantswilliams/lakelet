@@ -92,6 +92,9 @@ def test_import_dir_is_one_table_per_file(project, sources, tmp_path) -> None:
     (folder / "orders.csv").write_bytes((sources / "orders.csv").read_bytes())
     project.engine.execute(f"COPY (SELECT 1 AS customer_id) TO '{folder}/customers.csv' (HEADER)")
     (folder / "notes.txt").write_text("skipped")
+    previews = project.tables.preview_dir(folder)  # the folder can be looked at first
+    assert [(p.name, len(p.columns)) for p in previews] == [("customers", 1), ("orders", 4)]
+    assert project.tables.list() == [], "a preview writes nothing"
     infos = project.tables.import_dir(folder)
     assert {i.name for i in infos} == {"customers", "orders"}
     assert sorted(t.name for t in project.tables.list()) == ["customers", "orders"]
@@ -112,6 +115,10 @@ def test_list_describe_sample(project, sources) -> None:
     [info] = project.tables.list()
     assert (info.name, info.rows) == ("orders", 3) and info.bytes > 0
     assert info.columns == [("id", "long"), ("name", "string"), ("amt", "double"), ("d", "date")]
+    assert info.freshness is not None and info.freshness.tzinfo is not None
+    assert abs((datetime.now(UTC) - info.freshness).total_seconds()) < 60, (
+        "the list carries freshness"
+    )
     assert info.location.startswith(project.warehouse_url + "/main/orders")
 
     desc = project.tables.describe("orders")

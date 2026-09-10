@@ -210,8 +210,13 @@ def create_router(project: Project, token: str) -> APIRouter:
 
     @router.post("/preview", dependencies=guarded)
     def preview(body: PreviewBody):
+        """A file's preview, or a folder's: one per file `import` would take, as a list."""
+        from pathlib import Path
+
         with lock:
             try:
+                if Path(body.path).is_dir():
+                    return _plain(project.tables.preview_dir(body.path))
                 return _plain(project.tables.preview(body.path, name=body.name))
             except (UnsupportedFile, FileNotFoundError) as e:
                 return error(400, "bad_file", str(e))

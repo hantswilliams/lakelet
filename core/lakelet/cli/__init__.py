@@ -193,7 +193,13 @@ def import_(
     with _open() as p:
         try:
             if preview:
-                _print_preview(p.tables.preview(path, name=name))
+                previews = (
+                    p.tables.preview_dir(path)
+                    if path.is_dir()
+                    else [p.tables.preview(path, name=name)]
+                )
+                for pv in previews:
+                    _print_preview(pv)
                 return
             infos = (
                 p.tables.import_dir(path, mode=mode)
@@ -214,11 +220,11 @@ def import_(
 
 @tables_app.command("list")
 def tables_list() -> None:
-    """Tables in the catalog with rows, size and location."""
+    """Tables in the catalog with rows, size, when they were last written, and location."""
     with _open() as p:
         infos = p.tables.list()
     t = Table()
-    for column in ("table", "rows", "size", "columns", "where"):
+    for column in ("table", "rows", "size", "columns", "updated", "where"):
         t.add_column(column)
     for i in infos:
         t.add_row(
@@ -226,6 +232,7 @@ def tables_list() -> None:
             f"{i.rows:,}",
             _human_bytes(i.bytes),
             str(len(i.columns)),
+            i.freshness.isoformat(timespec="seconds") if i.freshness else "",
             "local" if i.location.startswith("file://") else i.location,
         )
     out.print(t)

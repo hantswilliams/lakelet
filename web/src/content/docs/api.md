@@ -32,11 +32,11 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 | Route | Body | Returns |
 |---|---|---|
 | `GET /health` | | `lakelet` and `duckdb` versions, `project` name and `root`, the `machine` profile (RAM, free disk, threads, memory limit), `throughput_local_mbps` and `bandwidth_mbps` from the cache. |
-| `GET /tables` | | The list: name, rows, bytes, columns, location, snapshot id. |
+| `GET /tables` | | The list: name, rows, bytes, columns, location, snapshot id, `freshness` (when the current snapshot was committed, ISO 8601). |
 | `GET /tables/discover?prefix=s3://…` | | Candidate prefixes with kind, files and bytes. |
 | `GET /tables/{name}` | | `describe`: the list's fields plus partitioning, freshness, last commit, snapshots, format version. 404 `no_such_table`. |
 | `GET /tables/{name}/sample?n=5&truncate=80` | | The first rows. |
-| `POST /preview` | `{path, name?}` | The columns with DuckDB type, Iceberg type and note, and sample rows. 400 `bad_file`. |
+| `POST /preview` | `{path, name?}` | The columns with DuckDB type, Iceberg type and note, and sample rows; for a folder, a list of these, one per file `import` would take. 400 `bad_file`. |
 | `POST /import` | `{path, name?, mode}` with `mode` one of `create`, `replace`, `append` | The table info, or a list of them for a folder. 409 `table_exists`, 400 `bad_file`, 409 `catalog_conflict`. |
 | `POST /tables/attach` | `{name, source, metadata_in_bucket}` | The table info. 409 `table_exists`, 400 `not_registrable` with the reason (drift, path-only partition column). |
 | `POST /tables/{name}/refresh` | | `{name, added, files, rows}`. 404 `no_such_table`, 409 `refresh_failed` when a registered file is gone. |

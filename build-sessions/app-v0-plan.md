@@ -1,6 +1,6 @@
 # Lakelet — desktop shell, build brief (app v0, revision 1)
 
-> **Decided September 10, 2026: A1 to A14 accepted** (Hants, in conversation). §4 is the build order from here; steps 0 and 1 were built the same day.
+> **Decided September 10, 2026: A1 to A14 accepted** (Hants, in conversation). §4 is the build order from here; steps 0 to 2 were built the same day.
 
 *September 10, 2026 · Session 6 of `lakelet-build-sessions.md` · Follows `core-v0.5-plan.md`, which it does not change · The A block at the top is for review: tick a box on each, write a line under "Change" if you disagree. Nothing in §4 is built until the A block is decided.*
 
@@ -115,7 +115,7 @@ The core is unchanged except for three small additions (§4 step 0): `serve --me
 
 ### 3.2 Launch sequence and the 1.5 s budget
 
-Window paints with the last project's name and an amber dot at t≈0.2 s (Tauri's window with a static first render); the sidecar is spawned at once; the dot turns green when `/api/health` answers, typically 0.8 to 1.2 s later on a warm machine; the tables list arrives with health. Nothing waits for the sidecar except the tables panel's rows and the run button. Measured in step 0's gate and recorded in §7.
+Window paints with the last project's name and an amber dot at t≈0.2 s (Tauri's window with a static first render); the sidecar is spawned at once; the dot turns green when `/api/health` answers, typically 0.8 to 1.2 s later on a warm machine; the tables list arrives with health. Nothing waits for the sidecar except the tables panel's rows and the run button. Measured in step 0's gate and recorded in §7. *Measured September 10 on the 64 GB MacBook Pro, from the app:* spawn to ready 871 ms for the first window (sidecar cold) and 441 ms for a second (warm), inside the budget; the shares read 38.3 GiB and 19.1 GiB.
 
 ### 3.3 The query path
 
@@ -145,7 +145,7 @@ Each step ends with a test that stays in the suite.
 |---|---|---|
 | 0 | `app/` scaffold: Tauri 2, React, Vite, the tokens; the three core additions (`serve --memory-limit`, the `serving` line, `LAKELET_DEV_ORIGIN`) with their pytest tests; the supervisor in Rust; the status dot; `app-ci.yml` | `cargo test` passes (the supervisor finds `serve.json`, restarts once, stops after two); `npm run tauri dev` with `LAKELET_SIDECAR` opens a window whose dot goes green; Playwright: health renders versions; window paint to green dot measured and recorded (§7); CI green on both runners |
 | 1 | Projects: open folder, init if needed, recent list, one window per project, memory limit per window, close stops the sidecar. *Built September 10:* `projects.rs` (recent list, memory share, `init`, the window registry), the welcome screen, "Open…" in the bar, `ready_ms` on the session and the panel | Rust and Playwright: a folder without `lakelet.toml` is initialised and opened; two windows get two sidecars with halved limits (`/api/health` reports the limit); closing kills the sidecar (no orphan process). *Met:* four Rust tests (share, recent list, init, two windows and close), three Vitest, two Playwright against two real sidecars |
-| 2 | Screen 1: tables panel, drop zone with the terminal command beside it, preview, import, "Copy as command" | Playwright: drop a generated CSV, the preview shows the columns and notes, import lands, the panel shows the table with rows and size; a folder drop lists three files; the copied command is the exact CLI line |
+| 2 | Screen 1: tables panel, drop zone with the terminal command beside it, preview, import, "Copy as command". *Built September 10:* `screens/Tables.tsx` with `TablesPanel` (rows, size, columns, updated), `DropZone` (Tauri's drag-drop event, "Choose files…", a typed path), `PreviewPanel` (columns with DuckDB and Iceberg types and notes, first rows, the name, replace-or-append on a 409), `Command` (the chip with copy) built from `lib/command.ts`; the `Open…` menu of recent projects; core additions `freshness` on the table list and `/api/preview` of a folder (also `lakelet import <folder> --preview`) | Playwright: drop a generated CSV, the preview shows the columns and notes, import lands, the panel shows the table with rows and size; a folder drop lists three files; the copied command is the exact CLI line. *Met:* four Playwright tests against a real sidecar (a typed path stands in for the drop in a browser), six Vitest (the command lines, the preview panel), three core tests |
 | 3 | Screen 2 without the chart: CodeMirror input, Cmd/Ctrl+Enter, the gauge line from headers, streaming grid, Red refusal and "Run anyway", Esc cancels | Playwright: on a 20 M-row table the first rows are on screen before the query completes (timestamped); a lowered-threshold project shows Red with the sentence and runs on "Run anyway"; Esc during a slow query leaves the app responsive and history shows the closed run |
 | 4 | The auto-chart (A5); crash recovery (A11); settings panel; keyboard polish | Playwright: bar chart for a group-by; killing the sidecar's pid shows "core restarted" and the tables refresh; settings write `lakelet.toml` and the CLI reads them |
 | 5 | Definition of done (§6); the log; the docs pages for the app | Everything in §6 measured and recorded |
@@ -181,6 +181,8 @@ Each step ends with a test that stays in the suite.
 ---
 
 ## 7. Known unknowns
+
+- *Answered September 10:* the sidecar's spawn-to-ready in the Tauri window on the 64 GB MacBook Pro is 871 ms cold and 441 ms warm (`ready_ms` on the session); two windows read 38.3 GiB and 19.1 GiB; closing the second left one `lakelet serve` process. The 1.5 s launch budget holds with margin from a venv; the frozen sidecar (session 10) is still the open question below.
 
 - WebKitGTK on Ubuntu 22.04: rendering speed of a virtualised grid and CodeMirror; the Linux CI runner and the reference laptop answer it in step 0 and step 3.
 - Arrow JS throughput: parsing 1,000-row batches at the rate the core streams them, and memory at the 100,000-row cap; step 3 measures.

@@ -77,6 +77,10 @@ def test_tables_over_http(served) -> None:
 
     listed = client.get("/api/tables").json()
     assert [t["name"] for t in listed] == ["orders"] and listed[0]["rows"] == 2000
+    assert listed[0]["freshness"].startswith("20"), "an ISO timestamp for the panel"
+    folder = client.post("/api/preview", json={"path": str(tmp_path)})
+    assert folder.status_code == 200 and [p["name"] for p in folder.json()] == ["orders"]
+    assert client.post("/api/preview", json={"path": str(tmp_path / "gone")}).status_code == 400
     described = client.get("/api/tables/orders").json()
     assert described["partitioning"] == "unpartitioned" and described["snapshots"] == 2
     sampled = client.get("/api/tables/orders/sample", params={"n": 2}).json()

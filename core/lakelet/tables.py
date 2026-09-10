@@ -67,12 +67,14 @@ class TableInfo:
     columns: list[tuple[str, str]]
     location: str
     snapshot_id: int | None
+    #: When the current snapshot was committed: the table's freshness, in the list too so
+    #: the app's tables panel can show it without a describe per table.
+    freshness: datetime | None
 
 
 @dataclass
 class TableDescription(TableInfo):
     partitioning: str = "unpartitioned"
-    freshness: datetime | None = None
     last_commit: dict[str, Any] = field(default_factory=dict)
     snapshots: int = 0
     format_version: int = 2
@@ -127,6 +129,14 @@ class Tables:
         ).fetchall()
         return Preview(name or identifier(path.stem), str(path), columns, rows)
 
+    def preview_dir(self, path: str | Path, sample: int = 5) -> list[Preview]:
+        """One preview per file `import_dir` would import, in the same order, so a folder
+        can be looked at before it is imported (CLI `--preview`, the app's drop zone)."""
+        return [
+            self.preview(file, name=name, sample=sample)
+            for name, file in self._dir_files(path).items()
+        ]
+
     # -- importing -----------------------------------------------------------------
 
     def import_file(
@@ -155,7 +165,16 @@ class Tables:
 
     def import_dir(self, path: str | Path, mode: Mode = "create") -> list[TableInfo]:
         """One table per file (brief D16). Files with an unsupported extension are skipped."""
+        return [
+            self.import_file(file, name=name, mode=mode)
+            for name, file in self._dir_files(path).items()
+        ]
+
+    @staticmethod
+    def _dir_files(path: str | Path) -> dict[str, Path]:
         root = Path(path)
+        if not root.is_dir():
+            raise FileNotFoundError(root)
         files = sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower() in READERS)
         names: dict[str, Path] = {}
         for file in files:
@@ -163,7 +182,7 @@ class Tables:
             if name in names:
                 raise TableExists(f"{names[name].name} and {file.name} would both be {name}")
             names[name] = file
-        return [self.import_file(file, name=name, mode=mode) for name, file in names.items()]
+        return names
 
     def _existing_columns(self, name: str) -> list[Column]:
         rows = self.project.engine.execute(
@@ -198,6 +217,9 @@ class Tables:
             columns=[(f.name, str(f.field_type)) for f in md.schema().fields],
             location=md.location,
             snapshot_id=snapshot.snapshot_id if snapshot else None,
+            freshness=datetime.fromtimestamp(snapshot.timestamp_ms / 1000, tz=UTC)
+            if snapshot
+            else None,
         )
 
     def list(self) -> list[TableInfo]:
@@ -219,9 +241,6 @@ class Tables:
         return TableDescription(
             **info.__dict__,
             partitioning=partitioning,
-            freshness=datetime.fromtimestamp(snapshot.timestamp_ms / 1000, tz=UTC)
-            if snapshot
-            else None,
             last_commit=(
                 {
                     "snapshot_id": snapshot.snapshot_id,

@@ -1,16 +1,18 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
-// Step 1 of the app brief: a window is either the welcome screen (no project) or a project
-// with its own sidecar; the status dot, what health says, the time the core took to be
-// ready. Screens 1 and 2 replace the body in steps 2 and 3.
+// The window (app brief steps 0 to 2): the welcome screen when it has no project, else the
+// project with its own sidecar: the status dot, what health says, the time the core took to
+// be ready, and screen 1 (tables, drop zone, preview, import). Screen 2 joins in step 3.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Api, humanBytes, type Health, type TableInfo } from './lib/api';
+import { Api, type Health, type TableInfo } from './lib/api';
 import {
   getSession, inTauri, onSidecarEvent, openProject, pickFolder, recentProjects, windowProject,
   type RecentProject, type Session,
 } from './lib/session';
+import { OpenMenu } from './components/OpenMenu';
 import { StatusDot, type Status } from './components/StatusDot';
+import { Tables } from './screens/Tables';
 import { Welcome } from './screens/Welcome';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e)); // Tauri rejects with a string
@@ -36,6 +38,10 @@ export default function App() {
     setTables(t);
     setStatus((prev) => (prev === 'restarted' ? prev : 'ready'));
   }
+
+  const refreshTables = useCallback(async () => {
+    if (session) setTables(await new Api(session).tables());
+  }, [session]);
 
   // Which project this window has; asked again after opening one into this window.
   const refreshProject = useCallback(async () => {
@@ -107,9 +113,7 @@ export default function App() {
         <span className="project" data-testid="project">{health?.project ?? (project ? baseName(project) : '')}</span>
         {project !== null && <StatusDot status={status} detail={detail} />}
         {inTauri() && project !== null && (
-          <button type="button" className="quiet" onClick={() => open()} disabled={!!busy} title="Open another folder in a new window">
-            Open…
-          </button>
+          <OpenMenu recent={recent} current={project} disabled={!!busy} onOpen={(p) => open(p)} onPick={() => open()} />
         )}
       </header>
       <main>
@@ -143,26 +147,7 @@ export default function App() {
                 <div data-testid="ready-ms"><b>{session?.ready_ms ? `${session.ready_ms} ms` : '—'}</b><span>core ready in</span></div>
               </section>
             )}
-            <section className="tables" data-testid="tables">
-              <h2>Tables</h2>
-              {tables.length === 0 ? (
-                <p className="muted">No tables yet. Drop a CSV, Parquet, Excel or JSON file here, or run <code>lakelet import &lt;file&gt;</code>.</p>
-              ) : (
-                <table>
-                  <thead><tr><th>Table</th><th>Rows</th><th>Size</th><th>Columns</th></tr></thead>
-                  <tbody>
-                    {tables.map((t) => (
-                      <tr key={t.name}>
-                        <td className="mono">{t.name}</td>
-                        <td>{t.rows.toLocaleString()}</td>
-                        <td>{humanBytes(t.bytes)}</td>
-                        <td>{t.columns.length}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </section>
+            {session && status !== 'down' && <Tables session={session} tables={tables} onChanged={refreshTables} />}
           </>
         )}
       </main>
