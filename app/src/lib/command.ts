@@ -28,6 +28,27 @@ export function importCommand(path: string, mode: ImportMode = 'create', name?: 
 
 export const previewCommand = (path: string): string => `${importCommand(path)} --preview`;
 
+export const isRemote = (path: string): boolean => /^s3:\/\//i.test(path.trim());
+
+/** The table name the core gives a prefix (`register.remote_name`): the last segment, the
+ *  value of a `k=v` segment. */
+export const remoteName = (prefix: string): string => {
+  const segment = prefix.replace(/\/+$/, '').split('/').pop() ?? prefix;
+  const value = segment.includes('=') ? segment.slice(segment.indexOf('=') + 1) : segment;
+  const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'project';
+  return /^[0-9]/.test(slug) ? `t_${slug}` : slug;
+};
+
+/** `lakelet tables discover [--anonymous] <prefix>`: the drop zone's line for an s3:// path. */
+export const discoverCommand = (prefix: string, anonymous = false): string =>
+  `lakelet tables discover${anonymous ? ' --anonymous' : ''} ${shellArg(prefix)}`;
+
+/** `lakelet tables attach <name> [--anonymous] <prefix>`: the preview panel's line for a prefix. */
+export const attachCommand = (name: string, prefix: string, anonymous = false): string =>
+  `lakelet tables attach ${shellArg(name)}${anonymous ? ' --anonymous' : ''} ${shellArg(prefix)}`;
+
+export const refreshCommand = (name: string): string => `lakelet tables refresh ${shellArg(name)}`;
+
 export const initCommand = (folder: string): string => `lakelet init ${shellArg(folder)}`;
 
 /** `--` comments outside string literals removed, so folding the SQL onto one line for the

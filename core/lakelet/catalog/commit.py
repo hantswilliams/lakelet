@@ -9,9 +9,10 @@ Lakelet writes are the files pyiceberg would write.
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
 from pyiceberg.catalog import TABLE_METADATA_FILE_NAME_REGEX, MetastoreCatalog
-from pyiceberg.io import FileIO, load_file_io
+from pyiceberg.io import FileIO, InputFile, InputStream, OutputFile, load_file_io
 from pyiceberg.manifest import ManifestContent
 from pyiceberg.partitioning import UNPARTITIONED_PARTITION_SPEC, PartitionSpec
 from pyiceberg.schema import Schema
@@ -31,12 +32,66 @@ def parse_version(location: str) -> int:
     return int(match.group(1)) if match else -1
 
 
+class _CachedInputFile(InputFile):
+    """An immutable remote object (a manifest, a manifest list, a metadata file) served from
+    a local copy after the first read, so the second estimate needs no network."""
+
+    def __init__(self, inner: InputFile, cache_path: Path) -> None:
+        super().__init__(inner.location)
+        self._inner = inner
+        self._cache_path = cache_path
+
+    def __len__(self) -> int:
+        return self._cache_path.stat().st_size if self._cache_path.exists() else len(self._inner)
+
+    def exists(self) -> bool:
+        return self._cache_path.exists() or self._inner.exists()
+
+    def open(self, seekable: bool = True) -> InputStream:
+        if not self._cache_path.exists():
+            self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._inner.open() as stream:
+                data = stream.read()
+            tmp = self._cache_path.with_suffix(".tmp")
+            tmp.write_bytes(data)
+            tmp.replace(self._cache_path)
+        return self._cache_path.open("rb")
+
+
+class CachingFileIO(FileIO):
+    """Wraps a FileIO; reads of ``.avro`` and ``.metadata.json`` objects that are not local
+    are cached under ``.lakelet/cache/objects/`` (brief §4 step 8)."""
+
+    def __init__(self, inner: FileIO, cache_dir: Path) -> None:
+        super().__init__(inner.properties)
+        self._inner = inner
+        self._dir = cache_dir
+
+    def new_input(self, location: str) -> InputFile:
+        inner = self._inner.new_input(location)
+        if "://" not in location or location.startswith("file://"):
+            return inner
+        if not location.endswith((".avro", ".metadata.json")):
+            return inner
+        return _CachedInputFile(inner, self._dir / location.replace("://", "/"))
+
+    def new_output(self, location: str) -> OutputFile:
+        return self._inner.new_output(location)
+
+    def delete(self, location: str | InputFile | OutputFile) -> None:
+        self._inner.delete(location)
+
+
 class MetadataIO:
     """Reads and writes metadata files through pyiceberg's FileIO, so ``file://`` and
-    ``s3://`` warehouses are the same code path."""
+    ``s3://`` warehouses are the same code path. With ``cache_dir`` set, remote metadata
+    files and manifests are kept locally after the first read: Iceberg never rewrites a
+    file under the same name, so the copy is good for as long as the name is (brief §4
+    step 8; the second estimate on a bucket table needs no network)."""
 
-    def __init__(self, properties: dict[str, str]) -> None:
-        self.io: FileIO = load_file_io(properties)
+    def __init__(self, properties: dict[str, str], cache_dir: Path | None = None) -> None:
+        inner: FileIO = load_file_io(properties)
+        self.io: FileIO = CachingFileIO(inner, cache_dir) if cache_dir else inner
 
     def read(self, location: str) -> TableMetadata:
         return FromInputFile.table_metadata(self.io.new_input(location))

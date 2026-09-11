@@ -47,3 +47,31 @@ describe('PreviewPanel', () => {
     expect(screen.getByTestId('command').textContent).toContain('lakelet import /data/in');
   });
 });
+
+describe('PreviewPanel for a remote prefix (real-data R4)', () => {
+  const remote = {
+    name: 'place',
+    source: 's3://overturemaps-us-west-2/release/2026-08-19.0/theme=places/type=place/',
+    columns: [
+      { name: 'id', duckdb_type: 'string', iceberg_type: 'string', note: '' },
+      { name: 'bbox', duckdb_type: 'struct<xmin: float, ...>', iceberg_type: 'struct<...>', note: '' },
+    ],
+    sample: [],
+    remote: true,
+    files: 16,
+    bytes: 10_500_000_000,
+    anonymous: true,
+  };
+
+  it('shows the files and bytes, Attach, and the tables attach line with --anonymous', () => {
+    const onAttach = vi.fn();
+    render(<PreviewPanel path={remote.source} folder={false} previews={[remote]} name="places" mode="create" onName={() => {}} onImport={() => {}} onAttach={onAttach} onCancel={() => {}} />);
+    expect(screen.getByTestId('remote-summary').textContent).toContain('16 Parquet files, 10.5 GB, read in place without credentials');
+    expect(screen.getByText('Arrow')).toBeTruthy();
+    expect(screen.getByTestId('command').textContent).toContain(`lakelet tables attach places --anonymous ${remote.source}`);
+    expect(screen.getByTestId('attach').textContent).toBe('Attach as places');
+    fireEvent.click(screen.getByTestId('attach'));
+    expect(onAttach).toHaveBeenCalled();
+    expect(screen.queryByTestId('import')).toBeNull();
+  });
+});

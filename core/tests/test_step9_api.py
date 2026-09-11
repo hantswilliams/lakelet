@@ -43,6 +43,14 @@ def test_token_health_and_the_open_catalog(served) -> None:
     p, client, _ = served
     health = client.get("/api/health")
     assert health.json()["throughput_probe"] in ("nocache", "direct", "cached")
+    aws = health.json()["aws"]
+    assert set(aws) == {"configured", "source", "profile", "region", "endpoint"}
+    assert aws["source"] in ("environment", "profile", "none")
+    assert aws["configured"] == (aws["source"] != "none")
+    assert (
+        "AWS_SECRET" not in health.text
+        and (os.environ.get("AWS_SECRET_ACCESS_KEY") or "\0") not in health.text
+    )
     assert health.status_code == 200, health.text
     data = health.json()
     assert data["lakelet"] and data["duckdb"] == duckdb.__version__

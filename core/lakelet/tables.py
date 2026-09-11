@@ -63,6 +63,12 @@ class Preview:
     source: str
     columns: list[Column]
     sample: list[tuple]
+    #: A remote prefix's preview (`tables attach`, not `import`): the file count and bytes
+    #: of what would be registered in place, and whether it is read without credentials.
+    remote: bool = False
+    files: int | None = None
+    bytes: int | None = None
+    anonymous: bool = False
 
 
 @dataclass
@@ -76,6 +82,10 @@ class TableInfo:
     #: When the current snapshot was committed: the table's freshness, in the list too so
     #: the app's tables panel can show it without a describe per table.
     freshness: datetime | None
+    #: For a table registered from a prefix (`tables attach`): the prefix; None for a table
+    #: Lakelet wrote. ``public`` is true when it is read without credentials.
+    source: str | None = None
+    public: bool = False
 
 
 @dataclass
@@ -241,6 +251,8 @@ class Tables:
             freshness=datetime.fromtimestamp(snapshot.timestamp_ms / 1000, tz=UTC)
             if snapshot
             else None,
+            source=md.properties.get("lakelet.source-prefix"),
+            public=md.properties.get("lakelet.anonymous", "").lower() == "true",
         )
 
     def list(self) -> list[TableInfo]:
@@ -304,23 +316,56 @@ class Tables:
 
     # -- remote, read-only (brief D25, D26, D27, M3) ----------------------------------
 
-    def discover(self, prefix: str):
+    def discover(self, prefix: str, anonymous: bool = False):
         from lakelet import register
 
-        return register.discover(self.project, prefix)
+        return register.discover(self.project, prefix, anonymous=anonymous)
 
-    def attach(self, name: str, source: str, metadata_in_bucket: bool = False) -> TableInfo:
+    def preview_remote(self, prefix: str, anonymous: bool = False) -> Preview:
+        """The columns of a Parquet prefix before `attach`, in the shape of a file's preview
+        so the app's panel shows both; `files`, `bytes` and `remote` say the rest."""
+        from lakelet import register
+
+        r = register.inspect(self.project, prefix, anonymous=anonymous)
+        columns = [Column(n, arrow, iceberg) for n, arrow, iceberg in r.columns]
+        return Preview(
+            r.name,
+            r.source,
+            columns,
+            [],
+            remote=True,
+            files=r.files,
+            bytes=r.bytes,
+            anonymous=r.anonymous,
+        )
+
+    def attach(
+        self,
+        name: str,
+        source: str,
+        metadata_in_bucket: bool = False,
+        anonymous: bool = False,
+    ) -> TableInfo:
         """A Parquet prefix registered in place, or an existing Iceberg table by its
-        metadata location. Nothing is copied."""
+        metadata location. Nothing is copied. ``anonymous``: a public bucket, no credentials."""
         from lakelet import register
 
         if self._exists(name):
             raise TableExists(name)
         if source.endswith(".metadata.json"):
+            if anonymous:
+                raise register.NotRegistrable(
+                    "--anonymous registers a Parquet prefix; an Iceberg table by its metadata "
+                    "location needs credentials for its metadata"
+                )
             register.attach_metadata(self.project, name, source)
         else:
             register.attach_prefix(
-                self.project, name, source, metadata_in_bucket=metadata_in_bucket
+                self.project,
+                name,
+                source,
+                metadata_in_bucket=metadata_in_bucket,
+                anonymous=anonymous,
             )
         self.refresh_agents_md()
         return self._info(name)

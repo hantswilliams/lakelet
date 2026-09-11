@@ -98,4 +98,11 @@ What it does: one listing call, one Parquet footer read per file for the schema 
 
 **Bandwidth.** The first attach in a project times a read of up to 64 MB from the largest file in the bucket and caches the result for an hour in `.lakelet/cache/machine.json`. The gauge uses it: a query over an attached table shows `from s3://…` and `at your N Mbps` in its line, and goes Red when the bytes cannot arrive inside the Yellow window. Manifests and metadata fetched from S3 are immutable and are cached on disk, so the second estimate on an attached table is as fast as a local one.
 
+**Public buckets.** `--anonymous` on `discover` and `attach` reads a bucket that allows anonymous access (the datasets in AWS's Registry of Open Data, for instance) with no credentials at all: the listing, the Parquet footers and every later read go out unsigned, pyarrow asks S3 which region the bucket is in, the metadata stays local (there is nothing to write with), the table carries `lakelet.anonymous = true` so `refresh` reads the same way, and the bucket is written to `.lakelet/public-buckets.json` so the engine opens it, with a secret scoped to that bucket alone, every time the project starts. A machine with no AWS credentials can attach and query a public dataset; a machine with credentials still reads that bucket unsigned. `--anonymous` with `--metadata-in-bucket` is refused.
+
+```bash
+lakelet tables discover --anonymous s3://some-open-data-bucket/release/2025-01/
+lakelet tables attach places --anonymous s3://some-open-data-bucket/release/2025-01/places/
+```
+
 **Credentials** come from the standard AWS environment only, never from `lakelet.toml`. `AWS_ENDPOINT_URL` points both DuckDB and pyiceberg at a self-hosted store such as RustFS. With no keys in the environment, both fall back to the AWS default credential chain, which needs DuckDB's `aws` extension, one of the four `init` installs. A machine with no AWS credentials anywhere is the normal case and everything local works on it; the first `discover`, `attach` or `refresh` against `s3://` is refused with a sentence naming the variables to set.

@@ -3,10 +3,12 @@
 // Screen 1 of the app brief: the tables panel, the drop zone, the preview, the import. A
 // dropped path is previewed with /api/preview; import is /api/import on a click, in the mode
 // the core allows (409 table_exists offers replace or append); the panel refreshes after.
+// An s3:// prefix (real-data brief R4) is previewed the same way and attached in place with
+// /api/tables/attach; an attached table's Refresh is /api/tables/{name}/refresh.
 
 import { useEffect, useState } from 'react';
-import { Api, ApiError, type ImportMode, type Preview, type TableInfo } from '../lib/api';
-import { importCommand, defaultName } from '../lib/command';
+import { Api, ApiError, type Health, type ImportMode, type Preview, type TableInfo } from '../lib/api';
+import { attachCommand, importCommand, defaultName, isRemote, refreshCommand } from '../lib/command';
 import { inTauri, onDrop, pickFiles, type Session } from '../lib/session';
 import { Command } from '../components/Command';
 import { DropZone } from '../components/DropZone';
@@ -14,10 +16,13 @@ import { PreviewPanel } from '../components/PreviewPanel';
 import { TablesPanel } from '../components/TablesPanel';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const humanFiles = (n: number | null | undefined) => `${(n ?? 0).toLocaleString()} ${n === 1 ? 'file' : 'files'}`;
 
 interface Pending {
   path: string;
   folder: boolean;
+  remote: boolean;
+  anonymous: boolean;
   previews: Preview[];
   name: string;
   mode: ImportMode;
@@ -27,10 +32,18 @@ interface Pending {
 
 interface Done {
   line: string;
-  tables: TableInfo[];
+  text: string;
 }
 
-export function Tables({ session, tables, onChanged }: { session: Session; tables: TableInfo[]; onChanged: () => Promise<void> }) {
+export interface TablesProps {
+  session: Session;
+  tables: TableInfo[];
+  /** The core's credentials, from health, for the drop zone's line. */
+  aws?: Health['aws'];
+  onChanged: () => Promise<void>;
+}
+
+export function Tables({ session, tables, aws, onChanged }: TablesProps) {
   const api = new Api(session);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState<string>();
@@ -40,16 +53,17 @@ export function Tables({ session, tables, onChanged }: { session: Session; table
 
   // A9: a drop previews first. Many files dropped at once: the first is previewed and the
   // rest are named, until a partner asks for more (brief §7's last unknown).
-  async function preview(paths: string[]) {
+  async function preview(paths: string[], anonymous = false) {
     const path = paths[0];
     if (!path) return;
     setDropError(undefined);
     setDone(undefined);
-    setBusy(`reading ${path.split(/[\\/]/).pop()}…`);
+    const remote = isRemote(path);
+    setBusy(remote ? 'listing the prefix…' : `reading ${path.split(/[\\/]/).pop()}…`);
     try {
-      const previews = await api.preview(path);
-      const folder = !/\.(csv|tsv|parquet|json|jsonl|xlsx)$/i.test(path); // a file the core previewed has one of its extensions
-      setPending({ path, folder, previews, name: folder ? '' : previews[0].name, mode: 'create' });
+      const previews = await api.preview(path, undefined, anonymous);
+      const folder = !remote && !/\.(csv|tsv|parquet|json|jsonl|xlsx)$/i.test(path); // a file the core previewed has one of its extensions
+      setPending({ path, folder, remote, anonymous, previews, name: folder ? '' : previews[0].name, mode: 'create' });
       if (paths.length > 1) setDropError(`${paths.length} files dropped; previewing the first. Drop a folder to import several at once.`);
     } catch (e: unknown) {
       setDropError(message(e));
@@ -65,7 +79,10 @@ export function Tables({ session, tables, onChanged }: { session: Session; table
     setBusy('importing…');
     try {
       const imported = await api.import(pending.path, mode, name);
-      setDone({ line: importCommand(pending.path, mode, name), tables: imported });
+      setDone({
+        line: importCommand(pending.path, mode, name),
+        text: `Imported ${imported.map((t) => `${t.name} (${t.rows.toLocaleString()} rows)`).join(', ')}.`,
+      });
       setPending(undefined);
       await onChanged();
     } catch (e: unknown) {
@@ -75,6 +92,47 @@ export function Tables({ session, tables, onChanged }: { session: Session; table
       } else {
         setPending({ ...pending, mode, error: message(e) });
       }
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  async function attach() {
+    if (!pending) return;
+    const name = pending.name.trim() || pending.previews[0].name;
+    setPending({ ...pending, error: undefined });
+    setBusy('attaching…');
+    try {
+      const info = await api.attach(name, pending.path, pending.anonymous);
+      setDone({
+        line: attachCommand(name, pending.path, pending.anonymous),
+        text: `Attached ${info.name} (${info.rows.toLocaleString()} rows in ${humanFiles(pending.previews[0].files)}) in place; nothing was copied.`,
+      });
+      setPending(undefined);
+      await onChanged();
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.code === 'table_exists') {
+        setPending({ ...pending, exists: name, error: `Table ${name} already exists; pick another name.` });
+      } else {
+        setPending({ ...pending, error: message(e) });
+      }
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  async function refresh(name: string) {
+    setDropError(undefined);
+    setBusy(`refreshing ${name}…`);
+    try {
+      const r = await api.refresh(name);
+      setDone({
+        line: refreshCommand(name),
+        text: `Refreshed ${r.name}: ${r.added} ${r.added === 1 ? 'file' : 'files'} added; ${r.files} files, ${r.rows.toLocaleString()} rows.`,
+      });
+      await onChanged();
+    } catch (e: unknown) {
+      setDropError(message(e));
     } finally {
       setBusy(undefined);
     }
@@ -99,12 +157,10 @@ export function Tables({ session, tables, onChanged }: { session: Session; table
 
   return (
     <>
-      <TablesPanel tables={tables} />
+      <TablesPanel tables={tables} busy={busy} onRefresh={(name) => void refresh(name)} />
       {done && (
         <section className="notice" data-testid="imported">
-          <b>
-            Imported {done.tables.map((t) => `${t.name} (${t.rows.toLocaleString()} rows)`).join(', ')}.
-          </b>
+          <b>{done.text}</b>
           <Command line={done.line} />
         </section>
       )}
@@ -118,12 +174,13 @@ export function Tables({ session, tables, onChanged }: { session: Session; table
           exists={pending.exists}
           error={pending.error}
           busy={busy}
-          onName={(name) => setPending({ ...pending, name })}
+          onName={(name) => setPending({ ...pending, name, exists: undefined, error: undefined })}
           onImport={(mode) => void doImport(mode)}
+          onAttach={() => void attach()}
           onCancel={() => setPending(undefined)}
         />
       ) : (
-        <DropZone native={inTauri()} over={over} busy={busy} onPaths={(p) => void preview(p)} onChoose={() => void choose()} />
+        <DropZone native={inTauri()} over={over} busy={busy} aws={aws} onPaths={(p, anonymous) => void preview(p, anonymous)} onChoose={() => void choose()} />
       )}
       {dropError && <section className="error" data-testid="drop-error"><pre>{dropError}</pre></section>}
     </>

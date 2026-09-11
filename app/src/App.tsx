@@ -197,7 +197,7 @@ export default function App() {
             {session && status !== 'down' && tables.length > 0 && (
               <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} /></Suspense>
             )}
-            {session && status !== 'down' && <Tables session={session} tables={tables} onChanged={refreshTables} />}
+            {session && status !== 'down' && <Tables session={session} tables={tables} aws={health?.aws} onChanged={refreshTables} />}
           </>
         )}
       </main>

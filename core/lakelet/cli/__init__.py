@@ -241,9 +241,16 @@ def tables_list() -> None:
             _human_bytes(i.bytes),
             str(len(i.columns)),
             i.freshness.isoformat(timespec="seconds") if i.freshness else "",
-            "local" if i.location.startswith("file://") else i.location,
+            _where(i),
         )
     out.print(t)
+
+
+def _where(i) -> str:
+    """The list's last column: where the data is, not where the metadata is."""
+    if i.source:
+        return ("public " if i.public else "attached ") + i.source
+    return "local" if i.location.startswith("file://") else i.location
 
 
 @tables_app.command("describe")
@@ -346,6 +353,13 @@ def tables_attach(
             "--metadata-in-bucket", help="Keep the Iceberg metadata under s3://bucket/_lakelet/."
         ),
     ] = False,
+    anonymous: Annotated[
+        bool,
+        typer.Option(
+            "--anonymous",
+            help="A public bucket: read it without credentials (metadata stays local).",
+        ),
+    ] = False,
 ) -> None:
     """Register remote data as a read-only Iceberg table without copying it."""
     from lakelet.register import NotRegistrable
@@ -353,15 +367,18 @@ def tables_attach(
 
     with _open() as p:
         try:
-            info = p.tables.attach(name, source, metadata_in_bucket=metadata_in_bucket)
+            info = p.tables.attach(
+                name, source, metadata_in_bucket=metadata_in_bucket, anonymous=anonymous
+            )
         except TableExists:
             _fail(f"table {name} exists")
         except NotRegistrable as e:
             _fail(str(e))
     placement = "in the bucket" if metadata_in_bucket else "local"
+    public = ", read without credentials" if anonymous else ""
     out.print(
         f"{info.name}: {info.rows:,} rows, {_human_bytes(info.bytes)} in place at {source}; "
-        f"metadata {placement}",
+        f"metadata {placement}{public}",
         highlight=False,
     )
 
@@ -388,10 +405,18 @@ def tables_refresh(name: str) -> None:
 @tables_app.command("discover")
 def tables_discover(
     prefix: Annotated[str, typer.Argument(help="s3://bucket/ or s3://bucket/prefix/")],
+    anonymous: Annotated[
+        bool, typer.Option("--anonymous", help="A public bucket: list it without credentials.")
+    ] = False,
 ) -> None:
     """Candidate prefixes under a bucket, with their size and kind."""
+    from lakelet.register import NotRegistrable
+
     with _open() as p:
-        found = p.tables.discover(prefix)
+        try:
+            found = p.tables.discover(prefix, anonymous=anonymous)
+        except NotRegistrable as e:
+            _fail(str(e))
     t = Table()
     for column in ("prefix", "kind", "files", "size"):
         t.add_column(column)

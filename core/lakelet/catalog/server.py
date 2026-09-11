@@ -15,6 +15,7 @@ table's ``data/`` directory to exist on a local warehouse.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
@@ -124,10 +125,13 @@ def _ensure_local_layout(location: str) -> None:
 
 
 def create_app(
-    store: Store, warehouse: str, io_properties: dict[str, str] | None = None
+    store: Store,
+    warehouse: str,
+    io_properties: dict[str, str] | None = None,
+    cache_dir: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Lakelet Iceberg REST catalog", docs_url=None, redoc_url=None)
-    mio = ic.MetadataIO(io_properties or {})
+    mio = ic.MetadataIO(io_properties or {}, cache_dir=cache_dir)
     warehouse = warehouse.rstrip("/")
 
     @app.exception_handler(NotFound)

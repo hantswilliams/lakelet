@@ -14,7 +14,7 @@ Lakelet is a local-first lakehouse: Apache Iceberg tables on Parquet in a folder
 | `lakelet init`, `import`, `sql`, `estimate`, `tables` | Built, tested on macOS; Ubuntu in CI | [Quickstart](/docs/install), [CLI](/docs/cli) |
 | The gauge: Green, Yellow, Red, the sentence, exit codes, history | Built; constants are v0, tuned on one machine | [The gauge](/docs/gauge) |
 | Importing files and folders into Iceberg, with the type coercion table | Built; six file types | [Tables](/docs/tables) |
-| `tables attach`, `refresh`, `discover` for Parquet already in S3 | Built, tested against an in-process S3 mock and RustFS | [Tables](/docs/tables) |
+| `tables attach`, `refresh`, `discover` for Parquet already in S3 | Built, tested against an in-process S3 mock and RustFS; the same suite runs against a real bucket by hand | [Tables](/docs/tables), [A real bucket](/docs/remote) |
 | The Iceberg REST catalog, `catalog serve`; DuckDB, pyiceberg, Spark 3.5 and Trino as clients | Built; Spark and Trino verified through Docker Compose | [Catalog](/docs/catalog) |
 | Saved questions as dbt models with two checks; `dbt run` builds them through the catalog | Built; `dbt run` and `dbt test` pass on the generated project | [Questions](/docs/questions) |
 | `lakelet serve`: the local HTTP API with a bearer token and Arrow results | Built; the app runs one per window | [HTTP API](/docs/api) |

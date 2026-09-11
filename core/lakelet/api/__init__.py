@@ -51,12 +51,14 @@ class ImportBody(BaseModel):
 class PreviewBody(BaseModel):
     path: str
     name: str | None = None
+    anonymous: bool = False  # for an s3:// prefix: a public bucket, no credentials
 
 
 class AttachBody(BaseModel):
     name: str
     source: str
     metadata_in_bucket: bool = False
+    anonymous: bool = False
 
 
 class SqlBody(BaseModel):
@@ -237,6 +239,7 @@ def create_router(project: Project, token: str) -> APIRouter:
             "throughput_local_mbps": cache.get("throughput_local_mbps"),
             "throughput_probe": inputs.probe_method(cache),
             "bandwidth_mbps": cache.get("bandwidth_mbps"),
+            "aws": project.s3.describe(),
         }
 
     # -- tables -----------------------------------------------------------------------
@@ -247,10 +250,10 @@ def create_router(project: Project, token: str) -> APIRouter:
             return _plain(project.tables.list())
 
     @router.get("/tables/discover", dependencies=guarded)
-    def discover(prefix: str):
+    def discover(prefix: str, anonymous: bool = False):
         with lock:
             try:
-                return _plain(project.tables.discover(prefix))
+                return _plain(project.tables.discover(prefix, anonymous=anonymous))
             except NotRegistrable as e:
                 return error(400, "not_registrable", str(e))
 
@@ -277,11 +280,17 @@ def create_router(project: Project, token: str) -> APIRouter:
 
         with lock:
             try:
+                if body.path.startswith("s3://"):
+                    return _plain(
+                        project.tables.preview_remote(body.path, anonymous=body.anonymous)
+                    )
                 if Path(body.path).is_dir():
                     return _plain(project.tables.preview_dir(body.path))
                 return _plain(project.tables.preview(body.path, name=body.name))
             except (UnsupportedFile, FileNotFoundError) as e:
                 return error(400, "bad_file", str(e))
+            except NotRegistrable as e:
+                return error(400, "not_registrable", str(e))
 
     @router.post("/import", dependencies=guarded)
     def import_(body: ImportBody):
@@ -307,7 +316,10 @@ def create_router(project: Project, token: str) -> APIRouter:
             try:
                 return _plain(
                     project.tables.attach(
-                        body.name, body.source, metadata_in_bucket=body.metadata_in_bucket
+                        body.name,
+                        body.source,
+                        metadata_in_bucket=body.metadata_in_bucket,
+                        anonymous=body.anonymous,
                     )
                 )
             except TableExists:

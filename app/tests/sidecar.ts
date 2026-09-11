@@ -5,7 +5,8 @@
 // it, and spawn-to-ready is measured the way the shell measures it. Four are started: the
 // second with half the first's memory limit, as the shell gives a second window (A8); the
 // third with a 20 M-row table for the streaming gate; the fourth with the gauge thresholds
-// lowered so every query is Red.
+// lowered so every query is Red; the fifth with a stand-in bucket (Moto, public-read) for
+// the attach screen, its credentials in the sidecar's environment.
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -15,18 +16,24 @@ import { fileURLToPath } from 'node:url';
 
 export const STATE_FILE = join(tmpdir(), 'lakelet-app-e2e.json');
 
-export interface Started { project: string; port: number; token: string; pid: number; readyMs: number; memoryLimit: string }
+export interface Started {
+  project: string; port: number; token: string; pid: number; readyMs: number; memoryLimit: string;
+  /** The fifth sidecar's bucket: the Moto endpoint, its pid, and the file that makes it add a fourth Parquet file. */
+  s3?: { endpoint: string; pid: number; flag: string; prefix: string };
+}
 
-export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean }
+export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean; s3?: boolean }
 
 // Each spec file owns what it imports into a sidecar; the files run in parallel outside CI.
 // step 0 → the first; step 2 → the second (and counts its tables); steps 3 and 4 → the
-// third (big) and the fourth (Red); step 4's settings → the second's lakelet.toml only.
+// third (big) and the fourth (Red); step 4's settings → the second's lakelet.toml only;
+// the real-data round's attach test → the fifth (s3).
 export const SIDECARS: SidecarSpec[] = [
   { memoryLimit: '2GB' },
   { memoryLimit: '1GB' },
   { memoryLimit: '2GB', big: true },
   { memoryLimit: '1GB', red: true },
+  { memoryLimit: '1GB', s3: true },
 ];
 
 export const BIG_ROWS = 20_000_000;
@@ -43,7 +50,26 @@ export function sidecarExecutable(): string {
   return existsSync(venv) ? venv : 'lakelet';
 }
 
-export async function startSidecar({ memoryLimit, big, red }: SidecarSpec): Promise<{ started: Started; child: ChildProcess }> {
+/** The stand-in bucket: `tests/moto_fixture.py` on the venv's python, ready when it prints its endpoint. */
+async function startMoto(project: string): Promise<{ endpoint: string; child: ChildProcess; flag: string }> {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const flag = join(project, 'add-more');
+  const child = spawn(venvPython(), [join(here, 'moto_fixture.py'), flag], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const endpoint = await new Promise<string>((ok, fail) => {
+    let out = '';
+    child.stdout!.on('data', (d) => {
+      out += d;
+      const m = /moto (http:\/\/\S+)/.exec(out);
+      if (m) ok(m[1]);
+    });
+    child.stderr!.on('data', (d) => { out += d; });
+    child.on('exit', (code) => fail(new Error(`moto exited (${code}) before serving:\n${out}`)));
+    setTimeout(() => fail(new Error(`moto not ready in 30 s:\n${out}`)), 30_000);
+  });
+  return { endpoint, child, flag };
+}
+
+export async function startSidecar({ memoryLimit, big, red, s3 }: SidecarSpec): Promise<{ started: Started; child: ChildProcess; extra?: ChildProcess }> {
   const exe = sidecarExecutable();
   const project = mkdtempSync(join(tmpdir(), 'lakelet-e2e-'));
   const init = spawnSync(exe, ['init', project, '--probe-mb', '0'], { encoding: 'utf8' });
@@ -70,9 +96,16 @@ export async function startSidecar({ memoryLimit, big, red }: SidecarSpec): Prom
     if (imported.status !== 0) throw new Error(`import of big.parquet failed:\n${imported.stdout}\n${imported.stderr}`);
     console.log(`big: ${BIG_ROWS.toLocaleString()} rows imported in ${((Date.now() - t) / 1000).toFixed(1)} s`);
   }
+  let moto: { endpoint: string; child: ChildProcess; flag: string } | undefined;
+  const env: NodeJS.ProcessEnv = { ...process.env, LAKELET_DEV_ORIGIN: 'http://localhost:5173' };
+  if (s3) {
+    moto = await startMoto(project);
+    Object.assign(env, { AWS_ENDPOINT_URL: moto.endpoint, AWS_ACCESS_KEY_ID: 'test', AWS_SECRET_ACCESS_KEY: 'test', AWS_REGION: 'us-east-1' });
+    delete env.AWS_PROFILE;
+  }
   const t0 = Date.now();
   const child = spawn(exe, ['-C', project, 'serve', '--port', '0', '--memory-limit', memoryLimit], {
-    env: { ...process.env, LAKELET_DEV_ORIGIN: 'http://localhost:5173' },
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   await new Promise<void>((ok, fail) => {
@@ -83,16 +116,18 @@ export async function startSidecar({ memoryLimit, big, red }: SidecarSpec): Prom
     setTimeout(() => fail(new Error(`sidecar not ready in 30 s:\n${out}`)), 30_000);
   });
   const serve = JSON.parse(readFileSync(join(project, '.lakelet', 'serve.json'), 'utf8'));
-  const started = { project, port: serve.port, token: serve.token, pid: child.pid!, readyMs: Date.now() - t0, memoryLimit };
-  return { started, child };
+  const started: Started = { project, port: serve.port, token: serve.token, pid: child.pid!, readyMs: Date.now() - t0, memoryLimit };
+  if (moto) started.s3 = { endpoint: moto.endpoint, pid: moto.child.pid!, flag: moto.flag, prefix: 's3://lakelet-test/raw/events/' };
+  return { started, child, extra: moto?.child };
 }
 
 export async function startAll(): Promise<ChildProcess[]> {
   const children: ChildProcess[] = [];
   const states: Started[] = [];
   for (const spec of SIDECARS) {
-    const { started, child } = await startSidecar(spec);
+    const { started, child, extra } = await startSidecar(spec);
     children.push(child);
+    if (extra) children.push(extra);
     states.push(started);
   }
   writeFileSync(STATE_FILE, JSON.stringify(states));

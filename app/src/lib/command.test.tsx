@@ -3,7 +3,7 @@
 // Step 2 gate, the CLI-first rule: the line the app shows is the line the CLI takes.
 
 import { describe, expect, it } from 'vitest';
-import { defaultName, importCommand, initCommand, previewCommand, shellArg, sqlCommand, stripComments } from './command';
+import { attachCommand, defaultName, discoverCommand, importCommand, initCommand, isRemote, previewCommand, refreshCommand, remoteName, shellArg, sqlCommand, stripComments } from './command';
 
 describe('Copy as command', () => {
   it('builds the exact lakelet import line', () => {
@@ -38,5 +38,17 @@ describe('Copy as command', () => {
   it('quotes only when the shell needs it', () => {
     expect(shellArg('~/a-b_c.1')).toBe('~/a-b_c.1');
     expect(shellArg("it's here")).toBe("'it'\\''s here'");
+  });
+
+  it('builds the attach, discover and refresh lines for an s3:// prefix (real-data R4)', () => {
+    const prefix = 's3://overturemaps-us-west-2/release/2026-08-19.0/theme=places/type=place/';
+    expect(isRemote(prefix)).toBe(true);
+    expect(isRemote('/data/orders.csv')).toBe(false);
+    expect(remoteName(prefix)).toBe('place');
+    expect(remoteName('s3://b/exports/2024-events/')).toBe('t_2024_events');
+    expect(discoverCommand(prefix, true)).toBe(`lakelet tables discover --anonymous ${prefix}`);
+    expect(attachCommand('place', prefix, true)).toBe(`lakelet tables attach place --anonymous ${prefix}`);
+    expect(attachCommand('events', 's3://acme-exports/events/')).toBe('lakelet tables attach events s3://acme-exports/events/');
+    expect(refreshCommand('events')).toBe('lakelet tables refresh events');
   });
 });

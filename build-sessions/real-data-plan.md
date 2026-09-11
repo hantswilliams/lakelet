@@ -1,6 +1,6 @@
 # Lakelet — real data: S3, dbt views, the next screens (session 9 widened, revision 1)
 
-> **For review.** Tick a box on each of R1 to R10; write a line under "Change" where you disagree. Nothing in §4 is built until the R block is decided. R2 needs the bucket and an IAM user from you before step 0 can run.
+> **Decided September 11, 2026: R1 to R10 accepted** (Hants, in the file), **R3 amended** the same day: the demo uses a dataset from AWS's Registry of Open Data rather than a Lakelet-owned bucket; see the answer under R3. Step 0 needs the private bucket and its IAM user; step 1 needs no bucket of ours at all.
 
 *September 11, 2026 · Hants' call the same day: the ship brief (`ship-v0-plan.md`, S1 to S14 accepted) waits until the product has been used against a real bucket, dbt views work, and the app has the screens that show both. This brief is that round. It takes session 9 of `lakelet-build-sessions.md` (dbt and the Simple/Technical screens), widens it with real S3 and three app screens, and leaves git auto-commit and the versions screen to a later round. Follows `app-v0-plan.md` and `core-v0.5-plan.md`, which it does not change.*
 
@@ -14,52 +14,52 @@ Everything remote has been tested against a fake (Moto in CI, RustFS on the Mac)
 
 **R1. This round comes before ship; the ship brief stands as accepted and its numbers get re-measured once, at the end.**
 *Recommend:* yes. The order in `TASKS.md` becomes: this round, then session 10 (ship), then 8, then 5. One consequence for the ship brief: `lakelet run` makes dbt a runtime dependency of the bundle (R5), so the frozen sidecar grows by dbt-core and dbt-duckdb (about 15 MB uncompressed) and S3's size expectation moves with it; nothing else in S1 to S14 changes.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **R2. Real S3 is the existing step 8 suite against your bucket, from the Mac, with the bucket named by an environment variable and credentials that never touch the repo.**
 *Recommend:* `test_step8_remote.py` already switches to a real store when `LAKELET_TEST_S3_ENDPOINT` is set; it gains `LAKELET_TEST_S3_BUCKET` (today the name `lakelet-test` is fixed and the fixture creates it, which a real account should not do by accident) and is run on the Mac with `AWS_ENDPOINT_URL=https://s3.<region>.amazonaws.com` and the keys of an IAM user whose policy allows `s3:ListBucket`, `s3:GetObject`, `s3:PutObject` and `s3:DeleteObject` on that one bucket and nothing else (the tests write fixtures and `--metadata-in-bucket` metadata under it). The setup is one page in `/docs/remote` (the policy JSON, the variables, what the suite writes and deletes, the cost: the fixtures are megabytes; the ten-thousand-file registration stays gated). The results go in the log: attach time, `refresh`, the bandwidth probe's figure against your link, the second estimate under 150 ms with manifests cached. *Not chosen:* a real-S3 job in CI (secrets in a public repo's Actions, and a bill that runs on every push).
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **R3. The demo bucket is a second, public-read bucket with a public-domain dataset large enough to be Red from a laptop.**
 *Recommend:* the core brief's §6 demo path, now with a bucket: a Lakelet-owned bucket with a bucket policy allowing anonymous `GetObject` and `ListBucket` on one prefix, holding a public-domain Parquet dataset above 15 GB (Red is more than ten minutes, and at your 190 Mbps that is about 14 GB scanned; NYC TLC's yellow-taxi trip records are the obvious candidate, all years at roughly 20 GB, and they are already Parquet with a stable schema per year), prepared with `lakelet tables attach` and nothing else. From a laptop `lakelet estimate 'select count(*) from taxi'` is Red with the bandwidth sentence, `select` with a month's predicate is Green through pruning, and pyiceberg reads the registered table from another process. It costs about fifty cents a month to store; a stranger's full scan costs the bucket's owner egress (about $0.09 per GB), which is why the docs say "estimate first" and why the request-payer setting stays off until it matters. *Not chosen:* pointing the docs at a public dataset in someone else's bucket (the layout is not ours to keep stable).
-- [ ] Agree
-- [ ] Change:
+- [x] Agree - but i would like to do use something that is perhaps already available on a public s3 bucket with read only access? or would we need one with write access as well? im thinking for demonstration purposes, it could be nice to use a free open dataset openly hosted by AWS 
+- [x] Change: *(answer, September 11)* Read-only is enough. `tables attach` writes nothing to the bucket by default: D26 keeps the table's metadata under the laptop's own `warehouse/`, and the data files are read in place; only `--metadata-in-bucket` writes, and that is session 8's. So the demo is a dataset from AWS's Registry of Open Data (public read, anonymous, and AWS carries the egress, so a stranger's full scan costs nobody anything), which is better than R3 as written on every count but one: the layout is theirs to change, so `/docs` names the release or prefix it was tested against. What it needs from the core: anonymous access, which is refused today (a machine with no credentials gets "set AWS_ACCESS_KEY_ID…"), so step 1 adds `lakelet tables attach|discover --anonymous` (pyarrow's `anonymous=True`, an unsigned DuckDB secret, the flag kept in the table's properties so `refresh` and every read use it too) and the app's "public bucket, no credentials" checkbox. The candidate must be Parquet with one schema across the prefix, in a layout D25 registers (plain or hive-partitioned by columns that are also in the files), above 15 GB under one prefix, and not requester-pays; step 1 tries `lakelet tables discover` on two or three (Overture Maps' `places` and `buildings` themes, Common Crawl's `cc-index` table, the NYC TLC set if its bucket still lists) and records which one it is and why. R3's own bucket is not created.
 
 **R4. Attach from the app is a typed `s3://` prefix, discovery before registration, and the credentials the CLI already uses.**
 *Recommend:* the drop zone's path box accepts an `s3://bucket/prefix/`; the preview panel then shows `GET /api/tables/discover` (files, sizes, the schema read from one footer, a drift or layout error named as the CLI names it) and one button, "Attach as <name>", which is `lakelet tables attach <name> s3://…` and `POST /api/tables/attach`. The bandwidth probe runs where it runs today (first remote use) and the gauge line carries the Red bandwidth sentence unchanged. The tables panel marks an attached table with its source and offers "Refresh" (D27). Credentials: none in the app and none in `lakelet.toml`; the sidecar inherits the shell's environment, which is the CLI's chain (D36), and `/api/health` gains `aws: {configured, region}` so the panel can say "no AWS credentials in this environment; set AWS_ACCESS_KEY_ID… or AWS_PROFILE and restart the core" before the user types a prefix. The settings row for a bucket and a region (PRD F0.8.4) waits for session 8 with the writes. *Not chosen:* a keys form in the settings panel (the PRD wants keys in the OS keychain, which is its own piece of work, and the Tauri shell's environment already carries a developer's profile).
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **R5. dbt: `lakelet run` in the core, the plugin lifted into the package, dbt as an optional extra; the app gets the Models panel and the Simple/Technical toggle; git auto-commit and versions wait.**
 *Recommend:* `tests/dbt_plugin.py` becomes `lakelet.dbt` (the dbt-duckdb plugin and the materialisation macro it already carries); `lakelet run [selectors] [--burst never]` compiles the project with dbt-duckdb, estimates each model's compiled SQL through the gauge, prints the DAG in dependency order with a verdict per model, then runs it in that order through the catalog (PRD F0.7.3; `--burst auto` is session 8 and refuses today with the sentence that burst does not exist yet); `GET /api/run/plan` returns the DAG with verdicts and `POST /api/run` streams progress. dbt-core and dbt-duckdb move from dev to an optional extra `lakelet[dbt]` (the CLI without it says "install lakelet[dbt]"), and the app's bundle includes the extra. The app: screen 7's Models panel (the `models/` files, the DAG coloured by verdict, a model's SQL, its tests from `schema.yml`, its last run from history) and screen 8's Simple mode (questions as cards with their checks and freshness), with the Simple/Technical toggle in the bar and the vocabulary mapping from the build spec. Git auto-commit on save, the "last change" commit line and screen 9 (versions, restore) are the next round: they need a git strategy of their own. *Not chosen:* the app driving dbt itself (the CLI must be able to do everything the app does).
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **R6. A dbt `view` model is an Iceberg view in Lakelet's catalog, and the engine gives DuckDB a view of the same name on connect.**
 *Recommend:* the catalog gains views: the Iceberg REST view routes (`/v1/{prefix}/namespaces/{ns}/views`, create, load, replace, drop) and a view-metadata file per the Iceberg view spec, one SQL representation with dialect `duckdb`, stored under `warehouse/main/<name>/metadata/` as tables are. The engine, after `ATTACH`, lists the catalog's views and runs `CREATE VIEW main.<name> AS <sql>` in its own session, and re-syncs after any view change through the API or the plugin; `/api/tables` lists views with a `kind` so the panel shows them as views. The dbt plugin's `view` materialisation writes the view through the catalog (create or replace) instead of DuckDB's own `CREATE VIEW`, so a view survives the process and a second `lakelet serve` sees it. DuckDB's iceberg extension does not read views from a REST catalog, which is why the engine does it; Spark 3.5 with Iceberg 1.5 reads views through the REST catalog, so the engines smoke gains a view read (dialect permitting: the SQL is DuckDB's, and a view Spark cannot parse is Spark's error to show, recorded as such). *Not chosen:* views as session-only DuckDB objects recreated from the dbt manifest (gone without dbt, invisible to the API, to a second process and to every other engine); materialising views as tables under the name (a lie about cost, and `refresh` semantics no one asked for).
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **R7. The table detail is one panel from `describe`, with expire, refresh and sample as buttons.**
 *Recommend:* clicking a table in the panel opens its detail: columns with Iceberg types, partitioning, location and source (local, attached, view), freshness, the snapshot list (id, when, operation, rows and bytes added), the reclaimable line and the retention, and three buttons: "Sample rows" (`lakelet tables sample`), "Expire snapshots" (`lakelet tables expire <name>`, showing the report), and for an attached table "Refresh" (`lakelet tables refresh`). Each shows its CLI line with copy. `GET /api/tables/{name}` already carries most of it; the snapshot list is the addition.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **R8. The gauge screen (screen 5) is built now, from history, with the export button; the learned line says "not yet" until ship.**
 *Recommend:* a Gauge screen from `GET /api/history` (plus the health tiles it already has): the machine line; runs recorded, the share within 2× on time, Green runs over three minutes; the run list (when, verdict, where it ran, estimate, actual); the estimate-versus-actual scatter on log axes with the diagonal (Vega-Lite, through the interpreter as the chart is); "Learned on this machine" reading "after 20 runs" until the correction ships in session 10 (S10), then the factors; "Export history" as `lakelet gauge export`, which is the ship brief's S11 built here because the button is on this screen (the F0.3.9 field list and its test come with it); "Reset" as `lakelet gauge reset`; "Probe again" as `lakelet gauge probe`. The sharing toggle stays the settings row it is.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **R9. The first Arrow batch reaches the page as soon as the core has it.**
 *Recommend:* the open item from session 6: the first flush of `/api/query`'s response. Find where the batches wait (the async generator's first `yield` against uvicorn's write buffering) and make the first batch go out on its own; the Playwright timing test (`data-first-rows-ms`) is the gate, with the first batch's row count asserted small. An afternoon; in this round because every screen above reads through the same path.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 **R10. Gates as before: pytest for the core, Playwright against real sidecars for the app, Moto in CI and your bucket on the Mac; the dbt tests need the extra installed.**
 *Recommend:* yes. The Playwright sidecars gain one with a dbt project (models, a view, `schema.yml`) generated in setup, and one whose catalog holds an attached table over Moto for the attach screen; the real bucket is run by hand with the results in the log; the Spark view read is the compose profile on the Mac.
-- [ ] Agree
+- [x] Agree
 - [ ] Change:
 
 ---

@@ -4,7 +4,7 @@
 
 ## Now
 
-**The real-data round** (session 9 widened): the brief is written and waiting on Hants: `real-data-plan.md`, R1 to R10 (the step 8 suite against a real bucket, the demo bucket, attach from the app, the table detail, the Gauge screen with export, `lakelet run` with the DAG by verdict, dbt views as Iceberg views in the catalog, the Models panel and Simple mode, the first flush). Decided 2026-09-11: ship (`ship-v0-plan.md`, S1 to S14 accepted the same day) waits until this round is done. Needs from Hants before step 0: a private bucket and an IAM user scoped to it; before step 1: a public-read bucket for the demo.
+**The real-data round** (`real-data-plan.md`, R1 to R10 accepted 2026-09-11, R3 amended: the demo is an AWS Open Data dataset, read-only, no bucket of ours). Step 0 done the same day: the S3 tests run against Hants' bucket (10 passed, 21 s; the second estimate on a bucket table 3 ms after the metadata cache the run found missing), `aws` in health, `/docs/remote`. Step 1 done (`--anonymous`; Overture `addresses` and `places` attached from the Mac with no credentials, pyiceberg reading anonymously from another process). Step 2 built: attach from the app (the s3:// box, the public switch, the credentials line, the remote preview, Attach, Where, Refresh; Vitest 34, Playwright 19 with a Moto sidecar); to try on the Mac with the Overture prefix. Next: step 3, the table detail and the first flush.
 
 ## Next, in order
 
@@ -12,7 +12,7 @@ Decided 2026-09-11 (Hants, in conversation). Each item names the document that s
 
 1. ~~Core: the disk-throughput probe~~ **done 2026-09-11** (`decisions-for-review_091126.md` 1 to 3): the probe reads with the cache bypassed (`O_DIRECT`, `F_NOCACHE`), the method is recorded, `lakelet gauge probe` measures again, health and the app's tile flag a cached figure. To run on the Mac: `lakelet gauge probe` in `~/lakelet-demo`.
 2. ~~Core: snapshot expiry~~ **done 2026-09-11** (decision 4): `lakelet tables expire [<name>|--all] [--keep-days N]`, `catalog.keep_snapshots_days` (7, settable), `describe` names what is reclaimable, `POST /api/tables/{name}/expire`; attached tables refused; orphans from `import --replace` swept after an hour's grace. Five tests in `test_expire.py`.
-3. **The real-data round** (`real-data-plan.md`, session 9 widened; decided 2026-09-11 to come before ship): real S3 (the step 8 suite against Hants' bucket; the demo bucket), attach from the app, the table detail, the Gauge screen with `gauge export`, `lakelet run` with the DAG by verdict, dbt `view` models as Iceberg views in the catalog, the Models panel and Simple/Technical, the first Arrow flush. Git auto-commit and screen 9 go to the round after. **Brief written 2026-09-11, R1 to R10 waiting to be ticked.**
+3. **The real-data round** (`real-data-plan.md`, session 9 widened; decided 2026-09-11 to come before ship): real S3 (the step 8 suite against Hants' bucket; the demo bucket), attach from the app, the table detail, the Gauge screen with `gauge export`, `lakelet run` with the DAG by verdict, dbt `view` models as Iceberg views in the catalog, the Models panel and Simple/Technical, the first Arrow flush. Git auto-commit and screen 9 go to the round after. **R1 to R10 accepted 2026-09-11 (R3 amended); step 0 done on the real bucket.**
 4. **Session 10, ship** (`lakelet-build-sessions.md`): signed installers with the sidecar and the DuckDB extensions bundled (D33), the "under 200 MB" claim measured, the frozen sidecar's spawn-to-ready measured against the 1.5 s budget (the app brief's last known unknown), brew tap, the per-operator-class correction (M7), the `catalog serve` engines smoke test through the real verb, instrumentation export, partner onboarding. **Brief written and S1 to S14 accepted 2026-09-11 (`ship-v0-plan.md`); the build follows the real-data round.**
 5. **Session 9, the rest**: what the real-data round leaves: git auto-commit on save, screen 9 (versions, restore), table-level lineage (D32). Needs a brief of its own after the round.
 6. **Session 8, burst end to end**: control plane, job token, cap → budget, catalog lease pushing the metadata tree (D26), `publish`. Partner intake (five questions) runs before it. Session 3 (the Fargate worker spike, throwaway) can run any time in parallel and should run before this.
@@ -28,7 +28,8 @@ Decided 2026-09-11 (Hants, in conversation). Each item names the document that s
 - [ ] Trademark search for "Lakelet" (USPTO, and the PyPI name); PRD D4.3 says before publishing, and the repo is public. Session 10 publishes to PyPI (`ship-v0-plan.md` S7), so the name is needed then; `lakelet-cli` is the fallback.
 - [ ] An Apple Developer Program membership (US$99 a year) for signing and notarising the DMG (`ship-v0-plan.md` S4): the Developer ID certificate and an App Store Connect API key, into the repository's secrets.
 - [ ] A clean Mac (never seen Lakelet) and an Ubuntu 22.04 VM for session 10's install measurements (`ship-v0-plan.md` §6).
-- [ ] AWS for the real-data round (`real-data-plan.md` R2, R3): a private bucket and an IAM user with list, get, put and delete on that bucket only, for the step 8 suite; a public-read bucket for the demo dataset. Keys stay in the shell's environment, never in the repo or `lakelet.toml`.
+- [x] The Open Data dataset (`real-data-plan.md` R3 as amended): Overture Maps `addresses` (21.9 GB, 32 files, 472.8 M rows) and `places`, attached from the Mac with no credentials 2026-09-11; `/docs/remote` has the commands and numbers. pyiceberg read it anonymously from another process (126,285 rows of a bounding-box scan).
+- [x] AWS for the real-data round (`real-data-plan.md` R2): the private bucket and its IAM user exist and the S3 tests ran against them 2026-09-11 (`/docs/remote` has the policy and the command). Keys stay in the shell's environment, never in the repo or `lakelet.toml`; the bucket's name carries the account id and stays out of the logs. No demo bucket: R3 amended to an AWS Open Data dataset.
 - [ ] The founder uses the app daily on a real dataset for a week (app brief §6). `examples/sample-data/make_sample.py` and any CSV are enough to start.
 
 ## The map
@@ -43,7 +44,7 @@ The sessions of `lakelet-build-sessions.md`, with where each stands. That file i
 | 7 | Ask box, `lakelet ask` | **parked** 2026-09-11 | `lakelet-build-sessions.md` |
 | 8 | Burst end to end | not started; partner intake first | `lakelet-build-sessions.md` |
 | 5 | `lakelet mcp` | not started; after 8 | `lakelet-build-sessions.md` |
-| 9 | dbt and the Simple/Technical screens, widened with real S3 and three app screens | **next**; brief written 2026-09-11, R1 to R10 waiting on Hants; git auto-commit and screen 9 to a later brief | `real-data-plan.md` |
+| 9 | dbt and the Simple/Technical screens, widened with real S3 and three app screens | **in progress**; R1 to R10 accepted 2026-09-11; step 0 built, steps 1–7 to go; git auto-commit and screen 9 to a later brief | `real-data-plan.md` |
 | 10 | Ship: installers, brew tap, correction, smoke test, instrumentation, onboarding | S1 to S14 accepted 2026-09-11; build after the real-data round | `ship-v0-plan.md` |
 
 ## Session 6, the desktop shell (`app-v0-plan.md` §4)
@@ -57,7 +58,7 @@ The sessions of `lakelet-build-sessions.md`, with where each stands. That file i
 | 4 | done 2026-09-10 | The auto-chart (`lib/chart.ts`, Vega-Lite through `vega-interpreter` so no `unsafe-eval`); the window's `restarted` and `down` reactions with "Restart the core"; the settings panel over new core verbs `lakelet config show|set` and `/api/settings`, rewriting one line of `lakelet.toml` in place; ⌘/Ctrl+, and ⌘/Ctrl+K; dates, times and decimals converted per Arrow type in the grid; `examples/sample-data/`. Mac: the line chart in the Tauri window, two kills, a setting saved. |
 | 5 | done 2026-09-11 | §6 measured and recorded line by line in the brief (all but the week of daily use, which is Hants'); `/docs/app` on the site; `lakelet-session-6-desktop-shell.md`; two more gates for "nothing hidden" (every request across both screens goes to the dev server or the sidecar; a release build passes no dev origin, `cargo test --release`); Yellow in the gauge-line tests. |
 
-Gates as of 2026-09-11: Playwright 17 against four real sidecars (one with a 20 M-row table), Vitest 27, `cargo test` 8, core 161 on the Mac; CI green on macOS and Ubuntu for `core`, `app` and Pages.
+Gates as of 2026-09-11 (evening): Playwright 19 against five real sidecars (one with a 20 M-row table, one with a Moto bucket), Vitest 34, `cargo test` 8, core 161 on the Mac (158 + 9 skipped in the container, the S3 files against a real bucket by hand); CI green on macOS and Ubuntu for `core`, `app` and Pages.
 
 ## Core v0, the steps of `core-v0.5-plan.md` §4
 
@@ -103,9 +104,7 @@ Closed:
 
 ## Decisions waiting on Hants
 
-- [ ] `real-data-plan.md` R1 to R10 (2026-09-11), the real-data round.
-
-Decided: `ship-v0-plan.md` S1 to S14 (2026-09-11), build held until the real-data round; `decisions-for-review_091126.md`, all four (2026-09-11), shipped the same day; `app-v0-plan.md` A1 to A14 (2026-09-10); `decisions-for-review_090926.md`, all three (2026-09-09); the order of what follows step 5 (2026-09-11, above).
+None open. Decided: `real-data-plan.md` R1 to R10 (2026-09-11, R3 amended the same day); `ship-v0-plan.md` S1 to S14 (2026-09-11), build held until the real-data round; `decisions-for-review_091126.md`, all four (2026-09-11), shipped the same day; `app-v0-plan.md` A1 to A14 (2026-09-10); `decisions-for-review_090926.md`, all three (2026-09-09); the order of what follows step 5 (2026-09-11, above).
 
 ## Done
 

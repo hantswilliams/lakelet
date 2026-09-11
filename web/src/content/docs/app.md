@@ -28,6 +28,8 @@ The dot in the bar is the core's state: amber while it starts, green when `/api/
 
 The tables panel lists every table with rows, size, columns and when it was last written, from `/api/tables`. Drop a file or a folder anywhere on the window, or **Choose files…**, or type a path: the preview shows each column with its DuckDB type, the Iceberg type it becomes and any note about the coercion, plus the first rows, before anything is written. Import is one click; if the table exists you choose **Replace it** or **Append to it**. A folder imports one table per supported file (`.csv`, `.tsv`, `.parquet`, `.json`, `.jsonl`, `.xlsx`; other files are skipped). The line beside every step is `lakelet import <path> [--name n] [--replace|--append]`.
 
+An `s3://bucket/prefix/` of Parquet typed into the same box is attached rather than imported: the preview shows one file's columns with the Iceberg type each becomes, how many files and bytes would be registered, and one button, **Attach as name**, which is `lakelet tables attach <name> s3://…`; nothing is copied. Tick **Public bucket (no credentials)** for a dataset that allows anonymous reads (the line gains `--anonymous`). The core reads AWS credentials from the environment the app was started in; when it has none the box says so before you type a prefix, with the variables to set. The tables panel's **Where** column names the prefix an attached table came from, `public` or `attached`, and its **Refresh** button is `lakelet tables refresh <name>`, adding the files written to the prefix since. [A real bucket](/docs/remote) has the policies and a public dataset to try.
+
 ## Screen 2: SQL, the verdict, the rows
 
 Once the project has a table, the SQL box appears above the panel, with the tables and columns for completion. ⌘/Ctrl+Enter runs (or the Run button). The verdict comes back before any row, from the response headers, as the gauge line: Green "Runs here", Yellow "Runs here, slowly", Red "Needs more machine", with the sentence (what it scans, whether it fits in memory, how long). Red is a refusal until **Run anyway**, which is `lakelet sql '…' --run-anyway`. Rows stream into the grid as the core produces them; the first rows are on screen before the query completes, and the grid keeps 100,000 rows before it says so and names `lakelet sql --format parquet` for the rest. Esc stops a running query wherever the focus is; the core stops the statement at once and history records the run as stopped early.
@@ -62,10 +64,10 @@ The app makes no network request the core does not: a Playwright test records ev
 ```bash
 cd app/src-tauri && cargo test    # the supervisor, projects and windows, against a fake sidecar
 cd .. && npm test                  # Vitest: the screens' pieces, the command lines, the chart rule, the window's reactions
-npm run e2e                        # Playwright against four real `lakelet serve`s, one with a 20 M-row table
+npm run e2e                        # Playwright against five real `lakelet serve`s, one with a 20 M-row table, one with a stand-in bucket
 ```
 
-The Playwright suite starts its own sidecars on temp projects; nothing of yours is touched. On a laptop it runs the spec files on several workers at once and each file owns the sidecar it writes to.
+The Playwright suite starts its own sidecars on temp projects (and, for the attach screen, a Moto server standing in for a bucket, with public-read ACLs so the anonymous path is real); nothing of yours is touched. On a laptop it runs the spec files on several workers at once and each file owns the sidecar it writes to.
 
 ## When it does not start
 

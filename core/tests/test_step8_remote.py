@@ -4,16 +4,16 @@
 copying, DuckDB and pyiceberg both read it, refresh adds a new file and refuses a missing
 one, metadata local or in the bucket, register by metadata location, discover, the
 bandwidth probe, the Red bandwidth sentence, and the second estimate under 150 ms with the
-manifests cached. Runs against Moto in the default suite; LAKELET_TEST_S3_ENDPOINT points it
-at a real store. The schema-drift and hive fixtures are here; ten thousand files is gated."""
+manifests cached. Runs against Moto in the default suite; LAKELET_TEST_S3_BUCKET (a real
+bucket) or LAKELET_TEST_S3_ENDPOINT (a self-hosted store) points it at a real one, see
+tests/s3_helpers.py. The schema-drift and hive fixtures are here; ten thousand files is gated."""
 
-import logging
 import os
 import time
 from types import SimpleNamespace
 
-import boto3
 import duckdb
+import httpx
 import pytest
 from pyiceberg.catalog.rest import RestCatalog
 
@@ -21,71 +21,40 @@ from lakelet import Project
 from lakelet.gauge import inputs
 from lakelet.register import MissingFiles, NotRegistrable, SchemaDrift
 from lakelet.tables import TableExists
-
-BUCKET = "lakelet-test"
+from tests.s3_helpers import open_store
 
 
 @pytest.fixture(scope="module")
 def s3():
-    endpoint = os.environ.get("LAKELET_TEST_S3_ENDPOINT")
-    if endpoint:
-        creds = SimpleNamespace(
-            endpoint=endpoint,
-            key=os.environ["AWS_ACCESS_KEY_ID"],
-            secret=os.environ["AWS_SECRET_ACCESS_KEY"],
-            real=True,
-        )
-    else:
-        logging.getLogger("werkzeug").setLevel(logging.ERROR)
-        from moto.server import ThreadedMotoServer
-
-        server = ThreadedMotoServer(ip_address="127.0.0.1", port=0, verbose=False)
-        server.start()
-        time.sleep(0.3)
-        port = server._server.socket.getsockname()[1]
-        creds = SimpleNamespace(
-            endpoint=f"http://127.0.0.1:{port}", key="test", secret="test", real=False
-        )
-    client = boto3.client(
-        "s3",
-        endpoint_url=creds.endpoint,
-        aws_access_key_id=creds.key,
-        aws_secret_access_key=creds.secret,
-        region_name="us-east-1",
-    )
-    if BUCKET not in {b["Name"] for b in client.list_buckets().get("Buckets", [])}:
-        client.create_bucket(Bucket=BUCKET)
-    creds.client = client
-    yield creds
-    if not creds.real:
-        server.stop()
+    store = open_store()
+    yield store
+    store.stop()
 
 
 @pytest.fixture
 def env(s3, monkeypatch):
-    monkeypatch.setenv("AWS_ENDPOINT_URL", s3.endpoint)
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", s3.key)
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", s3.secret)
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    for k, v in s3.environment().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
     return s3
 
 
 def writer(s3) -> duckdb.DuckDBPyConnection:
-    con = duckdb.connect()
-    con.execute("INSTALL httpfs; LOAD httpfs")
-    host = s3.endpoint.removeprefix("http://").removeprefix("https://")
-    ssl = "true" if s3.endpoint.startswith("https") else "false"
-    con.execute(
-        f"CREATE SECRET (TYPE s3, KEY_ID '{s3.key}', SECRET '{s3.secret}', REGION 'us-east-1', "
-        f"ENDPOINT '{host}', URL_STYLE 'path', USE_SSL {ssl})"
-    )
-    return con
+    """A non-Iceberg writer: plain DuckDB with its own secret, the way a partner's pipeline
+    would have written the prefix."""
+    if s3.writer_con is None:
+        con = duckdb.connect()
+        con.execute("INSTALL httpfs; LOAD httpfs")
+        con.execute(s3.duckdb_secret_sql())
+        s3.writer_con = con
+    return s3.writer_con
 
 
-def write_part(con, key: str, start: int, rows: int, extra: str = "") -> None:
-    con.execute(
+def write_part(s3, key: str, start: int, rows: int, extra: str = "") -> None:
+    """``key`` is a full key in the store's bucket (``s3.key(...)`` puts it under the run)."""
+    writer(s3).execute(
         f"COPY (SELECT range AS id, 'c' || (range % 10) AS customer, range * 1.5 AS amt{extra} "
-        f"FROM range({start}, {start + rows})) TO 's3://{BUCKET}/{key}' (FORMAT parquet)"
+        f"FROM range({start}, {start + rows})) TO '{s3.uri(key)}' (FORMAT parquet)"
     )
 
 
@@ -101,16 +70,14 @@ def project(env, tmp_path):
 @pytest.fixture
 def events(env, tmp_path):
     """Three plain Parquet files under a unique prefix, written by a non-Iceberg writer."""
-    prefix = f"raw-{tmp_path.name}/events"
-    con = writer(env)
+    prefix = env.key(f"raw-{tmp_path.name}/events")
     for i in range(3):
-        write_part(con, f"{prefix}/part-{i}.parquet", i * 1000, 1000)
-    return SimpleNamespace(prefix=f"s3://{BUCKET}/{prefix}/", key=prefix, con=con)
+        write_part(env, f"{prefix}/part-{i}.parquet", i * 1000, 1000)
+    return SimpleNamespace(prefix=env.uri(prefix) + "/", key=prefix, s3=env)
 
 
 def object_keys(s3, prefix: str) -> set[str]:
-    pages = s3.client.get_paginator("list_objects_v2").paginate(Bucket=BUCKET, Prefix=prefix)
-    return {o["Key"] for page in pages for o in page.get("Contents", [])}
+    return s3.keys(prefix)
 
 
 def test_attach_registers_in_place_and_both_engines_read_it(project, events, env) -> None:
@@ -126,7 +93,8 @@ def test_attach_registers_in_place_and_both_engines_read_it(project, events, env
         "main.events"
     )
     assert table.scan().to_arrow().num_rows == 3000
-    assert all(t.file.file_path.startswith(f"s3://{BUCKET}/") for t in table.scan().plan_files())
+    files = [t.file.file_path for t in table.scan().plan_files()]
+    assert all(f.startswith(f"s3://{env.bucket}/") for f in files)
 
     desc = project.tables.describe("events")
     assert desc.rows == 3000 and desc.snapshots == 1
@@ -137,7 +105,7 @@ def test_attach_registers_in_place_and_both_engines_read_it(project, events, env
 
 def test_metadata_in_the_bucket_and_register_by_metadata_location(project, events, env) -> None:
     info = project.tables.attach("events_b", events.prefix, metadata_in_bucket=True)
-    assert info.location == f"s3://{BUCKET}/_lakelet/events_b"
+    assert info.location == env.uri("_lakelet/events_b")
     assert any(k.endswith(".metadata.json") for k in object_keys(env, "_lakelet/events_b/"))
     assert project.engine.execute("select count(*) from events_b").fetchone()[0] == 3000
 
@@ -152,35 +120,33 @@ def test_metadata_in_the_bucket_and_register_by_metadata_location(project, event
 def test_refresh_adds_new_files_and_refuses_missing_ones(project, events, env) -> None:
     project.tables.attach("events", events.prefix)
     assert project.tables.refresh("events").added == 0
-    write_part(events.con, f"{events.key}/part-3.parquet", 3000, 500)
+    write_part(events.s3, f"{events.key}/part-3.parquet", 3000, 500)
     report = project.tables.refresh("events")
     assert (report.added, report.files, report.rows) == (1, 4, 3500)
     assert project.engine.execute("select count(*) from events").fetchone()[0] == 3500
     assert project.tables.describe("events").snapshots == 2
 
-    env.client.delete_object(Bucket=BUCKET, Key=f"{events.key}/part-1.parquet")
+    env.client.delete_object(Bucket=env.bucket, Key=f"{events.key}/part-1.parquet")
     with pytest.raises(MissingFiles, match="part-1.parquet"):
         project.tables.refresh("events")
 
 
 def test_schema_drift_is_refused_with_the_file_and_column_named(project, env, tmp_path) -> None:
-    key = f"drift-{tmp_path.name}/t"
-    con = writer(env)
-    write_part(con, f"{key}/part-0.parquet", 0, 10)
-    write_part(con, f"{key}/part-1.parquet", 10, 10)
-    write_part(con, f"{key}/part-2.parquet", 20, 10, extra=", 'x' AS region")
+    key = env.key(f"drift-{tmp_path.name}/t")
+    write_part(env, f"{key}/part-0.parquet", 0, 10)
+    write_part(env, f"{key}/part-1.parquet", 10, 10)
+    write_part(env, f"{key}/part-2.parquet", 20, 10, extra=", 'x' AS region")
     with pytest.raises(SchemaDrift, match=r"part-2\.parquet.*adds \['region'\]"):
-        project.tables.attach("drift", f"s3://{BUCKET}/{key}/")
+        project.tables.attach("drift", env.uri(key) + "/")
     assert project.tables.list() == []
 
 
 def test_hive_partition_only_in_the_path_is_refused_by_name(project, env, tmp_path) -> None:
-    key = f"hive-{tmp_path.name}/t"
-    con = writer(env)
-    write_part(con, f"{key}/country=US/part-0.parquet", 0, 10)
-    write_part(con, f"{key}/country=DE/part-0.parquet", 10, 10)
+    key = env.key(f"hive-{tmp_path.name}/t")
+    write_part(env, f"{key}/country=US/part-0.parquet", 0, 10)
+    write_part(env, f"{key}/country=DE/part-0.parquet", 10, 10)
     with pytest.raises(NotRegistrable, match="country"):
-        project.tables.attach("hive", f"s3://{BUCKET}/{key}/")
+        project.tables.attach("hive", env.uri(key) + "/")
 
 
 def test_discover_lists_candidate_prefixes(project, events, env) -> None:
@@ -219,11 +185,27 @@ def test_bandwidth_probe_red_sentence_and_the_cached_second_estimate(project, ev
         )
         assert red.line.startswith("● Needs more machine · scans ")
 
+        # The second estimate must not fetch metadata or manifests again: every remote read
+        # the Python side makes goes through the caching FileIO, counted here at its inner.
+        inner = p.metadata_io.io._inner
+        fetched: list[str] = []
+        original = inner.new_input
+
+        def spy(location: str):
+            f = original(location)
+            opened = f.open
+            f.open = lambda *a, **k: fetched.append(location) or opened(*a, **k)
+            return f
+
+        inner.new_input = spy
         started = time.perf_counter()
         p.estimate("select sum(amt) from events where id > 2500")
         second = time.perf_counter() - started
+        inner.new_input = original
         print(f"\nsecond estimate on a bucket-metadata table: {second * 1000:.0f} ms")
         assert list((p.cache_dir / "objects").rglob("*.avro")), "manifests should be cached on disk"
+        assert list((p.cache_dir / "objects").rglob("*.metadata.json")), "metadata cached too"
+        assert fetched == [], f"the second estimate read from the store: {fetched}"
         load, cores = os.getloadavg()[0], os.cpu_count() or 1
         if load > cores:
             pytest.skip(
@@ -245,7 +227,7 @@ def test_cli_attach_refresh_discover(project, events, env) -> None:
     attached = runner.invoke(app, ["-C", root, "tables", "attach", "events", events.prefix])
     assert attached.exit_code == 0, attached.output
     assert "3,000 rows" in attached.output and "in place" in attached.output
-    write_part(events.con, f"{events.key}/part-9.parquet", 9000, 100)
+    write_part(events.s3, f"{events.key}/part-9.parquet", 9000, 100)
     refreshed = runner.invoke(app, ["-C", root, "tables", "refresh", "events"])
     assert refreshed.exit_code == 0 and "1 file(s) added" in refreshed.output
     discovered = runner.invoke(
@@ -256,16 +238,83 @@ def test_cli_attach_refresh_discover(project, events, env) -> None:
     assert twice.exit_code == 1
 
 
+def test_a_public_bucket_is_read_without_credentials(events, env, monkeypatch, tmp_path) -> None:
+    """Real-data brief R3: `--anonymous` lists, registers, reads and refreshes a prefix with
+    no AWS keys anywhere, the engine reading through a secret scoped to the bucket, and the
+    bucket remembered so a re-opened project reads the table too."""
+    from lakelet.remote import load_public_buckets
+
+    if env.real:
+        pytest.skip("a private bucket is not made public by a test; the Open Data run is by hand")
+    # Moto honours ACLs the way S3 does: an anonymous request needs a public-read grant.
+    env.client.put_bucket_acl(Bucket=env.bucket, ACL="public-read")
+    for key in env.keys(events.key):
+        env.client.put_object_acl(Bucket=env.bucket, Key=key, ACL="public-read")
+    for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_PROFILE"):
+        monkeypatch.delenv(key, raising=False)
+    root = tmp_path / "public"
+    Project.init(root, probe_mb=8)
+    p = Project.open(root, serve=True)
+    try:
+        with pytest.raises(NotRegistrable, match="no AWS credentials"):
+            p.tables.discover(events.prefix.rsplit("/", 2)[0] + "/")
+        found = p.tables.discover(events.prefix.rsplit("/", 2)[0] + "/", anonymous=True)
+        assert any(d.prefix == events.prefix for d in found)
+        # The app's preview before an attach: one footer's columns, the files and bytes,
+        # through the API as the drop zone calls it.
+        client = httpx.Client(
+            base_url=p.catalog_url, headers={"Authorization": f"Bearer {p.token}"}
+        )
+        refused = client.post("/api/preview", json={"path": events.prefix})
+        assert refused.status_code == 400 and refused.json()["error"] == "not_registrable"
+        shown = client.post("/api/preview", json={"path": events.prefix, "anonymous": True})
+        assert shown.status_code == 200, shown.text
+        body = shown.json()
+        assert body["remote"] and body["files"] == 3 and body["bytes"] > 0 and body["anonymous"]
+        assert body["name"] == "events" and body["sample"] == []
+        assert [c["name"] for c in body["columns"]] == ["id", "customer", "amt"]
+        assert [c["iceberg_type"] for c in body["columns"]] == ["long", "string", "decimal(21, 1)"]
+        client.close()
+        with pytest.raises(NotRegistrable, match="read-only"):
+            p.tables.attach("events", events.prefix, metadata_in_bucket=True, anonymous=True)
+        info = p.tables.attach("events", events.prefix, anonymous=True)
+        assert info.rows == 3000 and info.public and info.source == events.prefix
+        assert info.location.startswith(p.warehouse_url), "metadata stays local"
+        assert p.engine.execute("select count(*) from events").fetchone()[0] == 3000
+        assert list(load_public_buckets(p.lakelet_dir)) == [env.bucket]
+        write_part(events.s3, f"{events.key}/part-3.parquet", 3000, 500)
+        env.client.put_object_acl(
+            Bucket=env.bucket, Key=f"{events.key}/part-3.parquet", ACL="public-read"
+        )
+        assert p.tables.refresh("events").rows == 3500
+        assert p.estimate("select sum(amt) from events").remote
+    finally:
+        p.close()
+    again = Project.open(root)
+    try:
+        assert again.engine.execute("select count(*) from events").fetchone()[0] == 3500
+        assert [t.public for t in again.tables.list()] == [True]
+    finally:
+        again.close()
+
+
 @pytest.mark.skipif(os.environ.get("LAKELET_PERF") != "1", reason="set LAKELET_PERF=1")
 def test_ten_thousand_small_files(project, env, tmp_path) -> None:
-    key = f"many-{tmp_path.name}/t"
-    con = writer(env)
+    key = env.key(f"many-{tmp_path.name}/t")
     started = time.perf_counter()
     for i in range(10_000):
-        write_part(con, f"{key}/part-{i:05}.parquet", i * 10, 10)
+        write_part(env, f"{key}/part-{i:05}.parquet", i * 10, 10)
     written = time.perf_counter() - started
     started = time.perf_counter()
-    info = project.tables.attach("many", f"s3://{BUCKET}/{key}/")
+    info = project.tables.attach("many", env.uri(key) + "/")
     registered = time.perf_counter() - started
     print(f"\n10,000 files: written in {written:.0f}s, registered in {registered:.0f}s")
     assert info.rows == 100_000
+
+
+def test_a_table_name_from_a_prefix() -> None:
+    from lakelet.register import remote_name
+
+    assert remote_name("s3://b/release/2026-08-19.0/theme=places/type=place/") == "place"
+    assert remote_name("s3://b/exports/events/") == "events"
+    assert remote_name("s3://b/exports/2024-events") == "t_2024_events"

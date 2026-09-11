@@ -20,7 +20,7 @@ from lakelet.catalog.commit import MetadataIO
 from lakelet.catalog.store import NotFound
 from lakelet.config import Config, render_default
 from lakelet.engine import Engine, install_extensions
-from lakelet.remote import S3Settings
+from lakelet.remote import S3Settings, load_public_buckets, save_public_bucket
 
 if TYPE_CHECKING:
     from lakelet.gauge.manifests import ManifestCache
@@ -187,7 +187,7 @@ class Project:
         self.store: Store = Store(f"sqlite:///{self.catalog_db}")
         self.s3 = S3Settings.from_env()
         self.io_properties: dict[str, str] = self.s3.io_properties()
-        self.metadata_io = MetadataIO(self.io_properties)
+        self.metadata_io = MetadataIO(self.io_properties, cache_dir=self.cache_dir / "objects")
         self._manifests: ManifestCache | None = None
         self._catalog: EmbeddedCatalog | None = None
         self._engine: Engine | None = None
@@ -284,7 +284,12 @@ class Project:
         self.lakelet_dir.mkdir(exist_ok=True)
         self.cache_dir.mkdir(exist_ok=True)
         self._ensure_namespace(self.store)
-        app = create_app(self.store, warehouse=self.warehouse_url, io_properties=self.io_properties)
+        app = create_app(
+            self.store,
+            warehouse=self.warehouse_url,
+            io_properties=self.io_properties,
+            cache_dir=self.cache_dir / "objects",
+        )
         if self.token:
             from fastapi.middleware.cors import CORSMiddleware
 
@@ -310,6 +315,16 @@ class Project:
             threads=self.config.engine.threads,
             s3_secret=self.s3.duckdb_secret(),
         )
+        for bucket, region in load_public_buckets(self.lakelet_dir).items():
+            self._engine.allow_public(self.s3.anonymous_secret(bucket, region))
+
+    def allow_public_bucket(self, bucket: str) -> str:
+        """Remember a public bucket for this project and open it to the engine now; returns
+        the region S3 reports for it."""
+        region = self.s3.bucket_region(bucket)
+        save_public_bucket(self.lakelet_dir, bucket, region)
+        self.engine.allow_public(self.s3.anonymous_secret(bucket, region))
+        return region
 
     @property
     def catalog_url(self) -> str:

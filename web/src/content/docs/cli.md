@@ -219,6 +219,8 @@ Arguments:
 
 Options:
   --metadata-in-bucket  Keep the Iceberg metadata under s3://bucket/_lakelet/.
+  --anonymous           A public bucket: read it without credentials (metadata stays
+                        local).
   --help                Show this message and exit.
 ```
 
@@ -247,7 +249,8 @@ Arguments:
   prefix  s3://bucket/ or s3://bucket/prefix/  [required]
 
 Options:
-  --help  Show this message and exit.
+  --anonymous  A public bucket: list it without credentials.
+  --help       Show this message and exit.
 ```
 
 ### `lakelet catalog`

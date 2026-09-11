@@ -135,6 +135,10 @@ class Engine:
         self.s3_error = None
         return True
 
+    def allow_public(self, secret_sql: str) -> None:
+        """A bucket read without credentials (real-data brief R3): one scoped secret."""
+        self.con.execute(secret_sql)
+
     def s3_problem(self) -> str | None:
         """Before anything touches ``s3://``: None when a secret is in place, otherwise, after
         one more try at the default chain, a sentence naming what to set."""

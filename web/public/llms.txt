@@ -23,3 +23,4 @@
 - [The local HTTP API](/docs/api): lakelet serve, bearer token, routes, Arrow streaming
 - [Developing Lakelet](/docs/develop): the suite, opt-in Docker checks, contributing
 - [The desktop app](/docs/app): running it from source, projects and windows, the two screens, the chart, settings, keys, how it talks to the core, nothing hidden
+- [A real bucket](/docs/remote): what Lakelet needs from AWS, credentials, the IAM policies, running the S3 tests against a real bucket, what they write and remove

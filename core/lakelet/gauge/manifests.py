@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 from pyiceberg.catalog.noop import NoopCatalog
 from pyiceberg.expressions import AlwaysTrue, BooleanExpression
-from pyiceberg.io import FileIO, InputFile, InputStream, OutputFile
 from pyiceberg.manifest import ManifestContent
 from pyiceberg.table import StaticTable
 from pyiceberg.table.metadata import TableMetadata
@@ -111,59 +110,11 @@ def bytes_per_row(stats: list[FileStat], field_ids: set[int] | None = None) -> f
     return projected / records
 
 
-class _CachedInputFile(InputFile):
-    """An immutable remote object (a manifest, a manifest list, a metadata file) served from
-    a local copy after the first read, so the second estimate needs no network."""
-
-    def __init__(self, inner: InputFile, cache_path: Path) -> None:
-        super().__init__(inner.location)
-        self._inner = inner
-        self._cache_path = cache_path
-
-    def __len__(self) -> int:
-        return self._cache_path.stat().st_size if self._cache_path.exists() else len(self._inner)
-
-    def exists(self) -> bool:
-        return self._cache_path.exists() or self._inner.exists()
-
-    def open(self, seekable: bool = True) -> InputStream:
-        if not self._cache_path.exists():
-            self._cache_path.parent.mkdir(parents=True, exist_ok=True)
-            with self._inner.open() as stream:
-                data = stream.read()
-            tmp = self._cache_path.with_suffix(".tmp")
-            tmp.write_bytes(data)
-            tmp.replace(self._cache_path)
-        return self._cache_path.open("rb")
-
-
-class CachingFileIO(FileIO):
-    """Wraps a FileIO; reads of ``.avro`` and ``.metadata.json`` objects that are not local
-    are cached under ``.lakelet/cache/objects/`` (brief §4 step 8)."""
-
-    def __init__(self, inner: FileIO, cache_dir: Path) -> None:
-        super().__init__(inner.properties)
-        self._inner = inner
-        self._dir = cache_dir
-
-    def new_input(self, location: str) -> InputFile:
-        inner = self._inner.new_input(location)
-        if location.startswith("file://") or not location.endswith((".avro", ".metadata.json")):
-            return inner
-        return _CachedInputFile(inner, self._dir / location.replace("://", "/"))
-
-    def new_output(self, location: str) -> OutputFile:
-        return self._inner.new_output(location)
-
-    def delete(self, location: str | InputFile | OutputFile) -> None:
-        self._inner.delete(location)
-
-
 class ManifestCache:
     def __init__(self, project: Project) -> None:
         self.project = project
         self.dir = project.cache_dir / "manifests"
-        self.io = CachingFileIO(project.metadata_io.io, project.cache_dir / "objects")
+        self.io = project.metadata_io.io  # caches remote manifests and metadata by location
         self._tables: dict[tuple[str, int | None], tuple[StaticTable, TableStats]] = {}
 
     def get(self, name: str, metadata_location: str) -> tuple[StaticTable, TableStats]:

@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 SOURCE_PROPERTY = "lakelet.source-prefix"
 PLACEMENT_PROPERTY = "lakelet.metadata-placement"
+ANONYMOUS_PROPERTY = "lakelet.anonymous"  # "true": a public bucket read without credentials
 _HIVE_SEGMENT = re.compile(r"^([A-Za-z_]\w*)=([^/]*)$")
 
 
@@ -70,20 +71,20 @@ class _Listing:
         return join_uri(self.scheme, info.path)
 
 
-def _list(project: Project, prefix: str) -> _Listing:
+def _list(project: Project, prefix: str, anonymous: bool = False) -> _Listing:
     scheme, root = split_uri(prefix)
-    if scheme == "s3" and (problem := project.engine.s3_problem()):
+    if scheme == "s3" and not anonymous and (problem := project.engine.s3_problem()):
         raise NotRegistrable(problem)
-    fs = project.s3.filesystem(scheme)
+    fs = project.s3.filesystem(scheme, anonymous=anonymous, bucket=root.split("/")[0])
     root = root.rstrip("/")
     selector = pafs.FileSelector(root, recursive=True)
     files = [f for f in fs.get_file_info(selector) if f.type == pafs.FileType.File]
     return _Listing(scheme, root, fs, sorted(files, key=lambda f: f.path))
 
 
-def discover(project: Project, prefix: str) -> list[Discovered]:
+def discover(project: Project, prefix: str, anonymous: bool = False) -> list[Discovered]:
     """Candidate prefixes directly under ``prefix``, one listing call (M3)."""
-    listing = _list(project, prefix)
+    listing = _list(project, prefix, anonymous)
     groups: dict[str, list[pafs.FileInfo]] = {}
     for info in listing.files:
         relative = info.path[len(listing.root) :].lstrip("/")
@@ -105,6 +106,52 @@ def discover(project: Project, prefix: str) -> list[Discovered]:
             )
         )
     return out
+
+
+@dataclass
+class RemotePreview:
+    """What the app shows before `attach` (real-data brief R4): the prefix's files and
+    bytes, and the columns of one footer with the Iceberg type each becomes. The drift
+    check across every footer is `attach`'s; a preview reads one."""
+
+    name: str
+    source: str
+    columns: list[tuple[str, str, str]]  # name, Arrow type, Iceberg type
+    files: int
+    bytes: int
+    anonymous: bool
+
+
+def remote_name(prefix: str) -> str:
+    """A table name from a prefix's last segment: ``…/theme=places/type=place/`` gives
+    ``place``, ``…/exports/events/`` gives ``events``."""
+    from lakelet.project import identifier
+
+    segment = prefix.rstrip("/").split("/")[-1]
+    if "=" in segment:
+        segment = segment.split("=", 1)[1]
+    return identifier(segment)
+
+
+def inspect(project: Project, prefix: str, anonymous: bool = False) -> RemotePreview:
+    from pyiceberg.catalog import Catalog
+
+    prefix = prefix if prefix.endswith("/") else prefix + "/"
+    listing = _list(project, prefix, anonymous)
+    files = _parquet_files(listing)
+    if not files:
+        raise NotRegistrable(f"no .parquet files under {prefix}")
+    arrow = pq.read_schema(files[0].path, filesystem=listing.fs)
+    iceberg = Catalog._convert_schema_if_needed(arrow)
+    columns = [(f.name, str(arrow.field(f.name).type), str(f.field_type)) for f in iceberg.fields]
+    return RemotePreview(
+        name=remote_name(prefix),
+        source=prefix,
+        columns=columns,
+        files=len(files),
+        bytes=sum(f.size or 0 for f in files),
+        anonymous=anonymous,
+    )
 
 
 def _parquet_files(listing: _Listing) -> list[pafs.FileInfo]:
@@ -154,8 +201,17 @@ def _check_schemas(listing: _Listing, files: list[pafs.FileInfo]) -> pa.Schema:
     return first.remove_metadata()
 
 
-def _client(project: Project) -> RestCatalog:
-    return RestCatalog("lakelet", uri=project.catalog_url, **project.io_properties)
+def _client(project: Project, anonymous: bool = False, bucket: str | None = None) -> RestCatalog:
+    props = dict(project.io_properties)
+    if anonymous:
+        # pyiceberg reads the Parquet footers and, later, the data files of this table
+        # through its own S3 client; unsigned, like the listing (real-data brief R3).
+        props = {k: v for k, v in props.items() if not k.startswith("s3.access")}
+        props = {k: v for k, v in props.items() if not k.startswith("s3.secret")}
+        props["s3.anonymous"] = "true"
+        if bucket:
+            props["s3.region"] = project.s3.bucket_region(bucket)
+    return RestCatalog("lakelet", uri=project.catalog_url, **props)
 
 
 def _metadata_root(project: Project, name: str, prefix: str, in_bucket: bool) -> str:
@@ -167,25 +223,39 @@ def _metadata_root(project: Project, name: str, prefix: str, in_bucket: bool) ->
 
 
 def attach_prefix(
-    project: Project, name: str, prefix: str, metadata_in_bucket: bool = False
+    project: Project,
+    name: str,
+    prefix: str,
+    metadata_in_bucket: bool = False,
+    anonymous: bool = False,
 ) -> tuple[int, int]:
-    """Register the Parquet files under ``prefix`` in place. Returns (files, rows)."""
+    """Register the Parquet files under ``prefix`` in place. Returns (files, rows).
+    ``anonymous`` reads a public bucket without credentials; the metadata then stays local
+    (there is nothing to write with) and the engine gets a scoped secret for the bucket."""
     prefix = prefix if prefix.endswith("/") else prefix + "/"
-    listing = _list(project, prefix)
+    if anonymous and metadata_in_bucket:
+        raise NotRegistrable("a public bucket is read-only: the metadata cannot go in it")
+    listing = _list(project, prefix, anonymous)
     files = _parquet_files(listing)
     if not files:
         raise NotRegistrable(f"no .parquet files under {prefix}")
     schema = _check_schemas(listing, files)
     _check_layout(listing, files, schema)
-    catalog = _client(project)
+    bucket = split_uri(prefix)[1].split("/")[0]
+    if anonymous:
+        project.allow_public_bucket(bucket)
+    catalog = _client(project, anonymous, bucket)
+    properties = {
+        SOURCE_PROPERTY: prefix,
+        PLACEMENT_PROPERTY: "bucket" if metadata_in_bucket else "local",
+    }
+    if anonymous:
+        properties[ANONYMOUS_PROPERTY] = "true"
     table = catalog.create_table(
         f"main.{name}",
         schema=schema,
         location=_metadata_root(project, name, prefix, metadata_in_bucket),
-        properties={
-            SOURCE_PROPERTY: prefix,
-            PLACEMENT_PROPERTY: "bucket" if metadata_in_bucket else "local",
-        },
+        properties=properties,
     )
     table.add_files([listing.uri(f) for f in files])
     rows = sum(t.file.record_count for t in catalog.load_table(f"main.{name}").scan().plan_files())
@@ -200,14 +270,22 @@ def attach_metadata(project: Project, name: str, metadata_location: str) -> None
     _client(project).register_table(f"main.{name}", metadata_location)
 
 
+def is_anonymous(properties: dict[str, str]) -> bool:
+    return properties.get(ANONYMOUS_PROPERTY, "").lower() == "true"
+
+
 def refresh(project: Project, name: str) -> RefreshReport:
     """Add the files new since registration; fail loudly if a registered file is gone (D27)."""
     catalog = _client(project)
     table = catalog.load_table(f"main.{name}")
+    anonymous = is_anonymous(table.properties)
     prefix = table.properties.get(SOURCE_PROPERTY)
     if not prefix:
         raise NotRegistrable(f"{name} was not registered from a prefix; nothing to refresh")
-    listing = _list(project, prefix)
+    if anonymous:
+        catalog = _client(project, anonymous=True, bucket=split_uri(prefix)[1].split("/")[0])
+        table = catalog.load_table(f"main.{name}")
+    listing = _list(project, prefix, anonymous)
     files = _parquet_files(listing)
     known = {t.file.file_path for t in table.scan().plan_files()}
     present = {listing.uri(f) for f in files}

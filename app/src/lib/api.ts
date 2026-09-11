@@ -14,6 +14,8 @@ export interface Health {
   /** How the disk figure was measured: cache bypassed (`nocache`, `direct`), or `cached` and capped. */
   throughput_probe?: 'nocache' | 'direct' | 'cached' | 'none';
   bandwidth_mbps: number | null;
+  /** Whether the core has AWS credentials, and from where (never a key). */
+  aws?: { configured: boolean; source: 'environment' | 'profile' | 'none'; profile: string | null; region: string; endpoint: string | null };
 }
 
 export interface TableInfo {
@@ -25,6 +27,10 @@ export interface TableInfo {
   snapshot_id: number | null;
   /** When the current snapshot was committed, ISO 8601. */
   freshness: string | null;
+  /** The prefix an attached table was registered from; null for a table Lakelet wrote. */
+  source?: string | null;
+  /** Read without credentials (a public bucket). */
+  public?: boolean;
 }
 
 export interface PreviewColumn {
@@ -39,6 +45,11 @@ export interface Preview {
   source: string;
   columns: PreviewColumn[];
   sample: unknown[][];
+  /** A remote prefix's preview (`tables attach`, not `import`): what would be registered in place. */
+  remote?: boolean;
+  files?: number | null;
+  bytes?: number | null;
+  anonymous?: boolean;
 }
 
 export type ImportMode = 'create' | 'replace' | 'append';
@@ -106,10 +117,24 @@ export class Api {
     return this.get<TableInfo[]>('/tables');
   }
 
-  /** A file's preview, or a folder's: one per file `import` would take (A9). */
-  async preview(path: string, name?: string): Promise<Preview[]> {
-    const p = await this.post<Preview | Preview[]>('/preview', name ? { path, name } : { path });
+  /** A file's preview, or a folder's: one per file `import` would take (A9); an `s3://`
+   *  prefix's: the columns of one footer and the files it would register (real-data R4). */
+  async preview(path: string, name?: string, anonymous = false): Promise<Preview[]> {
+    const body: Record<string, unknown> = { path };
+    if (name) body.name = name;
+    if (anonymous) body.anonymous = true;
+    const p = await this.post<Preview | Preview[]>('/preview', body);
     return Array.isArray(p) ? p : [p];
+  }
+
+  /** `lakelet tables attach <name> [--anonymous] <prefix>`: registered in place, nothing copied. */
+  attach(name: string, source: string, anonymous = false): Promise<TableInfo> {
+    return this.post<TableInfo>('/tables/attach', { name, source, anonymous });
+  }
+
+  /** `lakelet tables refresh <name>`: the files new under the prefix since the attach. */
+  refresh(name: string): Promise<{ name: string; added: number; files: number; rows: number }> {
+    return this.post(`/tables/${encodeURIComponent(name)}/refresh`, {});
   }
 
   settings(): Promise<Settings> {
