@@ -4,7 +4,7 @@
 
 ## Now
 
-**Session 6, step 5 of `app-v0-plan.md`**: the §6 definition of done measured and recorded line by line (launch, streaming, verdicts, recovery, tests on both runners, nothing hidden), a docs page for the app under Develop on the site, and the session 6 log in its own file. One line of §6 is Hants', not the build's: the founder using it daily on a real dataset for a week.
+**Session 10, ship**: needs its own brief with decisions first (`ship-v0-plan.md`, in the shape of the app brief): the bundled sidecar (how the Python core is frozen and where it lives in the bundle), signed installers for macOS and Ubuntu, the "under 200 MB" claim measured, the frozen sidecar's spawn-to-ready against the 1.5 s budget, brew tap, the per-operator-class correction (M7), the engines smoke test through `catalog serve`, instrumentation export, partner onboarding. Session 6 closed 2026-09-11 with step 5: `app-v0-plan.md` §6 measured line by line, `/docs/app`, `lakelet-session-6-desktop-shell.md`.
 
 ## Next, in order
 
@@ -35,12 +35,12 @@ The sessions of `lakelet-build-sessions.md`, with where each stands. That file i
 |---|---|---|---|
 | 1–2, 4 | Core v0: catalog, engine, import, query and history, gauge, questions, CLI, remote read-only, local API | **done** 2026-09-08; CI green 2026-09-09; step 7's clean-machine quickstart and the demo bucket outstanding (above) | `core-v0.5-plan.md` |
 | 3 | Fargate worker spike (throwaway) | not started; any time, needs AWS | `lakelet-build-sessions.md` |
-| 6 | Desktop shell: Tauri, sidecar, screens 1 and 2, chart, recovery, settings | **steps 0–4 done** 2026-09-10; step 5 in progress | `app-v0-plan.md` |
+| 6 | Desktop shell: Tauri, sidecar, screens 1 and 2, chart, recovery, settings | **done** 2026-09-11 (steps 0–5); the week of daily use is Hants' | `app-v0-plan.md` |
 | 7 | Ask box, `lakelet ask` | **parked** 2026-09-11 | `lakelet-build-sessions.md` |
 | 8 | Burst end to end | not started; partner intake first | `lakelet-build-sessions.md` |
 | 5 | `lakelet mcp` | not started; after 8 | `lakelet-build-sessions.md` |
 | 9 | dbt and the Simple/Technical screens | not started; the materialisation shipped early (2026-09-09) | `lakelet-build-sessions.md` |
-| 10 | Ship: installers, brew tap, correction, smoke test, instrumentation, onboarding | not started; next after the two core items | `lakelet-build-sessions.md` |
+| 10 | Ship: installers, brew tap, correction, smoke test, instrumentation, onboarding | **next**; brief to write | `lakelet-build-sessions.md` |
 
 ## Session 6, the desktop shell (`app-v0-plan.md` §4)
 
@@ -51,9 +51,9 @@ The sessions of `lakelet-build-sessions.md`, with where each stands. That file i
 | 2 | done 2026-09-10 | Screen 1: the tables panel with an updated column (core `TableInfo.freshness`), the drop zone (Tauri drag-drop, "Choose files…", a typed path), the preview with types and notes (a folder answers a list; `lakelet import <folder> --preview` too), import with replace-or-append on a 409, "Copy as command" from `lib/command.ts`; `Open…` as a menu of recent projects. Mac: an 18-column CSV from Finder; wide tables scroll inside their panel. |
 | 3 | done 2026-09-10 | Screen 2: CodeMirror with completion, the verdict from the headers before any row, the streaming Arrow grid (100,000-row cap), Red as a refusal with "Run anyway", Esc. Core: `X-Lakelet-*` exposed over CORS; a client that goes away interrupts DuckDB and the run is recorded as stopped early. Mac: verdict at 56 ms, first rows at 62 ms, 66,667 rows at 143 ms over 20 M rows; the tests pick ⌘ as Mod and insert SQL as text. |
 | 4 | done 2026-09-10 | The auto-chart (`lib/chart.ts`, Vega-Lite through `vega-interpreter` so no `unsafe-eval`); the window's `restarted` and `down` reactions with "Restart the core"; the settings panel over new core verbs `lakelet config show|set` and `/api/settings`, rewriting one line of `lakelet.toml` in place; ⌘/Ctrl+, and ⌘/Ctrl+K; dates, times and decimals converted per Arrow type in the grid; `examples/sample-data/`. Mac: the line chart in the Tauri window, two kills, a setting saved. |
-| 5 | in progress | §6 measured and recorded; the docs page for the app; the session 6 log. |
+| 5 | done 2026-09-11 | §6 measured and recorded line by line in the brief (all but the week of daily use, which is Hants'); `/docs/app` on the site; `lakelet-session-6-desktop-shell.md`; two more gates for "nothing hidden" (every request across both screens goes to the dev server or the sidecar; a release build passes no dev origin, `cargo test --release`); Yellow in the gauge-line tests. |
 
-Gates as of 2026-09-11: Playwright 16 against four real sidecars (one with a 20 M-row table), Vitest 26, `cargo test` 7, core 149 passed; CI green on macOS and Ubuntu for `core`, `app` and Pages.
+Gates as of 2026-09-11: Playwright 17 against four real sidecars (one with a 20 M-row table), Vitest 27, `cargo test` 8, core 161 on the Mac; CI green on macOS and Ubuntu for `core`, `app` and Pages.
 
 ## Core v0, the steps of `core-v0.5-plan.md` §4
 
@@ -92,7 +92,8 @@ Closed:
 
 - [ ] `PUBLIC_WAITLIST_URL` is not set; the forms log to the console and show success, so signups are lost. Pick a provider (Formspree, Buttondown, or Cloudflare Pages with `functions/api/waitlist.ts`).
 - [ ] Domain: when bought, add under Settings → Pages and set `SITE_URL`.
-- [ ] Docs follow-ups: a CI check that `gen-cli-reference.py` is current; the quickstart transcripts are illustrative until the clean-machine run replaces them; a page on `audit network` and one on history's schema; the app page (step 5).
+- [ ] Docs follow-ups: a CI check that `gen-cli-reference.py` is current; the quickstart transcripts are illustrative until the clean-machine run replaces them; a page on `audit network` and one on history's schema.
+- [x] `/docs/app` (2026-09-11), and the overview's status table names the app.
 - [ ] The medallion page's `[burst.tags.<tag>]` caps and `[schedules.nightly]` are not in the architecture spec; decide whether to adopt.
 - [x] Developer docs (2026-09-09): `/docs` with the pages under `web/src/content/docs/`, the CLI reference generated, `llms.txt`, the nav's GitHub link; `/docs/transactions` on what DuckDB-Iceberg refuses inside one transaction.
 
@@ -106,4 +107,4 @@ None open. Decided: `decisions-for-review_091126.md`, all four (2026-09-11), shi
 - 2026-09-08 — Remote-data decisions R1 to R6 accepted; `core-v0.2-plan.md`. MinIO replaced by Moto, measured. Site and deck compared; M1 to M12 accepted; `core-v0.3-plan.md`, `core-v0.4-plan.md`. §10 wording applied to `web/src` and the deck. Readiness review; gitignore decision; `CLAUDE.md`, `AGENTS.md`, README; `core-v0.5-plan.md` (revision 7). Steps 0 through 9 built and their gates passing on the Mac; Postgres, RustFS, Spark and Trino verified through `compose.yaml`.
 - 2026-09-09 — Repo hygiene commit `7f0ff4a`; CI failed then green after the credential chain and descriptor-leak fixes; developer docs on the site; the dbt materialisation through the catalog; `/docs/transactions`; the desktop shell brief.
 - 2026-09-10 — `app-v0-plan.md` A1 to A14 accepted; steps 0 to 4 of the desktop shell built, each verified on the Mac; core additions along the way (`serve --memory-limit`, `LAKELET_DEV_ORIGIN`, `freshness`, folder preview, verdict headers over CORS, interrupt on disconnect, `config show|set`, `/api/settings`); `examples/sample-data/`. See `lakelet-build-sessions_091026.md`.
-- 2026-09-11 — Session 7 deprioritised; this file restructured (Now, Next in order, the map); the two core items decided (`decisions-for-review_091126.md`) and built: the probe with the cache bypassed and `lakelet gauge probe`, `lakelet tables expire` with `keep_snapshots_days`. See `lakelet-build-sessions_091126.md`.
+- 2026-09-11 — Session 7 deprioritised; this file restructured (Now, Next in order, the map); the two core items decided (`decisions-for-review_091126.md`) and built: the probe with the cache bypassed and `lakelet gauge probe`, `lakelet tables expire` with `keep_snapshots_days`; step 5 of the app brief, closing session 6. See `lakelet-build-sessions_091126.md` and `lakelet-session-6-desktop-shell.md`.

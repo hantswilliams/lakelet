@@ -5,7 +5,7 @@ section: Start
 order: 0
 ---
 
-Lakelet is a local-first lakehouse: Apache Iceberg tables on Parquet in a folder you own, a catalog that speaks the Iceberg REST spec, DuckDB as the engine, and a pre-flight gauge that says whether this machine can run a query before it runs. The Python package `lakelet` in `core/` is the whole of it today, driven by a CLI. The desktop app, bursting to a cloud worker, the ask box and the MCP server are on the [marketing pages](/) as plans; they are not in the package yet.
+Lakelet is a local-first lakehouse: Apache Iceberg tables on Parquet in a folder you own, a catalog that speaks the Iceberg REST spec, DuckDB as the engine, and a pre-flight gauge that says whether this machine can run a query before it runs. The Python package `lakelet` in `core/` is the core, driven by a CLI; the desktop app in `app/` is a window over it, running from source. Bursting to a cloud worker, the ask box and the MCP server are on the [marketing pages](/) as plans; they are not built yet.
 
 ## What exists
 
@@ -17,10 +17,12 @@ Lakelet is a local-first lakehouse: Apache Iceberg tables on Parquet in a folder
 | `tables attach`, `refresh`, `discover` for Parquet already in S3 | Built, tested against an in-process S3 mock and RustFS | [Tables](/docs/tables) |
 | The Iceberg REST catalog, `catalog serve`; DuckDB, pyiceberg, Spark 3.5 and Trino as clients | Built; Spark and Trino verified through Docker Compose | [Catalog](/docs/catalog) |
 | Saved questions as dbt models with two checks; `dbt run` builds them through the catalog | Built; `dbt run` and `dbt test` pass on the generated project | [Questions](/docs/questions) |
-| `lakelet serve`: the local HTTP API with a bearer token and Arrow results | Built; for the app that does not exist yet | [HTTP API](/docs/api) |
+| `lakelet serve`: the local HTTP API with a bearer token and Arrow results | Built; the app runs one per window | [HTTP API](/docs/api) |
+| The desktop app: projects, drop-to-import with a preview, the SQL screen with the verdict before the rows, the streaming grid, the auto-chart, crash recovery, settings | Built, from source; tested with Playwright against real sidecars on macOS and Ubuntu; no installer yet | [The desktop app](/docs/app) |
+| `lakelet tables expire`, `lakelet gauge probe`, `lakelet config` | Built | [Tables](/docs/tables), [The gauge](/docs/gauge), [Config](/docs/config) |
 | `lakelet audit network` | Built; measures zero outbound attempts on the quickstart | [Quickstart](/docs/install) |
 | Installers, brew tap, a PyPI release | Not yet | |
-| Burst, the app, `ask`, `mcp`, correction factors, `catalog attach` | Not yet | |
+| Burst, `ask`, `mcp`, correction factors, `catalog attach` | Not yet | |
 
 ## Versions
 

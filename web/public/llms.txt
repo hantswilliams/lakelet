@@ -22,3 +22,4 @@
 - [lakelet.toml and the project folder](/docs/config): every setting, what init writes
 - [The local HTTP API](/docs/api): lakelet serve, bearer token, routes, Arrow streaming
 - [Developing Lakelet](/docs/develop): the suite, opt-in Docker checks, contributing
+- [The desktop app](/docs/app): running it from source, projects and windows, the two screens, the chart, settings, keys, how it talks to the core, nothing hidden

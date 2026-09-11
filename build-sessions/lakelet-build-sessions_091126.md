@@ -30,7 +30,13 @@ Tests, `tests/test_expire.py`, five: a create and three in-place rebuilds (the d
 
 The tables page has a "Snapshots, history and expiry" section; the gauge page says how the throughput is measured and what `cached` means; the config page has the key; the API page has the route, the describe fields and `throughput_probe`; the CLI reference is regenerated. The app: the retention row in settings, the tile's flag.
 
-## 6. Still open
+Hants ran the probe on the Mac: 16,592 MB/s at first (the read alone bypassed), then 9,949 after the write-side fix, `nocache`; an Apple SSD peaks at 7,000 to 8,000 for reads, so a little of the just-written data is still served from memory, and the figure is within the gauge's 2× target where 84,914 was off by twelve. `describe` on a once-imported table showed one snapshot and no expiry line, as it should.
 
-1. On the Mac: `lakelet gauge probe` in `~/lakelet-demo` (the number, and `nocache` as the method); `lakelet tables describe` and `expire` on a table rebuilt a few times.
-2. Step 5 of `app-v0-plan.md`, then session 10 per `TASKS.md`.
+## 6. Step 5 of the app brief, closing session 6
+
+§6 of `app-v0-plan.md` now carries a number or a test against every line, ticked, except the week of daily use. Two gates were added for "nothing hidden": `step5-nothing-hidden.spec.ts` records every request across screen 1 (a preview and an import), screen 2 (a query with a bar chart) and the settings panel, and allows only the dev server and the sidecar on loopback (56 requests, two hosts); `a_release_build_passes_no_dev_origin` in the supervisor's tests asserts, under `cfg!(debug_assertions)`, that a debug build passes the Vite origin and a release build passes nothing, and is meant to be run with `cargo test --release` (done once in the container, 191 s for the release build; CI keeps the debug build). Yellow joined the gauge-line Vitest. The docs gained `/docs/app` (running from source, projects and windows, both screens, the chart's rule, settings, the keys, how the window talks to the core, nothing hidden, the tests, what to do when it does not start), the overview's status table names the app, and `lakelet-session-6-desktop-shell.md` is the session's record for whoever opens session 10.
+
+## 7. Still open
+
+1. Session 10's brief (`ship-v0-plan.md`), with the decisions for Hants; then the build.
+2. Everything in `TASKS.md` that needs another machine.

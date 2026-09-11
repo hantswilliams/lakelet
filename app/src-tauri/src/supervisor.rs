@@ -313,6 +313,19 @@ pub(crate) mod tests {
         dir
     }
 
+    /// The "nothing hidden" line of §6: a release build passes no dev origin, so a bundled
+    /// app's sidecar allows only the Tauri origins. Run with `cargo test --release` to hold
+    /// it against the build that ships; in a debug build the origin is the Vite server's.
+    #[test]
+    fn a_release_build_passes_no_dev_origin() {
+        let config = SidecarConfig::new("/nowhere");
+        if cfg!(debug_assertions) {
+            assert_eq!(config.dev_origin.as_deref(), Some(DEV_ORIGIN));
+        } else {
+            assert_eq!(config.dev_origin, None, "a shipped app never widens CORS");
+        }
+    }
+
     #[test]
     fn starts_reads_serve_json_and_stops() {
         let dir = temp_dir("start");

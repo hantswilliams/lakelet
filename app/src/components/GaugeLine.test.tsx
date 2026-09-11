@@ -9,6 +9,7 @@ import { GaugeLine } from './GaugeLine';
 
 const green = { verdict: 'green' as const, words: 'Runs here', reason: 'scans 61.4 MB · fits in memory · ~0.3 s' };
 const red = { verdict: 'red' as const, words: 'Needs more machine', reason: 'scans 40 GB · cap $5.00' };
+const yellow = { verdict: 'yellow' as const, words: 'Runs here, slowly', reason: 'scans 6.1 GB · spills 2 GB · ~4 min' };
 
 describe('GaugeLine', () => {
   it('is nothing until there is a verdict, then the words, the colour and the count', () => {
@@ -20,6 +21,15 @@ describe('GaugeLine', () => {
     expect(line.textContent).toContain('Runs here');
     expect(line.textContent).toContain('61.4 MB');
     expect(line.textContent).toContain('12,000 rows so far');
+  });
+
+  it('Yellow runs, in its own colour, with the sentence', () => {
+    render(<GaugeLine state={{ kind: 'running', verdict: yellow, rows: 10 }} onRunAnyway={() => {}} />);
+    const line = screen.getByTestId('gauge');
+    expect(line.className).toContain('yellow');
+    expect(line.textContent).toContain('Runs here, slowly');
+    expect(line.textContent).toContain('~4 min');
+    expect(screen.queryByTestId('run-anyway')).toBeNull();
   });
 
   it('says how many rows in how long, and names the CLI when the stream was capped', () => {
