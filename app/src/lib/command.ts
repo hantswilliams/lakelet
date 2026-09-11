@@ -93,3 +93,13 @@ export const gaugeHistoryCommand = (last = 20): string => `lakelet gauge history
 export const gaugeExportCommand = (): string => 'lakelet gauge export';
 export const gaugeResetCommand = (): string => 'lakelet gauge reset --yes';
 export const gaugeProbeCommand = (): string => 'lakelet gauge probe';
+
+/** The Models panel's lines (real-data brief R5, step 6): `lakelet run` builds the whole
+ *  DAG, `lakelet run <model>` one model (and, through dbt's selector, only it), `--plan`
+ *  estimates without building, `--run-anyway` runs a Red model here regardless. */
+export function runCommand(select: string[] = [], opts: { plan?: boolean; runAnyway?: boolean } = {}): string {
+  const parts = ['lakelet run', ...select.map(shellArg)];
+  if (opts.plan) parts.push('--plan');
+  if (opts.runAnyway) parts.push('--run-anyway');
+  return parts.join(' ');
+}

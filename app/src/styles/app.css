@@ -148,3 +148,40 @@ nav.screens button.on{background:var(--cloud);color:var(--lake)}
 .gauge-screen td.verdict.green{color:var(--local)} .gauge-screen td.verdict.yellow{color:var(--slow)} .gauge-screen td.verdict.red{color:var(--burst)}
 .gauge-screen footer.actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .gauge-screen .confirm{display:inline-flex;align-items:center;gap:8px;font-size:13px}
+/* real-data round, step 6: the Models screen (screens 7 and 8) and the view detail */
+nav.screens.mode{margin-left:auto}
+nav.screens.mode+button{margin-left:8px}
+.models-screen{display:grid;gap:14px;min-width:0}
+.models-screen header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.models-screen h2{font-size:16px}
+.models-screen .run-all{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
+.models-screen .split{display:grid;grid-template-columns:minmax(280px,2fr) minmax(320px,3fr);gap:14px;align-items:start}
+@media (max-width:900px){.models-screen .split{grid-template-columns:1fr}}
+.models-screen table.dag{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.models-screen table.dag th,.models-screen table.dag td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left}
+.models-screen table.dag th{font-size:12px;color:var(--muted);font-weight:600;background:#F6F8FA}
+.models-screen table.dag tbody tr{cursor:pointer}
+.models-screen table.dag tbody tr:hover td{background:var(--bg)}
+.models-screen table.dag tbody tr.on td{background:var(--cloud)}
+.models-screen table.dag tr:last-child td{border-bottom:0}
+.models-screen .verdict{font-weight:600}
+.models-screen .verdict.green{color:var(--local)} .models-screen .verdict.yellow{color:var(--slow)} .models-screen .verdict.red{color:var(--burst)} .models-screen .verdict.none{color:var(--muted)}
+.models-screen .failed{color:var(--burst);font-size:13px}
+.models-screen article.model{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:grid;gap:12px;min-width:0}
+.models-screen article.model h3{font-size:15px}
+.models-screen article.model h4{font-size:13px;font-weight:600;margin:4px 0 0}
+.models-screen dl.facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;font-size:13.5px;margin:0}
+.models-screen dl.facts dt{color:var(--muted)}
+.models-screen dl.facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.models-screen dl.facts ul{margin:0;padding-left:18px}
+.models-screen footer.actions,.models-screen .error .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+pre.sql{margin:0;font:12.5px/1.5 var(--mono);white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:320px;overflow:auto}
+.models-screen .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.models-screen .card{background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:12px;padding:14px 16px;display:grid;gap:6px;min-width:0}
+.models-screen .card.green{border-left-color:var(--local)} .models-screen .card.yellow{border-left-color:var(--slow)} .models-screen .card.red{border-left-color:var(--burst)}
+.models-screen .card h3{font-size:15px}
+.models-screen .card p{margin:0;font-size:13.5px}
+.models-screen .card .kind{color:var(--muted);font-size:12.5px}
+.models-screen .card .checks{color:var(--muted);font-size:12.5px}
+.models-screen .card footer{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
+.detail.view pre.sql{max-height:200px}

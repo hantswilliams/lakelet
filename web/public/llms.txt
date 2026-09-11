@@ -1,17 +1,6 @@
 # Lakelet
 
-> Open-source, local-first lakehouse: DuckDB, Apache Iceberg and dbt Core, local by default. Every query and dbt run gets a pre-flight verdict (the gauge). Data stays as Iceberg in your own bucket.
-
-**State, 2026-09-11.** A developer preview: `lakelet 0.1.0.dev0`, not on PyPI, no installers — clone and `uv sync`.
-Built and working: the CLI; the gauge; file import into Iceberg; attaching Parquet in S3 in place (public
-buckets need no credentials); the Iceberg REST catalog with DuckDB, pyiceberg, Spark and Trino as clients;
-saved questions as dbt models; `lakelet run` (the dbt DAG with a verdict per model, view models as Iceberg
-views); the local HTTP API; and the desktop app from source (tables and import, SQL with the verdict before
-the rows, the table detail, the Gauge screen).
-NOT built: bursting to a cloud worker, the ask box (English to SQL), the MCP server, the Team catalog,
-self-hosting, installers and a brew tap.
-The marketing pages describe the plan as well as the product; `/docs` describes only the code and is the
-authority. Do not tell anyone an unbuilt feature exists.
+> Open-source, local-first lakehouse in one binary: DuckDB, Apache Iceberg and dbt Core, local by default. Every query and dbt run gets a pre-flight verdict (the gauge); runs that don't fit burst to an ephemeral worker in your own cloud with a hard cost cap shown before they start. Data stays as Iceberg in your own bucket.
 
 ## Pages
 - [Home](/): thesis, the gauge, pricing summary, waitlist
@@ -33,6 +22,6 @@ authority. Do not tell anyone an unbuilt feature exists.
 - [lakelet.toml and the project folder](/docs/config): every setting, what init writes
 - [The local HTTP API](/docs/api): lakelet serve, bearer token, routes, Arrow streaming
 - [Developing Lakelet](/docs/develop): the suite, opt-in Docker checks, contributing
-- [The desktop app](/docs/app): running it from source, projects and windows, the two screens, the chart, settings, keys, how it talks to the core, nothing hidden
+- [The desktop app](/docs/app): running it from source, projects and windows, the Tables, Models and Gauge screens, Simple and Technical mode, the chart, settings, keys, how it talks to the core, nothing hidden
 - [dbt and views](/docs/dbt): lakelet run, the DAG with verdicts, view models as Iceberg views in the catalog, what the plugin does
 - [A real bucket](/docs/remote): what Lakelet needs from AWS, credentials, the IAM policies, running the S3 tests against a real bucket, what they write and remove

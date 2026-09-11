@@ -7,7 +7,9 @@
 // third with a 20 M-row table for the streaming gate; the fourth with the gauge thresholds
 // lowered so every query is Red; the fifth with a stand-in bucket (Moto, public-read) for
 // the attach screen, its credentials in the sidecar's environment; the sixth with the
-// snapshot retention at zero days and an orders table, for the table detail.
+// snapshot retention at zero days and an orders table, for the table detail; the seventh
+// with a small dbt project (a view model, a table model over it, a schema.yml with two
+// tests) for the Models screen.
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -23,12 +25,13 @@ export interface Started {
   s3?: { endpoint: string; pid: number; flag: string; prefix: string };
 }
 
-export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean; s3?: boolean; detail?: boolean }
+export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean; s3?: boolean; detail?: boolean; dbt?: boolean }
 
 // Each spec file owns what it imports into a sidecar; the files run in parallel outside CI.
 // step 0 → the first; step 2 → the second (and counts its tables); steps 3 and 4 → the
 // third (big) and the fourth (Red); step 4's settings → the second's lakelet.toml only;
-// the real-data round's attach test → the fifth (s3); its table-detail test → the sixth.
+// the real-data round's attach test → the fifth (s3); its table-detail test → the sixth;
+// its models test → the seventh (dbt).
 export const SIDECARS: SidecarSpec[] = [
   { memoryLimit: '2GB' },
   { memoryLimit: '1GB' },
@@ -36,7 +39,30 @@ export const SIDECARS: SidecarSpec[] = [
   { memoryLimit: '1GB', red: true },
   { memoryLimit: '1GB', s3: true },
   { memoryLimit: '1GB', detail: true },
+  { memoryLimit: '1GB', dbt: true },
 ];
+
+/** The seventh sidecar's dbt project: `stg` (a view over orders), `by_customer` (a table
+ *  over `stg`), and two tests on `stg` in schema.yml. */
+export const DBT_MODELS = {
+  'stg.sql': "select id, customer, amt from {{ source('lakelet', 'orders') }} where amt > 0\n",
+  'by_customer.sql': "{{ config(materialized='table') }}\nselect customer, sum(amt) as total from {{ ref('stg') }} group by 1\n",
+  'schema.yml': [
+    'version: 2',
+    'sources:',
+    '  - name: lakelet',
+    '    database: lakelet',
+    '    schema: main',
+    '    tables: [{ name: orders }]',
+    'models:',
+    '  - name: stg',
+    '    description: Orders with a positive amount.',
+    '    columns:',
+    '      - name: id',
+    '        tests: [not_null, unique]',
+    '',
+  ].join('\n'),
+};
 
 export const BIG_ROWS = 20_000_000;
 
@@ -71,7 +97,7 @@ async function startMoto(project: string): Promise<{ endpoint: string; child: Ch
   return { endpoint, child, flag };
 }
 
-export async function startSidecar({ memoryLimit, big, red, s3, detail }: SidecarSpec): Promise<{ started: Started; child: ChildProcess; extra?: ChildProcess }> {
+export async function startSidecar({ memoryLimit, big, red, s3, detail, dbt }: SidecarSpec): Promise<{ started: Started; child: ChildProcess; extra?: ChildProcess }> {
   const exe = sidecarExecutable();
   const project = mkdtempSync(join(tmpdir(), 'lakelet-e2e-'));
   const init = spawnSync(exe, ['init', project, '--probe-mb', '0'], { encoding: 'utf8' });
@@ -93,6 +119,12 @@ export async function startSidecar({ memoryLimit, big, red, s3, detail }: Sideca
     writeFileSync(join(project, 'orders.csv'), 'id,customer,amt\n1,c1,1.5\n2,c2,3.0\n3,c1,4.5\n');
     const imported = spawnSync(exe, ['-C', project, 'import', join(project, 'orders.csv')], { encoding: 'utf8' });
     if (imported.status !== 0) throw new Error(`import failed:\n${imported.stdout}\n${imported.stderr}`);
+  }
+  if (dbt) {
+    writeFileSync(join(project, 'orders.csv'), 'id,customer,amt\n1,c1,1.5\n2,c2,3.0\n3,c1,4.5\n4,c2,-1.0\n');
+    const imported = spawnSync(exe, ['-C', project, 'import', join(project, 'orders.csv')], { encoding: 'utf8' });
+    if (imported.status !== 0) throw new Error(`import failed:\n${imported.stdout}\n${imported.stderr}`);
+    for (const [name, text] of Object.entries(DBT_MODELS)) writeFileSync(join(project, 'models', name), text);
   }
   if (big) {
     // 20 M rows through DuckDB into Parquet, then imported as an Iceberg table

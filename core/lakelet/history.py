@@ -64,6 +64,16 @@ question_runs = sa.Table(
     sa.Column("run_id", sa.Integer, sa.ForeignKey("runs.id"), nullable=False),
 )
 
+# A dbt model's last `lakelet run` (real-data brief R5, the app's Models panel): the
+# model's unique id to the run that recorded it, the way a question's last run is kept.
+model_runs = sa.Table(
+    "model_runs",
+    metadata,
+    sa.Column("unique_id", sa.String(255), primary_key=True),
+    sa.Column("ts", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("run_id", sa.Integer, sa.ForeignKey("runs.id"), nullable=False),
+)
+
 corrections = sa.Table(
     "corrections",
     metadata,
@@ -201,9 +211,34 @@ class History:
         the correction factors. Returns the runs removed."""
         with self.engine.begin() as c:
             c.execute(question_runs.delete())
+            c.execute(model_runs.delete())
             c.execute(corrections.delete())
             removed = c.execute(runs.delete()).rowcount
         return removed
+
+    def record_model_run(self, unique_id: str, run_id: int) -> None:
+        now = datetime.now(UTC)
+        with self.engine.begin() as c:
+            c.execute(model_runs.delete().where(model_runs.c.unique_id == unique_id))
+            c.execute(model_runs.insert().values(unique_id=unique_id, ts=now, run_id=run_id))
+
+    def model_last_run(self, unique_id: str) -> Run | None:
+        with self.engine.connect() as c:
+            row = (
+                c.execute(
+                    runs.select()
+                    .join(model_runs, model_runs.c.run_id == runs.c.id)
+                    .where(model_runs.c.unique_id == unique_id)
+                )
+                .mappings()
+                .first()
+            )
+        if row is None:
+            return None
+        data = dict(row)
+        for column in JSON_COLUMNS:
+            data[column] = json.loads(data[column])
+        return Run(**data)
 
     def record_question_run(self, slug: str, run_id: int) -> None:
         now = datetime.now(UTC)

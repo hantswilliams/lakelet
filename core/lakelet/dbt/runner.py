@@ -45,6 +45,30 @@ class DbtFailed(Exception):
 
 
 @dataclass
+class ModelTest:
+    """A test from `schema.yml` on a model (the app's Models panel shows them; Simple mode
+    calls them checks): `not_null`, `unique`, `accepted_values`, `relationships`, or
+    `singular` for a test written as SQL under `tests/`."""
+
+    name: str
+    kind: str
+    column: str | None
+    unique_id: str
+
+
+@dataclass
+class LastRun:
+    """The model's last `lakelet run`, from history: when, whether dbt succeeded, its wall
+    time and the verdict the gauge gave it then."""
+
+    ts: str
+    ok: bool
+    seconds: float | None
+    verdict: str | None
+    error: str | None
+
+
+@dataclass
 class PlannedModel:
     name: str
     unique_id: str
@@ -58,6 +82,10 @@ class PlannedModel:
     est_bytes: int | None = None
     error: str | None = None
     estimate: Any = None
+    description: str = ""
+    path: str = ""
+    tests: list[ModelTest] = field(default_factory=list)
+    last_run: LastRun | None = None
 
 
 @dataclass
@@ -204,7 +232,12 @@ def plan(project: Project, select: list[str] | None = None) -> list[PlannedModel
                 d for d in node.get("depends_on", {}).get("nodes", []) if d in manifest["nodes"]
             ],
             compiled_sql=node["compiled_code"].strip(),
+            description=node.get("description") or "",
+            path=node.get("original_file_path") or node.get("path") or "",
+            tests=model_tests(manifest, uid),
         )
+    for m in models.values():
+        m.last_run = _last_run(project, m.unique_id)
     ordered = _ordered(models)
     existing = set(project.store.list_tables("main"))
     stand_ins: list[str] = []
@@ -231,6 +264,44 @@ def plan(project: Project, select: list[str] | None = None) -> list[PlannedModel
         for name in stand_ins:
             project.engine.drop_view(name)
     return ordered
+
+
+def model_tests(manifest: dict[str, Any], model_uid: str) -> list[ModelTest]:
+    """The tests the manifest attaches to a model: a generic test (`not_null`, `unique`,
+    `accepted_values`, `relationships`, or a project's own) names its column; a singular
+    test (a SQL file under `tests/`) depends on the model and has no column."""
+    out: list[ModelTest] = []
+    for uid, node in sorted(manifest["nodes"].items()):
+        if node.get("resource_type") != "test":
+            continue
+        attached = node.get("attached_node")
+        depends = node.get("depends_on", {}).get("nodes", [])
+        if attached != model_uid and (attached or model_uid not in depends):
+            continue
+        meta = node.get("test_metadata") or {}
+        column = node.get("column_name") or (meta.get("kwargs") or {}).get("column_name")
+        out.append(
+            ModelTest(
+                name=node["name"],
+                kind=meta.get("name") or "singular",
+                column=column,
+                unique_id=uid,
+            )
+        )
+    return out
+
+
+def _last_run(project: Project, unique_id: str) -> LastRun | None:
+    run = project.history.model_last_run(unique_id)
+    if run is None:
+        return None
+    return LastRun(
+        ts=run.ts.isoformat() if run.ts else "",
+        ok=run.ran and not run.error,
+        seconds=run.actual_wall,
+        verdict=run.verdict,
+        error=run.error,
+    )
 
 
 def unqualified(sql: str) -> str:
@@ -321,7 +392,8 @@ def _record(project: Project, m: PlannedModel, status: str, seconds: float) -> N
         actual_wall=seconds if status == "success" else None,
         error=None if status == "success" else f"dbt: {status}",
     )
-    project.history.record(run)
+    run_id = project.history.record(run)
+    project.history.record_model_run(m.unique_id, run_id)
 
 
 def _record_views(

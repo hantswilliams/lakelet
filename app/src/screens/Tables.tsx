@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { Api, ApiError, humanBytes, type Health, type ImportMode, type Preview, type TableDescription, type TableInfo } from '../lib/api';
 import { attachCommand, expireCommand, importCommand, defaultName, isRemote, refreshCommand } from '../lib/command';
 import { inTauri, onDrop, pickFiles, type Session } from '../lib/session';
+import type { Mode } from '../lib/vocabulary';
 import { Command } from '../components/Command';
 import { DropZone } from '../components/DropZone';
 import { PreviewPanel } from '../components/PreviewPanel';
@@ -41,10 +42,12 @@ export interface TablesProps {
   tables: TableInfo[];
   /** The core's credentials, from health, for the drop zone's line. */
   aws?: Health['aws'];
+  /** Screen 8: the view detail's words (`lakelet run` or Refresh). */
+  mode?: Mode;
   onChanged: () => Promise<void>;
 }
 
-export function Tables({ session, tables, aws, onChanged }: TablesProps) {
+export function Tables({ session, tables, aws, mode = 'technical', onChanged }: TablesProps) {
   const api = new Api(session);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState<string>();
@@ -229,6 +232,7 @@ export function Tables({ session, tables, aws, onChanged }: TablesProps) {
         <TableDetail
           table={detail.table}
           sample={detail.sample}
+          mode={mode}
           busy={busy}
           error={detail.error}
           onSample={() => void sample()}

@@ -63,3 +63,14 @@ describe('the gauge screen lines (real-data R8)', () => {
     expect(gaugeProbeCommand()).toBe('lakelet gauge probe');
   });
 });
+
+describe('the Models panel lines (real-data R5, step 6)', () => {
+  it('are lakelet run with a selection and its two flags', async () => {
+    const { runCommand } = await import('./command');
+    expect(runCommand()).toBe('lakelet run');
+    expect(runCommand(['big_orders'])).toBe('lakelet run big_orders');
+    expect(runCommand([], { plan: true })).toBe('lakelet run --plan');
+    expect(runCommand(['by_customer'], { runAnyway: true })).toBe('lakelet run by_customer --run-anyway');
+    expect(runCommand(['tag:nightly'])).toBe('lakelet run tag:nightly');
+  });
+});

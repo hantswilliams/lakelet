@@ -232,6 +232,10 @@ def _plan_json(m: Any) -> dict[str, Any]:
         "est_wall_local": m.est_wall_local,
         "est_bytes": m.est_bytes,
         "error": m.error,
+        "description": m.description,
+        "path": m.path,
+        "tests": [dataclasses.asdict(t) for t in m.tests],
+        "last_run": dataclasses.asdict(m.last_run) if m.last_run else None,
     }
 
 

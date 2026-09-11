@@ -112,13 +112,13 @@ Each step ends with a test that stays in the suite, or a measurement recorded in
 
 ## 6. Definition of done
 
-- [ ] **Real S3.** The step 8 suite green against your bucket; attach, refresh and the probe's figure recorded; `/docs/remote` says how to set it up and what it costs.
-- [ ] **The demo bucket.** Red with the bandwidth sentence from a laptop; a pruned month Green; pyiceberg reads it from another process; the docs point at it.
-- [ ] **The app does the first hour.** Attach a bucket, open a table's detail and expire its snapshots, see the gauge's record and export it, see the dbt project and run it; each with its CLI line. Playwright covers each against real sidecars.
-- [ ] **Views are real.** A `view` model is in the catalog, survives a restart, is read by a second process and by `/api/query`; Spark reads it or says why not (recorded).
-- [ ] **`lakelet run` prints the DAG by verdict** and runs it; `--burst auto` refuses honestly.
-- [ ] **The first rows land early**: the first batch's row count asserted small in the timing test.
-- [ ] **Tests green** on both CI runners with the dbt extra installed; the core suite, Vitest, Playwright, cargo.
+- [x] **Real S3.** *(September 11: 10 passed against the bucket; the second estimate 3 ms after the metadata cache; `/docs/remote`.)* The step 8 suite green against your bucket; attach, refresh and the probe's figure recorded; `/docs/remote` says how to set it up and what it costs.
+- [x] **The demo bucket.** *(September 11, amended to Overture on AWS Open Data: `addresses` Red at 21.9 GB with the bandwidth sentence, a bbox count Green in 4 s, pyiceberg reading 126,285 rows anonymously; `/docs/remote`.)* Red with the bandwidth sentence from a laptop; a pruned month Green; pyiceberg reads it from another process; the docs point at it.
+- [x] **The app does the first hour.** *(September 11: attach, the detail and expire, the Gauge screen and export, the Models screen and `lakelet run`; Playwright 22 against seven sidecars.)* Attach a bucket, open a table's detail and expire its snapshots, see the gauge's record and export it, see the dbt project and run it; each with its CLI line. Playwright covers each against real sidecars.
+- [x] **Views are real.** *(September 11, all but the Spark read, which is the smoke still to run on the Mac.)* A `view` model is in the catalog, survives a restart, is read by a second process and by `/api/query`; Spark reads it or says why not (recorded).
+- [x] **`lakelet run` prints the DAG by verdict** and runs it; `--burst auto` refuses honestly.
+- [x] **The first rows land early** *(the first batch asserted ≤ 1,000 rows)*: the first batch's row count asserted small in the timing test.
+- [ ] **Tests green** on both CI runners *(green locally on the Mac and in the container; CI after step 6's push)* with the dbt extra installed; the core suite, Vitest, Playwright, cargo.
 - [ ] **You used it for a week** on your bucket and your models (the app brief's last line).
 
 ---

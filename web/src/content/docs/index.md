@@ -19,7 +19,7 @@ Lakelet is a local-first lakehouse: Apache Iceberg tables on Parquet in a folder
 | Saved questions as dbt models with two checks; `dbt run` builds them through the catalog | Built; `dbt run` and `dbt test` pass on the generated project | [Questions](/docs/questions) |
 | `lakelet run`: the dbt DAG with a verdict per model; `view` models as Iceberg views in the catalog (build with `lakelet run`, not `dbt run`; the page says why) | Built | [dbt and views](/docs/dbt) |
 | `lakelet serve`: the local HTTP API with a bearer token and Arrow results | Built; the app runs one per window | [HTTP API](/docs/api) |
-| The desktop app: projects, drop-to-import with a preview, the SQL screen with the verdict before the rows, the streaming grid, the auto-chart, crash recovery, settings | Built, from source; tested with Playwright against real sidecars on macOS and Ubuntu; no installer yet | [The desktop app](/docs/app) |
+| The desktop app: projects, drop-to-import with a preview, attaching a bucket, the SQL screen with the verdict before the rows, the streaming grid, the auto-chart, the table and view detail, the Models screen over `lakelet run`, Simple and Technical mode, the Gauge screen, crash recovery, settings | Built, from source; tested with Playwright against seven real sidecars on macOS and Ubuntu; no installer yet | [The desktop app](/docs/app) |
 | `lakelet tables expire`, `lakelet gauge probe`, `lakelet config` | Built | [Tables](/docs/tables), [The gauge](/docs/gauge), [Config](/docs/config) |
 | `lakelet audit network` | Built; measures zero outbound attempts on the quickstart | [Quickstart](/docs/install) |
 | Installers, brew tap, a PyPI release | Not yet | |

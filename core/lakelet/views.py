@@ -54,9 +54,7 @@ class Views:
         import duckdb
 
         try:
-            arrow = self.project.engine.execute(
-                f"SELECT * FROM ({sql}) LIMIT 0"
-            ).fetch_arrow_table()
+            arrow = self.project.engine.execute(f"SELECT * FROM ({sql}) LIMIT 0").to_arrow_table()
         except duckdb.Error as e:
             raise BadView(str(e).splitlines()[0]) from e
         return assign_fresh_schema_ids(Catalog._convert_schema_if_needed(arrow.schema))

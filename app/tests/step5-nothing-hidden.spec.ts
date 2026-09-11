@@ -13,6 +13,7 @@ import { pageUrl, readStates } from './sidecar';
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
 
 test('every request goes to the dev server or the sidecar on loopback, nowhere else', async ({ page }) => {
+  test.setTimeout(180_000);
   const s = readStates()[2]; // the big-table sidecar: screen 2 is up
   const hosts = new Set<string>();
   const urls: string[] = [];
@@ -47,6 +48,9 @@ test('every request goes to the dev server or the sidecar on loopback, nowhere e
   await expect(page.getByTestId('scatter').locator('svg')).toBeVisible({ timeout: 15_000 });
   await page.getByTestId('export').click();
   await expect(page.getByTestId('gauge-notice')).toContainText('written to');
+  // The Models screen (step 6): dbt compiles the project (it has no models) and the plan comes back empty; nothing leaves.
+  await page.getByTestId('screen-models').click();
+  await expect(page.getByTestId('no-models')).toBeVisible({ timeout: 90_000 });
 
   const allowed = new Set(['localhost:5173', `127.0.0.1:${s.port}`]);
   const strangers = [...hosts].filter((h) => !allowed.has(h));

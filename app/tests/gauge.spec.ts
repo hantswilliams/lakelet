@@ -32,7 +32,8 @@ test('the gauge screen lists the runs, draws the scatter, exports without names,
   await expect(screen).toBeVisible();
   await expect(page.getByTestId('tables')).toHaveCount(0); // the tables screen is the other one
 
-  // Tiles and the list.
+  // Tiles and the list (the tiles say — until the summary arrives; wait for it).
+  await expect(page.getByTestId('tile-runs')).not.toHaveText('—');
   const runsBefore = Number(await page.getByTestId('tile-runs').textContent());
   expect(runsBefore).toBeGreaterThanOrEqual(3);
   await expect(page.getByTestId('tile-within')).not.toHaveText('—');

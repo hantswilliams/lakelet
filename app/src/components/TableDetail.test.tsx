@@ -3,7 +3,7 @@
 // Real-data brief R7: the detail's reclaimable line, the snapshot marks, and the buttons
 // that are `tables sample`, `tables expire` and `tables refresh`.
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { TableDescription } from '../lib/api';
 import { TableDetail } from './TableDetail';
@@ -68,5 +68,51 @@ describe('TableDetail', () => {
     expect(screen.getByTestId('sample').textContent).toContain('c1');
     expect(screen.getByTestId('sample').textContent).toContain('∅');
     expect(screen.getByTestId('sample').textContent).toContain('lakelet tables sample orders');
+  });
+
+  it('a view has its own shape: the query, its version, the model it came from, no snapshots, no expire', () => {
+    const view: TableDescription = {
+      ...local,
+      name: 'big_orders',
+      rows: 0,
+      bytes: 0,
+      kind: 'view',
+      view_sql: 'select * from "main"."orders" where amount > 100',
+      partitioning: 'a view',
+      snapshots: 2,
+      format_version: 1,
+      snapshot_list: [],
+      expirable_snapshots: 0,
+      reclaimable_bytes: 0,
+      last_commit: { operation: 'view version 2', timestamp: new Date().toISOString() },
+      properties: { 'lakelet.dbt-model': 'model.demo.big_orders' },
+    };
+    render(<TableDetail table={view} onSample={noop} onExpire={noop} onRefresh={noop} onClose={noop} />);
+    const detail = screen.getByTestId('detail');
+    expect(detail.dataset.kind).toBe('view');
+    expect(screen.getByTestId('view-sql').textContent).toBe('select * from "main"."orders" where amount > 100');
+    expect(screen.getByTestId('view-version').textContent).toBe('2 versions · this one just now');
+    expect(screen.getByTestId('view-model').textContent).toContain('model.demo.big_orders');
+    expect(screen.getByTestId('view-model').textContent).toContain('lakelet run big_orders');
+    expect(screen.queryByTestId('snapshots')).toBeNull();
+    expect(screen.queryByTestId('expire')).toBeNull();
+    expect(screen.queryByTestId('refresh')).toBeNull();
+    expect(screen.queryByTestId('reclaimable')).toBeNull();
+    expect(screen.getByTestId('no-snapshots').textContent).toContain('nothing to expire');
+    expect(detail.textContent).not.toContain('0 rows');
+    expect(screen.getAllByTestId('command').map((c) => c.textContent)).toEqual(expect.arrayContaining([
+      expect.stringContaining('lakelet tables describe big_orders'),
+      expect.stringContaining('lakelet run big_orders'),
+    ]));
+    // Simple mode says question and Refresh
+    cleanup();
+    render(<TableDetail table={view} mode="simple" onSample={noop} onExpire={noop} onRefresh={noop} onClose={noop} />);
+    expect(screen.getByTestId('detail').textContent).toContain('a question, answered live');
+    expect(screen.getByTestId('view-model').textContent).toContain('the question big_orders');
+    // a view put in the catalog directly names no model and offers no run line
+    cleanup();
+    render(<TableDetail table={{ ...view, properties: {} }} onSample={noop} onExpire={noop} onRefresh={noop} onClose={noop} />);
+    expect(screen.getByTestId('view-model').textContent).toContain('not a dbt model');
+    expect(screen.getAllByTestId('command').some((c) => c.textContent?.includes('lakelet run'))).toBe(false);
   });
 });

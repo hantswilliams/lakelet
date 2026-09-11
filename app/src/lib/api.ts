@@ -59,6 +59,8 @@ export interface TableDescription extends TableInfo {
   snapshots: number;
   format_version: number;
   snapshot_list: Snapshot[];
+  /** A view's properties (`lakelet.dbt-model` names the dbt model it came from); empty for a table. */
+  properties?: Record<string, string>;
 }
 
 export interface ExpireReport {
@@ -91,6 +93,61 @@ export interface GaugeSummary {
   within_2x: number;
   within_2x_share: number | null;
   green_over_3min: number;
+}
+
+/** A test on a dbt model from `schema.yml` (Simple mode calls it a check). */
+export interface ModelTest {
+  name: string;
+  /** `not_null`, `unique`, `accepted_values`, `relationships`, a project's own, or `singular` (a SQL file under `tests/`). */
+  kind: string;
+  column: string | null;
+  unique_id: string;
+}
+
+/** A model's last `lakelet run`, from history. */
+export interface LastRun {
+  ts: string;
+  ok: boolean;
+  seconds: number | null;
+  verdict: string | null;
+  error: string | null;
+}
+
+/** One model of `lakelet run --plan` (`GET /api/run/plan`): compiled, estimated, in dependency order. */
+export interface PlannedModel {
+  name: string;
+  unique_id: string;
+  materialized: string;
+  depends_on: string[];
+  compiled_sql: string;
+  verdict: string | null;
+  words: string | null;
+  reason: string | null;
+  est_wall_local: number | null;
+  est_bytes: number | null;
+  /** The gauge could not estimate it (the run will say). */
+  error: string | null;
+  description: string;
+  path: string;
+  tests: ModelTest[];
+  last_run: LastRun | null;
+}
+
+export interface ModelResult {
+  name: string;
+  status: string;
+  seconds: number;
+  message: string | null;
+}
+
+/** `POST /api/run`: what `lakelet run` did. */
+export interface RunReport {
+  models: PlannedModel[];
+  results: ModelResult[];
+  views_recorded: string[];
+  views_dropped: string[];
+  seconds: number;
+  ok: boolean;
 }
 
 export interface PreviewColumn {
@@ -232,6 +289,17 @@ export class Api {
   /** `lakelet tables refresh <name>`: the files new under the prefix since the attach. */
   refresh(name: string): Promise<{ name: string; added: number; files: number; rows: number }> {
     return this.post(`/tables/${encodeURIComponent(name)}/refresh`, {});
+  }
+
+  /** `lakelet run --plan [select]...`: the DAG through the gauge, nothing built. */
+  runPlan(select: string[] = []): Promise<PlannedModel[]> {
+    return this.get<PlannedModel[]>(select.length ? `/run/plan?select=${encodeURIComponent(select.join(','))}` : '/run/plan');
+  }
+
+  /** `lakelet run [select]... [--run-anyway]`: build the DAG here; a Red model refuses
+   *  (409 `red_refused`) until `run_anyway`. */
+  run(select: string[] = [], runAnyway = false): Promise<RunReport> {
+    return this.post<RunReport>('/run', { select, burst: 'never', run_anyway: runAnyway });
   }
 
   settings(): Promise<Settings> {

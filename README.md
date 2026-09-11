@@ -15,7 +15,7 @@ Your laptop is the warehouse until it can't be. An open-source, local-first lake
 | `build-sessions/` | Build plans, one file per revision, and one log per session |
 | `docs/` | Product spec (Day 0 to 3), Day 0 PRD, v0 build spec, architecture, agent-first strategy, verified facts, financial plan |
 | `core/` | The Python package `lakelet` (from step 0) |
-| `app/` | The desktop shell: Tauri 2 over the core as a sidecar, one window per project (`app-v0-plan.md`, steps 0 and 1) |
+| `app/` | The desktop app: Tauri 2 over the core as a sidecar, one window per project; the Tables, Models and Gauge screens (`app-v0-plan.md`, `real-data-plan.md`) |
 | `examples/sample-data/` | A script that writes a small made-up dataset to try the app and the CLI on (no data files are committed) |
 | `web/` | The Astro site |
 | `deck/` | Pitch deck and executive summary (gitignored) |

@@ -32,6 +32,8 @@ An `s3://bucket/prefix/` of Parquet typed into the same box is attached rather t
 
 Clicking a table opens its detail, which is `lakelet tables describe <name>` as a panel: the columns with their Iceberg types, where the data is, partitioning, the format version, every snapshot newest first (when, the operation, rows and files added, rows after, which is current and which the retention would expire), and the line saying what `expire` would reclaim. **Sample rows** is `lakelet tables sample`, **Expire snapshots** is `lakelet tables expire` and shows its report (snapshots and files removed, bytes reclaimed); an attached table has **Refresh** instead, because its files are not Lakelet's to delete. Row counts everywhere take position deletes off, so a table rebuilt by delete-then-insert (the dbt path) shows the rows it has, not the rows its files hold.
 
+A view (a dbt `view` model built with `lakelet run`, or a view put in the catalog directly) is listed beside the tables and has its own detail: its query, its columns, how many versions it has and when this one was recorded, which dbt model it came from with the `lakelet run <model>` line that rewrites it, and **Sample rows**. It has no snapshots and nothing to expire, because nothing is stored for it; the rows are computed from its query each time it is asked.
+
 ## Screen 2: SQL, the verdict, the rows
 
 Once the project has a table, the SQL box appears above the panel, with the tables and columns for completion. ⌘/Ctrl+Enter runs (or the Run button). The verdict comes back before any row, from the response headers, as the gauge line: Green "Runs here", Yellow "Runs here, slowly", Red "Needs more machine", with the sentence (what it scans, whether it fits in memory, how long). Red is a refusal until **Run anyway**, which is `lakelet sql '…' --run-anyway`. Rows stream into the grid as the core produces them, one 1,000-row batch at a time from the first; the first rows are on screen before the query completes, and the grid keeps 100,000 rows before it says so and names `lakelet sql --format parquet` for the rest. Esc stops a running query wherever the focus is; the core stops the statement at once and history records the run as stopped early.
@@ -40,9 +42,19 @@ A result of exactly two columns, one categorical and one numeric, draws a bar ch
 
 Dates, timestamps, times and decimals show as dates, timestamps, times and numbers; null is ∅.
 
+## The Models screen
+
+**Models** in the bar is the project's dbt DAG through the gauge, screen 7 of the mockups: `lakelet run --plan` as a panel. The list has every model in dependency order with its kind (`view` or `table`), the verdict coloured, the estimate and what it scans, and its last run; the line beside the summary is `lakelet run`. Clicking a model shows its compiled SQL, the models it `ref()`s, its tests from `schema.yml` (`not_null(id)`, `unique(id)`, a singular test by its name), the verdict's sentence, its description and file, and its last `lakelet run` from history (when, how long, or that it failed). **Run all** is `lakelet run`; **Run this** is `lakelet run <model>`. A Red model makes the run refuse the whole DAG, as the CLI does, until **Run anyway** (`--run-anyway`). After a run the notice says how many models built in how long and which views landed in the catalog; the tables panel and the Gauge screen's run list have the result at once. A `view` model is an Iceberg view in the catalog only when built this way; the reason is on [the dbt page](/docs/dbt).
+
+The plan compiles the project with dbt each time the screen opens, so it takes a few seconds; a project without dbt installed says so with the `pip install 'lakelet[dbt]'` line, and a project without models says a model is a SQL file under `models/`.
+
+## Simple and Technical
+
+The **Simple | Technical** switch at the right of the bar is screen 8: the same project in two vocabularies, remembered per window. Technical is everything above: model, test, view, the verdict by colour, the command line beside every button. Simple renames the Models screen **Questions** and shows the DAG as cards: a `view` model is a question *answered live*, a `table` model is *saved as a table*; each card has when it was last refreshed, the wait as a sentence ("Ready in about 2 s", "Takes a while: about 4 min", "Too big for this machine right now") instead of a colour, its checks in words (`not_null` on `id` is "id is never empty", `unique` is "id is never repeated", `accepted_values` is "one of the allowed values"), and one **Refresh** button; the top has **Refresh all**. The command lines stay, because Simple hides vocabulary, not what the app does. The view detail follows the switch too. The mapping between the two is one small table in the app, pinned by a test, so both screens say the same words.
+
 ## The Gauge screen
 
-**Gauge** in the bar (beside **Tables**) is the gauge's record, screen 5 of the mockups: this machine's line (RAM, threads, the memory limit, the disk figure, the bandwidth when a bucket has been read), three tiles (runs recorded; the share of completed local runs within 2× of their estimate on time; Green runs that took over three minutes), an estimate-versus-actual scatter on log axes with the diagonal of a perfect estimate and the verdict colouring each point, the run list (when, verdict, where it ran, estimate, actual, bytes scanned; a failed run says so, without its text), and what the gauge has learned on this machine, which is nothing until the correction factors ship. Four buttons are four verbs: `lakelet gauge history` at the top, **Export history** (`lakelet gauge export`: a file in the project, nothing sent; see [the gauge](/docs/gauge)), **Probe the disk again** (`lakelet gauge probe`), and **Reset** (`lakelet gauge reset`, which asks first).
+**Gauge** in the bar (beside **Tables** and **Models**) is the gauge's record, screen 5 of the mockups: this machine's line (RAM, threads, the memory limit, the disk figure, the bandwidth when a bucket has been read), three tiles (runs recorded; the share of completed local runs within 2× of their estimate on time; Green runs that took over three minutes), an estimate-versus-actual scatter on log axes with the diagonal of a perfect estimate and the verdict colouring each point, the run list (when, verdict, where it ran, estimate, actual, bytes scanned; a failed run says so, without its text), and what the gauge has learned on this machine, which is nothing until the correction factors ship. Four buttons are four verbs: `lakelet gauge history` at the top, **Export history** (`lakelet gauge export`: a file in the project, nothing sent; see [the gauge](/docs/gauge)), **Probe the disk again** (`lakelet gauge probe`), and **Reset** (`lakelet gauge reset`, which asks first).
 
 ## Settings
 
@@ -63,17 +75,17 @@ The shell spawns `lakelet serve --port 0 -C <project> --memory-limit <share>`, w
 
 ## Nothing hidden
 
-The app makes no network request the core does not: a Playwright test records every request across both screens, a chart and the settings panel and asserts the only hosts are the page's own server and the sidecar on loopback. The core's own `lakelet audit network` covers the other side. Nothing is downloaded at run time; the chart library evaluates its expressions with an interpreter so the window's content-security policy stays without `unsafe-eval`.
+The app makes no network request the core does not: a Playwright test records every request across the screens (a preview and import, a query with a chart, the settings panel, a Gauge export, a Models plan) and asserts the only hosts are the page's own server and the sidecar on loopback. The core's own `lakelet audit network` covers the other side. Nothing is downloaded at run time; the chart library evaluates its expressions with an interpreter so the window's content-security policy stays without `unsafe-eval`.
 
 ## Tests
 
 ```bash
 cd app/src-tauri && cargo test    # the supervisor, projects and windows, against a fake sidecar
 cd .. && npm test                  # Vitest: the screens' pieces, the command lines, the chart rule, the window's reactions
-npm run e2e                        # Playwright against six real `lakelet serve`s: a 20 M-row table, a stand-in bucket, a zero-day retention among them
+npm run e2e                        # Playwright against seven real `lakelet serve`s: a 20 M-row table, a stand-in bucket, a zero-day retention, a dbt project among them
 ```
 
-The Playwright suite starts its own sidecars on temp projects (and, for the attach screen, a Moto server standing in for a bucket, with public-read ACLs so the anonymous path is real); nothing of yours is touched. On a laptop it runs the spec files on several workers at once and each file owns the sidecar it writes to.
+The Playwright suite starts its own sidecars on temp projects (and, for the attach screen, a Moto server standing in for a bucket, with public-read ACLs so the anonymous path is real; for the Models screen, a dbt project with a view model, a table model over it and two tests); nothing of yours is touched. On a laptop it runs the spec files on several workers at once and each file owns the sidecar it writes to.
 
 ## When it does not start
 

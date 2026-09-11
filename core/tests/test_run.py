@@ -174,6 +174,7 @@ def test_lakelet_run_builds_the_dag_and_records_views(project) -> None:
     described = client.get("/api/tables/top").json()
     assert described["kind"] == "view" and described["snapshots"] == 1
     assert described["view_sql"] == top.sql and described["snapshot_list"] == []
+    assert client.get("/api/tables/top/sample?n=5").json() == [{"c": "c2"}], "sample reads a view"
     kinds = {t["name"]: t["kind"] for t in client.get("/api/tables").json()}
     assert kinds == {"by_c": "table", "src": "table", "stg_orders": "view", "top": "view"}
     # a changed view model is a new version; a removed one goes; --select prunes nothing
@@ -287,3 +288,61 @@ def test_the_cli_and_the_routes(project) -> None:
     assert json.loads((Path(root) / ".lakelet" / "dbt" / "target" / "manifest.json").read_text())[
         "nodes"
     ]
+
+
+def test_the_plan_carries_tests_description_and_the_last_run(project) -> None:
+    """Step 6 (the app's Models panel): a model's tests from `schema.yml`, its description,
+    its file, and its last `lakelet run` from history come with the plan."""
+    p = project
+    (p.root / "models" / "schema.yml").write_text(
+        "version: 2\n"
+        "models:\n"
+        "  - name: stg_orders\n"
+        "    description: Orders with a positive amount.\n"
+        "    columns:\n"
+        "      - name: id\n"
+        "        tests: [not_null, unique]\n"
+        "      - name: c\n"
+        "        tests:\n"
+        "          - accepted_values:\n"
+        "              values: ['c0', 'c1', 'c2']\n"
+    )
+    (p.root / "tests").mkdir(exist_ok=True)
+    (p.root / "tests" / "no_negative_totals.sql").write_text(
+        "select * from {{ ref('by_c') }} where total < 0\n"
+    )
+    planned = {m.name: m for m in runner.plan(p)}
+    stg = planned["stg_orders"]
+    assert stg.description == "Orders with a positive amount."
+    assert stg.path == "models/stg_orders.sql"
+    assert [(t.kind, t.column) for t in stg.tests] == [
+        ("accepted_values", "c"),
+        ("not_null", "id"),
+        ("unique", "id"),
+    ]
+    assert [(t.kind, t.column) for t in planned["by_c"].tests] == [("singular", None)]
+    assert planned["by_c"].tests[0].name == "no_negative_totals"
+    assert planned["top"].tests == []
+    assert all(m.last_run is None for m in planned.values()), "nothing has run yet"
+    runner.run(p)
+    planned = {m.name: m for m in runner.plan(p)}
+    last = planned["by_c"].last_run
+    assert last is not None and last.ok and last.verdict == "green" and last.seconds is not None
+    assert last.ts.startswith("20") and last.error is None
+    # the run is the same row the Gauge screen lists
+    assert p.history.model_last_run("model.proj.by_c").sql_text == planned["by_c"].compiled_sql
+    # over the API, and reset forgets it
+    client = httpx.Client(base_url=p.catalog_url, headers={"Authorization": f"Bearer {p.token}"})
+    over = {m["name"]: m for m in client.get("/api/run/plan").json()}
+    assert over["stg_orders"]["tests"][1] == {
+        "name": "not_null_stg_orders_id",
+        "kind": "not_null",
+        "column": "id",
+        "unique_id": over["stg_orders"]["tests"][1]["unique_id"],
+    }
+    assert over["by_c"]["last_run"]["ok"] is True
+    assert client.get("/api/tables/top").json()["properties"] == {
+        "lakelet.dbt-model": "model.proj.top"
+    }
+    assert client.post("/api/gauge/reset", json={}).json()["removed"] == 3
+    assert all(m["last_run"] is None for m in client.get("/api/run/plan").json())

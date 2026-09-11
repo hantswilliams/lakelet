@@ -116,6 +116,9 @@ class TableDescription(TableInfo):
     #: Every snapshot, newest first (real-data brief R7, the app's table detail): id, when,
     #: operation, what it added, whether it is current and whether `expire` would take it.
     snapshot_list: list[dict[str, Any]] = field(default_factory=list)
+    #: A view's properties (`lakelet.dbt-model` names the dbt model it came from); empty
+    #: for a table.
+    properties: dict[str, str] = field(default_factory=dict)
 
 
 def _rows_after(total: int | None, position_deletes: int | None) -> int | None:
@@ -309,6 +312,7 @@ class Tables:
                 },
                 snapshots=view.versions,
                 format_version=1,
+                properties=dict(view.properties),
             )
         md = self._metadata(name)
         info = self._info(name)
@@ -374,11 +378,13 @@ class Tables:
         )
 
     def sample(self, name: str, n: int = 5, truncate: int | None = None) -> list[dict[str, Any]]:
-        if not self._exists(name):
+        if self._exists(name):
+            source = f"lakelet.{NAMESPACE}.{_quoted(name)}"
+        elif name in self.project.engine.views:
+            source = f"memory.{NAMESPACE}.{_quoted(name)}"  # a catalog view, in the session
+        else:
             raise NoSuchTable(name)
-        cursor = self.project.engine.execute(
-            f"SELECT * FROM lakelet.{NAMESPACE}.{_quoted(name)} LIMIT {int(n)}"
-        )
+        cursor = self.project.engine.execute(f"SELECT * FROM {source} LIMIT {int(n)}")
         names = [d[0] for d in cursor.description]
         rows = cursor.fetchall()
 
