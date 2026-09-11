@@ -17,6 +17,7 @@ import { StatusDot, type Status } from './components/StatusDot';
 // Screen 2 carries Arrow and CodeMirror; loaded once there is a table to ask, so the first
 // paint (the launch budget, §3.2) does not wait for them.
 const Query = lazy(() => import('./screens/Query').then((m) => ({ default: m.Query })));
+const Gauge = lazy(() => import('./screens/Gauge').then((m) => ({ default: m.Gauge })));
 import { Tables } from './screens/Tables';
 import { Welcome } from './screens/Welcome';
 
@@ -33,6 +34,7 @@ export default function App() {
   const [detail, setDetail] = useState<string>();
   const [session, setSession] = useState<Session>();
   const [health, setHealth] = useState<Health>();
+  const [screen, setScreen] = useState<'tables' | 'gauge'>('tables');
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [error, setError] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -48,6 +50,9 @@ export default function App() {
 
   const refreshTables = useCallback(async () => {
     if (session) setTables(await new Api(session).tables());
+  }, [session]);
+  const refreshHealth = useCallback(async () => {
+    if (session) setHealth(await new Api(session).health());
   }, [session]);
 
   // Which project this window has; asked again after opening one into this window.
@@ -152,6 +157,12 @@ export default function App() {
           <OpenMenu recent={recent} current={project} disabled={!!busy} onOpen={(p) => open(p)} onPick={() => open()} />
         )}
         {api && (
+          <nav className="screens" aria-label="Screens" data-testid="screens">
+            <button type="button" className={screen === 'tables' ? 'on' : ''} onClick={() => setScreen('tables')} aria-pressed={screen === 'tables'} data-testid="screen-tables">Tables</button>
+            <button type="button" className={screen === 'gauge' ? 'on' : ''} onClick={() => setScreen('gauge')} aria-pressed={screen === 'gauge'} data-testid="screen-gauge">Gauge</button>
+          </nav>
+        )}
+        {api && (
           <button type="button" className="quiet" onClick={() => setSettingsOpen((o) => !o)} aria-pressed={settingsOpen} title="Settings (⌘/Ctrl+,)" data-testid="settings-button">Settings</button>
         )}
       </header>
@@ -182,7 +193,12 @@ export default function App() {
                 <pre>{session.initialised}</pre>
               </section>
             )}
-            {health && (
+            {session && status !== 'down' && screen === 'gauge' && (
+              <Suspense fallback={<section className="gauge-screen" data-testid="gauge-loading" />}>
+                <Gauge session={session} health={health} onHealthChanged={refreshHealth} />
+              </Suspense>
+            )}
+            {health && screen === 'tables' && (
               <section className="health" data-testid="health">
                 <div><b>{health.lakelet}</b><span>lakelet</span></div>
                 <div><b>{health.duckdb}</b><span>DuckDB</span></div>
@@ -194,10 +210,10 @@ export default function App() {
                 <div data-testid="ready-ms"><b>{session?.ready_ms ? `${session.ready_ms} ms` : '—'}</b><span>core ready in</span></div>
               </section>
             )}
-            {session && status !== 'down' && tables.length > 0 && (
-              <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} /></Suspense>
+            {session && status !== 'down' && screen === 'tables' && tables.length > 0 && (
+              <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} onDone={() => void refreshTables()} /></Suspense>
             )}
-            {session && status !== 'down' && <Tables session={session} tables={tables} aws={health?.aws} onChanged={refreshTables} />}
+            {session && status !== 'down' && screen === 'tables' && <Tables session={session} tables={tables} aws={health?.aws} onChanged={refreshTables} />}
           </>
         )}
       </main>

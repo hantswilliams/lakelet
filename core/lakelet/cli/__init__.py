@@ -746,6 +746,42 @@ def gauge_probe(
     )
 
 
+@gauge_app.command("export")
+def gauge_export(
+    out_path: Annotated[
+        str | None,
+        typer.Option(
+            "--out",
+            help="Where to write; '-' for stdout. Default: .lakelet/exports/gauge-<time>.jsonl",
+        ),
+    ] = None,
+) -> None:
+    """Write the calibration record as JSON lines: fingerprint, machine class, operator
+    counts, estimate, actual. Never SQL, table or column names, or values (PRD F0.3.9)."""
+    from lakelet.gauge.export import export_lines
+
+    with _open() as p:
+        if out_path == "-":
+            for line in export_lines(p.history.all_runs()):
+                print(line)
+            return
+        path, count = p.export_gauge(Path(out_path) if out_path else None)
+    out.print(f"{count} run(s) written to {path}", highlight=False)
+
+
+@gauge_app.command("reset")
+def gauge_reset(
+    yes: Annotated[bool, typer.Option("--yes", help="Do not ask.")] = False,
+) -> None:
+    """Forget every recorded run and what the gauge learned from them."""
+    with _open() as p:
+        n = p.history.summary()["runs"]
+        if not yes and not typer.confirm(f"Forget {n} recorded run(s) in {p.root}?"):
+            raise typer.Exit(0)
+        removed = p.history.reset()
+    out.print(f"{removed} run(s) forgotten", highlight=False)
+
+
 @gauge_app.command("history")
 def gauge_history(last: Annotated[int, typer.Option("--last", help="Runs to show.")] = 20) -> None:
     """Recent runs: verdict, estimate, actual."""
@@ -755,6 +791,16 @@ def gauge_history(last: Annotated[int, typer.Option("--last", help="Runs to show
     with _open() as p:
         runs = p.history.recent(last)
         cache = inputs.load_machine_cache(p.cache_dir)
+        summary = p.history.summary()
+    share = summary["within_2x_share"]
+    within = (
+        f"{share:.0%} within 2x on time" if share is not None else "no completed runs to compare"
+    )
+    out.print(
+        f"{summary['runs']} run(s) recorded; {within}; "
+        f"{summary['green_over_3min']} Green run(s) over 3 min",
+        highlight=False,
+    )
     mbps = cache.get("throughput_local_mbps")
     method = inputs.probe_method(cache)
     if mbps and method == "cached":

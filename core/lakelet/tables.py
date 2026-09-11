@@ -109,6 +109,17 @@ class TableDescription(TableInfo):
     last_commit: dict[str, Any] = field(default_factory=dict)
     snapshots: int = 0
     format_version: int = 2
+    #: Every snapshot, newest first (real-data brief R7, the app's table detail): id, when,
+    #: operation, what it added, whether it is current and whether `expire` would take it.
+    snapshot_list: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _rows_after(total: int | None, position_deletes: int | None) -> int | None:
+    """A snapshot's live rows from its summary: DuckDB's `total-records` counts the data
+    files' rows, deleted ones included; the position deletes on file come off."""
+    if total is None:
+        return None
+    return max(total - (position_deletes or 0), 0)
 
 
 def _sql_literal(text: str) -> str:
@@ -277,9 +288,33 @@ class Tables:
             kept = self._referenced_files(md, exclude={s.snapshot_id for s in expirable})
             gone = self._referenced_files(md, only={s.snapshot_id for s in expirable})
             reclaimable = sum(size for path, size in gone.items() if path not in kept)
+        expirable_ids = {s.snapshot_id for s in expirable}
+
+        def summary_int(snap: Any, key: str) -> int | None:
+            value = snap.summary.additional_properties.get(key) if snap.summary else None
+            return int(value) if value is not None else None
+
+        snapshot_list = [
+            {
+                "id": snap.snapshot_id,
+                "timestamp": datetime.fromtimestamp(snap.timestamp_ms / 1000, tz=UTC).isoformat(),
+                "operation": snap.summary.operation.value if snap.summary else None,
+                "added_rows": summary_int(snap, "added-records"),
+                "added_bytes": summary_int(snap, "added-files-size"),
+                "added_files": summary_int(snap, "added-data-files"),
+                "deleted_rows": summary_int(snap, "added-position-deletes"),
+                "total_rows": _rows_after(
+                    summary_int(snap, "total-records"), summary_int(snap, "total-position-deletes")
+                ),
+                "current": snapshot is not None and snap.snapshot_id == snapshot.snapshot_id,
+                "expirable": snap.snapshot_id in expirable_ids,
+            }
+            for snap in sorted(md.snapshots, key=lambda s: s.timestamp_ms, reverse=True)
+        ]
         return TableDescription(
             **info.__dict__,
             partitioning=partitioning,
+            snapshot_list=snapshot_list,
             expirable_snapshots=len(expirable),
             reclaimable_bytes=reclaimable,
             keep_days=self.project.config.catalog.keep_snapshots_days,

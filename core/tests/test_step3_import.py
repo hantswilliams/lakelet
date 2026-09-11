@@ -173,3 +173,19 @@ def test_every_parquet_type_reads_back_with_the_type_the_preview_promised(
     actual = {f.name: _normalise(str(f.field_type)) for f in table.schema().fields}
     assert actual == promised
     assert table.scan().to_arrow().num_rows == 1
+
+
+def test_row_counts_subtract_position_deletes(project) -> None:
+    """Real-data brief, step 3: the panel said 303 rows for a table DuckDB counted 200
+    after a delete-then-insert rebuild, because a DuckDB delete is a position-delete file
+    and the data files keep their record counts. The list, describe and the snapshot list
+    all take the deletes off."""
+    project.engine.execute("create table lakelet.main.t as select range as id from range(10)")
+    project.engine.execute("delete from lakelet.main.t where id < 6")
+    project.engine.execute("insert into lakelet.main.t select range from range(4)")
+    assert project.engine.execute("select count(*) from t").fetchone()[0] == 8
+    described = project.tables.describe("t")
+    assert described.rows == 8
+    assert [t.rows for t in project.tables.list() if t.name == "t"] == [8]
+    ops = [(s["operation"], s["deleted_rows"], s["total_rows"]) for s in described.snapshot_list]
+    assert ops == [("append", None, 8), ("delete", 6, 4), ("append", None, 10)]

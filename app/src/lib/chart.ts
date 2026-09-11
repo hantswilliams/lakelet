@@ -84,3 +84,57 @@ export function vegaLiteSpec(plan: ChartPlan): Record<string, unknown> {
     },
   };
 }
+
+// -- the Gauge screen's scatter (real-data brief R8) -------------------------------------
+
+/** One completed local run with both numbers: what the scatter plots. */
+export interface GaugePoint { est: number; actual: number; verdict: string; when: string }
+
+const VERDICT_COLOURS = { green: '#1F8A5B', yellow: '#C98A12', red: '#D24B3A' } as const; // the site's verdict tokens
+
+/** Estimate versus actual on log axes with the diagonal of a perfect estimate; the verdict
+ *  colours a point and the legend names it, so colour is never the only carrier. */
+export function scatterSpec(points: GaugePoint[]): Record<string, unknown> {
+  const all = points.flatMap((p) => [p.est, p.actual]).filter((v) => v > 0);
+  const lo = Math.max(Math.min(...all, 1) / 2, 0.001);
+  const hi = Math.max(...all, 1) * 2;
+  return {
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    width: 'container',
+    height: 260,
+    background: 'transparent',
+    layer: [
+      {
+        data: { values: [{ v: lo }, { v: hi }] },
+        mark: { type: 'line', strokeDash: [4, 4], color: LINE, strokeWidth: 1.5 },
+        encoding: { x: { field: 'v', type: 'quantitative' }, y: { field: 'v', type: 'quantitative' } },
+      },
+      {
+        data: { values: points },
+        mark: { type: 'point', filled: true, size: 70, opacity: 0.85, stroke: '#FFFFFF', strokeWidth: 1.5, tooltip: true },
+        encoding: {
+          x: { field: 'est', type: 'quantitative', scale: { type: 'log', domain: [lo, hi] }, axis: { title: 'estimated seconds', format: '~s', tickCount: 5 } },
+          y: { field: 'actual', type: 'quantitative', scale: { type: 'log', domain: [lo, hi] }, axis: { title: 'actual seconds', format: '~s', tickCount: 5 } },
+          color: {
+            field: 'verdict',
+            type: 'nominal',
+            scale: { domain: ['green', 'yellow', 'red'], range: [VERDICT_COLOURS.green, VERDICT_COLOURS.yellow, VERDICT_COLOURS.red] },
+            legend: { title: null, orient: 'top', labelExpr: "datum.label == 'green' ? 'Green · runs here' : datum.label == 'yellow' ? 'Yellow · slowly' : 'Red · more machine'" },
+          },
+          tooltip: [
+            { field: 'when', type: 'nominal', title: 'when' },
+            { field: 'verdict', type: 'nominal', title: 'verdict' },
+            { field: 'est', type: 'quantitative', title: 'estimated s', format: '.2f' },
+            { field: 'actual', type: 'quantitative', title: 'actual s', format: '.2f' },
+          ],
+        },
+      },
+    ],
+    config: {
+      font: FONT,
+      view: { stroke: null },
+      axis: { labelColor: MUTED, titleColor: MUTED, domainColor: LINE, tickColor: LINE, gridColor: GRID, gridWidth: 1, labelFontSize: 12, titleFontSize: 12, titleFontWeight: 500 },
+      legend: { labelColor: MUTED, labelFontSize: 12, symbolType: 'circle' },
+    },
+  };
+}

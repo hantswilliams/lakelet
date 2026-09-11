@@ -19,7 +19,14 @@ export const ROW_CAP = 100_000;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export function Query({ session, tables }: { session: Session; tables: TableInfo[] }) {
+export interface QueryProps {
+  session: Session;
+  tables: TableInfo[];
+  /** After a run completes: a statement may have written a table (the panel and an open detail re-read). */
+  onDone?: () => void;
+}
+
+export function Query({ session, tables, onDone }: QueryProps) {
   const [sql, setSql] = useState('');
   const [state, setState] = useState<RunState>({ kind: 'idle' });
   const [columns, setColumns] = useState<Column[]>([]);
@@ -69,7 +76,15 @@ export function Query({ session, tables }: { session: Session; tables: TableInfo
           const take = batch.length > room ? batch.slice(0, room) : batch;
           count += take.length;
           pending.current.push(...take);
-          if (first) { first = false; flush(); setTiming((t) => ({ ...t, firstRows: performance.now() - t0, firstCount: count })); }
+          if (first) {
+            // The first batch goes to the grid at once; its size is read now, not when
+            // React applies the update (by then later batches have added to `count`).
+            first = false;
+            flush();
+            const firstMs = performance.now() - t0;
+            const firstCount = count;
+            setTiming((t) => ({ ...t, firstRows: firstMs, firstCount }));
+          }
           else if (frame.current === undefined) frame.current = requestAnimationFrame(flush);
           setState({ kind: 'running', verdict: verdict!, rows: count });
           if (count >= ROW_CAP) { capped = true; return false; }
@@ -79,6 +94,7 @@ export function Query({ session, tables }: { session: Session; tables: TableInfo
       flush();
       setTiming((t) => ({ ...t, done: performance.now() - t0 }));
       setState({ kind: 'done', verdict: verdict!, rows: count, seconds: (performance.now() - t0) / 1000, complete: result.complete && !capped, capped });
+      onDone?.();
     } catch (e: unknown) {
       flush();
       if (ac.signal.aborted) {

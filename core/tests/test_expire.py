@@ -62,6 +62,12 @@ def test_expire_removes_old_snapshots_and_only_their_files(project, tmp_path) ->
     assert described.snapshots == snapshots
     # nothing is a week old, so the project's retention would expire nothing
     assert described.expirable_snapshots == 0 and described.reclaimable_bytes == 0
+    # the snapshot list the app's table detail shows: newest first, the current one marked
+    listed = described.snapshot_list
+    assert len(listed) == snapshots and listed[0]["current"] and not listed[1]["current"]
+    assert listed[0]["timestamp"] >= listed[-1]["timestamp"]
+    assert all(not s["expirable"] for s in listed)
+    assert listed[-1]["operation"] == "append" and listed[-1]["added_rows"] == 1000
     assert project.tables.expire("orders").snapshots_removed == 0
     assert _files_under(md.location) == before, "nothing to expire means nothing deleted"
 

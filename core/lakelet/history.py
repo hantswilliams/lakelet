@@ -6,6 +6,7 @@ model will ever need, including the SQL text, which never leaves the machine."""
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -161,6 +162,48 @@ class History:
                 data[column] = json.loads(data[column])
             out.append(Run(**data))
         return out
+
+    def all_runs(self) -> Iterator[Run]:
+        """Every run, oldest first, one at a time (the export, the summary)."""
+        with self.engine.connect() as c:
+            for row in c.execute(runs.select().order_by(runs.c.id)).mappings():
+                data = dict(row)
+                for column in JSON_COLUMNS:
+                    data[column] = json.loads(data[column])
+                yield Run(**data)
+
+    def summary(self) -> dict[str, Any]:
+        """What the Gauge screen's tiles say (real-data brief R8): runs recorded, the share
+        of completed local runs whose actual wall time is within 2x of the estimate either
+        way, and Green runs that took over three minutes (the gauge's promise broken)."""
+        recorded = compared = within = green_over = 0
+        for run in self.all_runs():
+            recorded += 1
+            if run.ran_where != "local" or not run.ran or run.error:
+                continue
+            est, actual = run.est_wall_local, run.actual_wall
+            if est and actual and est > 0 and actual > 0:
+                compared += 1
+                if 0.5 <= actual / est <= 2.0:
+                    within += 1
+            if run.verdict == "green" and actual and actual > 180:
+                green_over += 1
+        return {
+            "runs": recorded,
+            "compared": compared,
+            "within_2x": within,
+            "within_2x_share": (within / compared) if compared else None,
+            "green_over_3min": green_over,
+        }
+
+    def reset(self) -> int:
+        """`lakelet gauge reset`: forget every recorded run, the questions' last runs and
+        the correction factors. Returns the runs removed."""
+        with self.engine.begin() as c:
+            c.execute(question_runs.delete())
+            c.execute(corrections.delete())
+            removed = c.execute(runs.delete()).rowcount
+        return removed
 
     def record_question_run(self, slug: str, run_id: int) -> None:
         now = datetime.now(UTC)

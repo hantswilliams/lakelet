@@ -4,7 +4,7 @@
 
 ## Now
 
-**The real-data round** (`real-data-plan.md`, R1 to R10 accepted 2026-09-11, R3 amended: the demo is an AWS Open Data dataset, read-only, no bucket of ours). Step 0 done the same day: the S3 tests run against Hants' bucket (10 passed, 21 s; the second estimate on a bucket table 3 ms after the metadata cache the run found missing), `aws` in health, `/docs/remote`. Step 1 done (`--anonymous`; Overture `addresses` and `places` attached from the Mac with no credentials, pyiceberg reading anonymously from another process). Step 2 built: attach from the app (the s3:// box, the public switch, the credentials line, the remote preview, Attach, Where, Refresh; Vitest 34, Playwright 19 with a Moto sidecar); to try on the Mac with the Overture prefix. Next: step 3, the table detail and the first flush.
+**The real-data round** (`real-data-plan.md`, R1 to R10 accepted 2026-09-11, R3 amended: the demo is an AWS Open Data dataset, read-only, no bucket of ours). Step 0 done the same day: the S3 tests run against Hants' bucket (10 passed, 21 s; the second estimate on a bucket table 3 ms after the metadata cache the run found missing), `aws` in health, `/docs/remote`. Step 1 done (`--anonymous`; Overture `addresses` and `places` attached from the Mac with no credentials, pyiceberg reading anonymously from another process). Step 2 done: attach from the app, seen on the Mac with the Overture `places` prefix. Step 3 done: the table detail (seen on the Mac with `place` and a rebuilt `orders`), the first flush (a stopwatch error), row counts fixed for tables with deletes, the list and an open detail re-read after a run. Step 4 built: the Gauge screen (tiles, the scatter, the run list) with `gauge export` (the ship brief's S11, pulled forward), `gauge reset`, the probe button; to see on the Mac. Next: step 5, dbt in the core.
 
 ## Next, in order
 
@@ -58,7 +58,7 @@ The sessions of `lakelet-build-sessions.md`, with where each stands. That file i
 | 4 | done 2026-09-10 | The auto-chart (`lib/chart.ts`, Vega-Lite through `vega-interpreter` so no `unsafe-eval`); the window's `restarted` and `down` reactions with "Restart the core"; the settings panel over new core verbs `lakelet config show|set` and `/api/settings`, rewriting one line of `lakelet.toml` in place; ⌘/Ctrl+, and ⌘/Ctrl+K; dates, times and decimals converted per Arrow type in the grid; `examples/sample-data/`. Mac: the line chart in the Tauri window, two kills, a setting saved. |
 | 5 | done 2026-09-11 | §6 measured and recorded line by line in the brief (all but the week of daily use, which is Hants'); `/docs/app` on the site; `lakelet-session-6-desktop-shell.md`; two more gates for "nothing hidden" (every request across both screens goes to the dev server or the sidecar; a release build passes no dev origin, `cargo test --release`); Yellow in the gauge-line tests. |
 
-Gates as of 2026-09-11 (evening): Playwright 19 against five real sidecars (one with a 20 M-row table, one with a Moto bucket), Vitest 34, `cargo test` 8, core 161 on the Mac (158 + 9 skipped in the container, the S3 files against a real bucket by hand); CI green on macOS and Ubuntu for `core`, `app` and Pages.
+Gates as of 2026-09-11 (evening): Playwright 21 against six real sidecars (a 20 M-row table, a Moto bucket, a zero-day retention), Vitest 36, `cargo test` 8, core 162 on the Mac (the S3 files against a real bucket by hand); CI green on macOS and Ubuntu for `core`, `app` and Pages.
 
 ## Core v0, the steps of `core-v0.5-plan.md` §4
 
@@ -70,7 +70,7 @@ Definition of done (core brief §6): tests green on both runners ✓; budgets me
 
 Open:
 
-- [ ] The first Arrow batch reaching the app carries several thousand rows (7,000 on the Mac, 38,000 in the container): the server has that many batches written before the browser reads the first; if the first rows are to land as early as the core produces them, the response's first flush is the place to look. Found 2026-09-10.
+- [x] The first Arrow batch reaching the app carries several thousand rows: it did not; the screen's stopwatch read the count late (2026-09-11, real-data step 3). The first batch is one 1,000-row batch, asserted.
 - [ ] Re-export `deck/lakelet-executive-summary.pdf` from the edited docx (no LibreOffice on the Mac).
 - [ ] `old/deck-before-090826/` is in the public repo's history since `6290775`; purging is `git filter-repo` plus a force push; Hants' call.
 - [ ] `docs/lakelet-financial-plan.docx` is gitignored but still says Burrow inside; `docs/lakelet-product-spec.md` mentions Burrow once.

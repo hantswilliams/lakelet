@@ -318,6 +318,24 @@ class Project:
         for bucket, region in load_public_buckets(self.lakelet_dir).items():
             self._engine.allow_public(self.s3.anonymous_secret(bucket, region))
 
+    def export_gauge(self, out: Path | None = None) -> tuple[Path, int]:
+        """`lakelet gauge export`: the calibration record as JSON lines, the F0.3.9 fields
+        only (gauge/export.py), to ``.lakelet/exports/gauge-<utc time>.jsonl`` unless a
+        path is given. Returns the path and the runs written."""
+        from datetime import UTC, datetime
+
+        from lakelet.gauge.export import export_lines
+
+        if out is None:
+            out = self.lakelet_dir / "exports" / f"gauge-{datetime.now(UTC):%Y%m%d-%H%M%S}.jsonl"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        count = 0
+        with out.open("w") as f:
+            for line in export_lines(self.history.all_runs()):
+                f.write(line + "\n")
+                count += 1
+        return out, count
+
     def allow_public_bucket(self, bucket: str) -> str:
         """Remember a public bucket for this project and open it to the engine now; returns
         the region S3 reports for it."""

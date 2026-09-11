@@ -34,7 +34,7 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 | `GET /health` | | `lakelet` and `duckdb` versions, `project` name and `root`, the `machine` profile (RAM, free disk, threads, memory limit), `throughput_local_mbps` and `bandwidth_mbps` from the cache, `throughput_probe` (`nocache`, `direct`, `cached` or `none`: how the disk figure was measured), and `aws` (`configured`, `source`: `environment`, `profile` or `none`, `profile`, `region`, `endpoint`; never a key). |
 | `GET /tables` | | The list: name, rows, bytes, columns, location, snapshot id, `freshness` (when the current snapshot was committed, ISO 8601), `source` (the prefix an attached table was registered from; null for a table Lakelet wrote), `public` (read without credentials). |
 | `GET /tables/discover?prefix=s3://…&anonymous=false` | | Candidate prefixes with kind, files and bytes; `anonymous=true` lists a public bucket without credentials. 400 `not_registrable` when there are no credentials and the bucket is not declared public. |
-| `GET /tables/{name}` | | `describe`: the list's fields plus partitioning, freshness, last commit, snapshots, format version, and `expirable_snapshots`, `reclaimable_bytes`, `keep_days` for `expire`. 404 `no_such_table`. |
+| `GET /tables/{name}` | | `describe`: the list's fields plus partitioning, freshness, last commit, snapshots, format version, `expirable_snapshots`, `reclaimable_bytes`, `keep_days` for `expire`, and `snapshot_list` (every snapshot newest first: `id`, `timestamp`, `operation`, `added_rows`, `added_files`, `deleted_rows`, `total_rows` with deletes taken off, `current`, `expirable`). 404 `no_such_table`. |
 | `GET /tables/{name}/sample?n=5&truncate=80` | | The first rows. |
 | `POST /preview` | `{path, name?}` | The columns with DuckDB type, Iceberg type and note, and sample rows; for a folder, a list of these, one per file `import` would take. 400 `bad_file`. |
 | `POST /import` | `{path, name?, mode}` with `mode` one of `create`, `replace`, `append` | The table info, or a list of them for a folder. 409 `table_exists`, 400 `bad_file`, 409 `catalog_conflict`. |
@@ -47,6 +47,10 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 | `POST /questions` | `{title, sql}` | The saved question. 400 `sql_error`. |
 | `POST /questions/{slug}/run` | `{allow_red}` | An Arrow IPC stream, and the question's `last_run` is updated when it completes. 404 `no_such_question`. |
 | `GET /history?last=50` | | Recent runs from `.lakelet/history.db`, newest first. |
+| `GET /gauge/summary` | | `runs`, `compared`, `within_2x`, `within_2x_share`, `green_over_3min`: what `gauge history` opens with and the app's Gauge tiles show. |
+| `POST /gauge/export` | `{}` | `lakelet gauge export`: writes `.lakelet/exports/gauge-<time>.jsonl` in the project and answers `{path, runs}`; nothing is sent. |
+| `POST /gauge/reset` | `{}` | `lakelet gauge reset --yes`: `{removed}`. |
+| `POST /gauge/probe` | `{mb?}` | `lakelet gauge probe`: measures the disk again; `{mbps, method, size_bytes}`, and health reads the new figure. |
 | `GET /settings` | | `settings` (`engine.memory_limit`, `engine.threads`, `gauge.share_calibration`, `catalog.keep_snapshots_days` with their values), the `path` of `lakelet.toml`, and a `note` that the engine reads them at start. |
 | `PUT /settings` | `{key, value}` with `value` a string as `lakelet config set` takes it | The same as `GET`, after the one line in `lakelet.toml` is rewritten in place (comments and other sections kept). 400 `not_settable` for any other key or a value of the wrong shape. |
 

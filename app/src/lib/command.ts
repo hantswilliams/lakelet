@@ -49,6 +49,11 @@ export const attachCommand = (name: string, prefix: string, anonymous = false): 
 
 export const refreshCommand = (name: string): string => `lakelet tables refresh ${shellArg(name)}`;
 
+/** The table detail's lines (real-data brief R7). */
+export const describeCommand = (name: string): string => `lakelet tables describe ${shellArg(name)}`;
+export const sampleCommand = (name: string, n = 5): string => `lakelet tables sample ${shellArg(name)}${n === 5 ? '' : ` -n ${n}`}`;
+export const expireCommand = (name: string): string => `lakelet tables expire ${shellArg(name)}`;
+
 export const initCommand = (folder: string): string => `lakelet init ${shellArg(folder)}`;
 
 /** `--` comments outside string literals removed, so folding the SQL onto one line for the
@@ -82,3 +87,9 @@ export function sqlCommand(sql: string, runAnyway = false): string {
   const one = stripComments(sql).replace(/\s+/g, ' ').trim();
   return `lakelet sql ${shellArg(one)}${runAnyway ? ' --run-anyway' : ''}`;
 }
+
+/** The Gauge screen's lines (real-data brief R8). */
+export const gaugeHistoryCommand = (last = 20): string => `lakelet gauge history${last === 20 ? '' : ` --last ${last}`}`;
+export const gaugeExportCommand = (): string => 'lakelet gauge export';
+export const gaugeResetCommand = (): string => 'lakelet gauge reset --yes';
+export const gaugeProbeCommand = (): string => 'lakelet gauge probe';

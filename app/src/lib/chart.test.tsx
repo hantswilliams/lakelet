@@ -44,3 +44,17 @@ describe('planChart', () => {
     expect(plan?.values).toHaveLength(CHART_ROWS);
   });
 });
+
+describe('the gauge scatter (real-data R8)', () => {
+  it('plots on log axes with the diagonal and colours by verdict with a legend', async () => {
+    const { scatterSpec } = await import('./chart');
+    const spec = scatterSpec([{ est: 2, actual: 1.8, verdict: 'green', when: '10:41' }, { est: 90, actual: 246, verdict: 'yellow', when: '10:22' }]) as { layer: Record<string, unknown>[] };
+    expect(spec.layer).toHaveLength(2);
+    const points = spec.layer[1] as { encoding: { x: { scale: { type: string; domain: number[] } }; color: { scale: { domain: string[] }; legend: unknown } } };
+    expect(points.encoding.x.scale.type).toBe('log');
+    expect(points.encoding.x.scale.domain[0]).toBeLessThan(1.8);
+    expect(points.encoding.x.scale.domain[1]).toBeGreaterThan(246);
+    expect(points.encoding.color.scale.domain).toEqual(['green', 'yellow', 'red']);
+    expect(points.encoding.color.legend).toBeTruthy();
+  });
+});

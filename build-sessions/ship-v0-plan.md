@@ -64,7 +64,7 @@ The docs already decided: a Tauri shell with the Python core as a sidecar (build
 - [x] Agree
 - [ ] Change:
 
-**S11. Instrumentation export is `lakelet gauge export`, a JSON-lines file of exactly the fields F0.3.9 allows, sent by partners by hand; the sharing toggle stays off by default everywhere in Day 0.**
+**S11. Instrumentation export is `lakelet gauge export`, a JSON-lines file of exactly the fields F0.3.9 allows, sent by partners by hand; the sharing toggle stays off by default everywhere in Day 0.** *Built September 11, 2026 in the real-data round (step 4, R8), with `gauge reset` and the Gauge screen; what is left for session 10 is `PRIVACY.md` and the first-run wording.*
 *Recommend:* `lakelet gauge export [--out <file>]` (and `GET /api/gauge/export`) writes one line per run with: the fingerprint hash, the operator-class counts, the estimates, the actuals, the machine profile in buckets (RAM to the nearest 8 GB, threads, disk throughput to the nearest 500 MB/s, the platform), the verdict and where it ran; never the SQL, a table name, a column name or a value, and a test asserts it by grepping the file for every table and column name the fixture has. This file is the contract the Day 1 share path sends, so the receiver is built against a format partners have already produced. The PRD's first-run toggle, default on for the app, is deferred with the receiver: a switch that sends nothing should not be on, so `share_calibration` stays `false` everywhere, the settings row says "nothing is sent yet; `lakelet gauge export` writes the file", and `PRIVACY.md` in the repo and the bundle describes every byte that can leave the machine (today: none). This is a deviation from PRD F0.3.9's default, recorded in §8.
 - [x] Agree
 - [ ] Change:

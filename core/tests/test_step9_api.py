@@ -201,6 +201,25 @@ def test_estimate_and_query_stream_arrow_with_the_verdict(served) -> None:
     assert good["verdict"] == "green" and good["ran"] and good["actual_wall"]
 
 
+def test_the_gauge_screen_routes(served) -> None:
+    """Real-data brief R8: summary, export into the project, reset, probe."""
+    p, client, tmp_path = served
+    client.post("/api/import", json={"path": str(tmp_path / "orders.csv")})
+    _rows(client.post("/api/query", json={"sql": "select count(*) from orders"}))
+    summary = client.get("/api/gauge/summary").json()
+    assert summary["runs"] >= 1 and set(summary) >= {"within_2x_share", "green_over_3min"}
+    exported = client.post("/api/gauge/export").json()
+    assert exported["runs"] == summary["runs"] and exported["path"].startswith(str(p.root))
+    from pathlib import Path
+
+    assert "orders" not in Path(exported["path"]).read_text()
+    probe = client.post("/api/gauge/probe", json={"mb": 8}).json()
+    assert probe["mbps"] > 0 and probe["method"] in ("nocache", "direct", "cached")
+    assert client.get("/api/health").json()["throughput_local_mbps"] == pytest.approx(probe["mbps"])
+    assert client.post("/api/gauge/reset").json()["removed"] == summary["runs"]
+    assert client.get("/api/gauge/summary").json()["runs"] == 0
+
+
 def test_red_is_409_with_the_estimate_unless_allowed(served) -> None:
     p, client, tmp_path = served
     client.post("/api/import", json={"path": str(tmp_path / "orders.csv")})

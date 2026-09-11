@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pyarrow as pa
 import pyarrow.fs as pafs
@@ -131,6 +131,22 @@ def remote_name(prefix: str) -> str:
     if "=" in segment:
         segment = segment.split("=", 1)[1]
     return identifier(segment)
+
+
+def iceberg_type_text(t: Any) -> str:
+    """An Iceberg type the way a person reads it: ``struct<xmin: double, xmax: double>``,
+    ``list<string>``, ``map<string, long>``; pyiceberg's own ``str`` carries the field ids,
+    which a schema built from a footer does not have yet (they print as ``-1``)."""
+    from pyiceberg.types import ListType, MapType, StructType
+
+    if isinstance(t, StructType):
+        inner = ", ".join(f"{f.name}: {iceberg_type_text(f.field_type)}" for f in t.fields)
+        return f"struct<{inner}>"
+    if isinstance(t, ListType):
+        return f"list<{iceberg_type_text(t.element_type)}>"
+    if isinstance(t, MapType):
+        return f"map<{iceberg_type_text(t.key_type)}, {iceberg_type_text(t.value_type)}>"
+    return str(t)
 
 
 def inspect(project: Project, prefix: str, anonymous: bool = False) -> RemotePreview:

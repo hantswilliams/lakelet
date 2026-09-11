@@ -60,6 +60,8 @@ lakelet tables sample orders -n 10 # the first rows
 
 Rows and bytes come from the current snapshot's manifests, so they are exact for what was written; position deletes from a `MERGE INTO` are not subtracted from the row count. `describe`'s freshness is the current snapshot's timestamp and its last commit is that snapshot's summary.
 
+Row counts in `tables list` and `describe` are the data files' record counts less the position deletes on file, which is exact for DuckDB's own deletes (one entry per row) and an upper bound for an equality delete written by another engine.
+
 ## Snapshots, history and expiry
 
 Every write is an Iceberg snapshot, and an Iceberg table never deletes a data file on its own: a table rebuilt in place (a `dbt run`, a `DELETE` then `INSERT`) keeps every previous version's files until snapshots are expired, and `import --replace` drops and recreates the table, leaving the old table's files in the same folder. Nothing in Lakelet removes files unless you ask, because that is the one thing that cannot be undone.

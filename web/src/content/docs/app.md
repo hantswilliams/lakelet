@@ -30,13 +30,19 @@ The tables panel lists every table with rows, size, columns and when it was last
 
 An `s3://bucket/prefix/` of Parquet typed into the same box is attached rather than imported: the preview shows one file's columns with the Iceberg type each becomes, how many files and bytes would be registered, and one button, **Attach as name**, which is `lakelet tables attach <name> s3://…`; nothing is copied. Tick **Public bucket (no credentials)** for a dataset that allows anonymous reads (the line gains `--anonymous`). The core reads AWS credentials from the environment the app was started in; when it has none the box says so before you type a prefix, with the variables to set. The tables panel's **Where** column names the prefix an attached table came from, `public` or `attached`, and its **Refresh** button is `lakelet tables refresh <name>`, adding the files written to the prefix since. [A real bucket](/docs/remote) has the policies and a public dataset to try.
 
+Clicking a table opens its detail, which is `lakelet tables describe <name>` as a panel: the columns with their Iceberg types, where the data is, partitioning, the format version, every snapshot newest first (when, the operation, rows and files added, rows after, which is current and which the retention would expire), and the line saying what `expire` would reclaim. **Sample rows** is `lakelet tables sample`, **Expire snapshots** is `lakelet tables expire` and shows its report (snapshots and files removed, bytes reclaimed); an attached table has **Refresh** instead, because its files are not Lakelet's to delete. Row counts everywhere take position deletes off, so a table rebuilt by delete-then-insert (the dbt path) shows the rows it has, not the rows its files hold.
+
 ## Screen 2: SQL, the verdict, the rows
 
-Once the project has a table, the SQL box appears above the panel, with the tables and columns for completion. ⌘/Ctrl+Enter runs (or the Run button). The verdict comes back before any row, from the response headers, as the gauge line: Green "Runs here", Yellow "Runs here, slowly", Red "Needs more machine", with the sentence (what it scans, whether it fits in memory, how long). Red is a refusal until **Run anyway**, which is `lakelet sql '…' --run-anyway`. Rows stream into the grid as the core produces them; the first rows are on screen before the query completes, and the grid keeps 100,000 rows before it says so and names `lakelet sql --format parquet` for the rest. Esc stops a running query wherever the focus is; the core stops the statement at once and history records the run as stopped early.
+Once the project has a table, the SQL box appears above the panel, with the tables and columns for completion. ⌘/Ctrl+Enter runs (or the Run button). The verdict comes back before any row, from the response headers, as the gauge line: Green "Runs here", Yellow "Runs here, slowly", Red "Needs more machine", with the sentence (what it scans, whether it fits in memory, how long). Red is a refusal until **Run anyway**, which is `lakelet sql '…' --run-anyway`. Rows stream into the grid as the core produces them, one 1,000-row batch at a time from the first; the first rows are on screen before the query completes, and the grid keeps 100,000 rows before it says so and names `lakelet sql --format parquet` for the rest. Esc stops a running query wherever the focus is; the core stops the statement at once and history records the run as stopped early.
 
 A result of exactly two columns, one categorical and one numeric, draws a bar chart above the grid, in the rows' order; a date or timestamp and a numeric draws a line; anything else draws nothing. The chart comes from the first 5,000 rows and has at most 40 bars.
 
 Dates, timestamps, times and decimals show as dates, timestamps, times and numbers; null is ∅.
+
+## The Gauge screen
+
+**Gauge** in the bar (beside **Tables**) is the gauge's record, screen 5 of the mockups: this machine's line (RAM, threads, the memory limit, the disk figure, the bandwidth when a bucket has been read), three tiles (runs recorded; the share of completed local runs within 2× of their estimate on time; Green runs that took over three minutes), an estimate-versus-actual scatter on log axes with the diagonal of a perfect estimate and the verdict colouring each point, the run list (when, verdict, where it ran, estimate, actual, bytes scanned; a failed run says so, without its text), and what the gauge has learned on this machine, which is nothing until the correction factors ship. Four buttons are four verbs: `lakelet gauge history` at the top, **Export history** (`lakelet gauge export`: a file in the project, nothing sent; see [the gauge](/docs/gauge)), **Probe the disk again** (`lakelet gauge probe`), and **Reset** (`lakelet gauge reset`, which asks first).
 
 ## Settings
 
@@ -64,7 +70,7 @@ The app makes no network request the core does not: a Playwright test records ev
 ```bash
 cd app/src-tauri && cargo test    # the supervisor, projects and windows, against a fake sidecar
 cd .. && npm test                  # Vitest: the screens' pieces, the command lines, the chart rule, the window's reactions
-npm run e2e                        # Playwright against five real `lakelet serve`s, one with a 20 M-row table, one with a stand-in bucket
+npm run e2e                        # Playwright against six real `lakelet serve`s: a 20 M-row table, a stand-in bucket, a zero-day retention among them
 ```
 
 The Playwright suite starts its own sidecars on temp projects (and, for the attach screen, a Moto server standing in for a bucket, with public-read ACLs so the anonymous path is real); nothing of yours is touched. On a laptop it runs the spec files on several workers at once and each file owns the sidecar it writes to.

@@ -6,7 +6,8 @@
 // second with half the first's memory limit, as the shell gives a second window (A8); the
 // third with a 20 M-row table for the streaming gate; the fourth with the gauge thresholds
 // lowered so every query is Red; the fifth with a stand-in bucket (Moto, public-read) for
-// the attach screen, its credentials in the sidecar's environment.
+// the attach screen, its credentials in the sidecar's environment; the sixth with the
+// snapshot retention at zero days and an orders table, for the table detail.
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -22,18 +23,19 @@ export interface Started {
   s3?: { endpoint: string; pid: number; flag: string; prefix: string };
 }
 
-export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean; s3?: boolean }
+export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean; s3?: boolean; detail?: boolean }
 
 // Each spec file owns what it imports into a sidecar; the files run in parallel outside CI.
 // step 0 → the first; step 2 → the second (and counts its tables); steps 3 and 4 → the
 // third (big) and the fourth (Red); step 4's settings → the second's lakelet.toml only;
-// the real-data round's attach test → the fifth (s3).
+// the real-data round's attach test → the fifth (s3); its table-detail test → the sixth.
 export const SIDECARS: SidecarSpec[] = [
   { memoryLimit: '2GB' },
   { memoryLimit: '1GB' },
   { memoryLimit: '2GB', big: true },
   { memoryLimit: '1GB', red: true },
   { memoryLimit: '1GB', s3: true },
+  { memoryLimit: '1GB', detail: true },
 ];
 
 export const BIG_ROWS = 20_000_000;
@@ -69,7 +71,7 @@ async function startMoto(project: string): Promise<{ endpoint: string; child: Ch
   return { endpoint, child, flag };
 }
 
-export async function startSidecar({ memoryLimit, big, red, s3 }: SidecarSpec): Promise<{ started: Started; child: ChildProcess; extra?: ChildProcess }> {
+export async function startSidecar({ memoryLimit, big, red, s3, detail }: SidecarSpec): Promise<{ started: Started; child: ChildProcess; extra?: ChildProcess }> {
   const exe = sidecarExecutable();
   const project = mkdtempSync(join(tmpdir(), 'lakelet-e2e-'));
   const init = spawnSync(exe, ['init', project, '--probe-mb', '0'], { encoding: 'utf8' });
@@ -80,6 +82,14 @@ export async function startSidecar({ memoryLimit, big, red, s3 }: SidecarSpec): 
     writeFileSync(toml, readFileSync(toml, 'utf8')
       .replace('green_max_seconds = 60', 'green_max_seconds = 0.0000001')
       .replace('yellow_max_seconds = 600', 'yellow_max_seconds = 0.0000002'));
+    writeFileSync(join(project, 'orders.csv'), 'id,customer,amt\n1,c1,1.5\n2,c2,3.0\n3,c1,4.5\n');
+    const imported = spawnSync(exe, ['-C', project, 'import', join(project, 'orders.csv')], { encoding: 'utf8' });
+    if (imported.status !== 0) throw new Error(`import failed:\n${imported.stdout}\n${imported.stderr}`);
+  }
+  if (detail) {
+    // the retention at zero days, so every snapshot but the current one is expirable now
+    const toml = join(project, 'lakelet.toml');
+    writeFileSync(toml, readFileSync(toml, 'utf8').replace('keep_snapshots_days = 7', 'keep_snapshots_days = 0'));
     writeFileSync(join(project, 'orders.csv'), 'id,customer,amt\n1,c1,1.5\n2,c2,3.0\n3,c1,4.5\n');
     const imported = spawnSync(exe, ['-C', project, 'import', join(project, 'orders.csv')], { encoding: 'utf8' });
     if (imported.status !== 0) throw new Error(`import failed:\n${imported.stdout}\n${imported.stderr}`);

@@ -63,7 +63,10 @@ test('the verdict comes before the rows and the first rows before the query comp
   console.log(`verdict at +${verdictMs} ms; first ${firstRows} rows in the grid at +${firstMs} ms; ${expected} rows done at +${doneMs} ms`);
   expect(verdictMs).toBeGreaterThan(0);
   expect(verdictMs).toBeLessThanOrEqual(firstMs);
-  expect(firstRows).toBeLessThan(expected);
+  // The first rows on screen are one batch of the core's stream (real-data brief R9): the
+  // server writes 1,000-row batches and nothing on the way holds them back.
+  expect(firstRows).toBeGreaterThan(0);
+  expect(firstRows).toBeLessThanOrEqual(1000);
   expect(firstMs).toBeLessThan(doneMs);
 });
 

@@ -52,3 +52,14 @@ describe('Copy as command', () => {
     expect(refreshCommand('events')).toBe('lakelet tables refresh events');
   });
 });
+
+describe('the gauge screen lines (real-data R8)', () => {
+  it('are the four verbs', async () => {
+    const { gaugeExportCommand, gaugeHistoryCommand, gaugeProbeCommand, gaugeResetCommand } = await import('./command');
+    expect(gaugeHistoryCommand()).toBe('lakelet gauge history');
+    expect(gaugeHistoryCommand(50)).toBe('lakelet gauge history --last 50');
+    expect(gaugeExportCommand()).toBe('lakelet gauge export');
+    expect(gaugeResetCommand()).toBe('lakelet gauge reset --yes');
+    expect(gaugeProbeCommand()).toBe('lakelet gauge probe');
+  });
+});

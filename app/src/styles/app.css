@@ -122,3 +122,29 @@ button.quiet{font:500 12px var(--mono);color:var(--muted);background:var(--bg);b
 .drop label.check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink)}
 .tables span.where{white-space:nowrap}
 .tables button.small{margin-left:8px;padding:2px 8px;font-size:11px}
+/* real-data round, step 3: the table detail */
+.detail dl.facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;font-size:13.5px;margin:0}
+.detail dl.facts dt{color:var(--muted)}
+.detail dl.facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.detail tr.expirable td{color:var(--muted)}
+.detail footer.actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tables tbody tr.clickable{cursor:pointer}
+.tables tbody tr.clickable:hover td{background:var(--bg)}
+/* real-data round, step 4: the screens nav and the Gauge screen */
+nav.screens{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:8px}
+nav.screens button{font:600 12px var(--sans, system-ui);padding:5px 12px;background:var(--panel);color:var(--muted);border:0;cursor:pointer}
+nav.screens button.on{background:var(--cloud);color:var(--lake)}
+.gauge-screen{display:grid;gap:14px;min-width:0}
+.gauge-screen header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.gauge-screen h2{font-size:16px}
+.gauge-screen .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.gauge-screen .tiles div{padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.gauge-screen .tiles b{display:block;font-size:22px;font-weight:800;letter-spacing:-.01em}
+.gauge-screen .tiles span{color:var(--muted);font-size:13px}
+.gauge-screen table.runs{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.gauge-screen table.runs th,.gauge-screen table.runs td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left}
+.gauge-screen table.runs th{font-size:12px;color:var(--muted);font-weight:600;background:#F6F8FA}
+.gauge-screen table.runs tr:last-child td{border-bottom:0}
+.gauge-screen td.verdict.green{color:var(--local)} .gauge-screen td.verdict.yellow{color:var(--slow)} .gauge-screen td.verdict.red{color:var(--burst)}
+.gauge-screen footer.actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.gauge-screen .confirm{display:inline-flex;align-items:center;gap:8px;font-size:13px}

@@ -318,3 +318,26 @@ def test_a_table_name_from_a_prefix() -> None:
     assert remote_name("s3://b/release/2026-08-19.0/theme=places/type=place/") == "place"
     assert remote_name("s3://b/exports/events/") == "events"
     assert remote_name("s3://b/exports/2024-events") == "t_2024_events"
+
+
+def test_nested_iceberg_types_read_without_field_ids() -> None:
+    import pyarrow as pa
+    from pyiceberg.catalog import Catalog
+
+    from lakelet.register import iceberg_type_text
+
+    arrow = pa.schema(
+        [
+            pa.field("bbox", pa.struct([("xmin", pa.float64()), ("xmax", pa.float64())])),
+            pa.field("websites", pa.list_(pa.string())),
+            pa.field("names", pa.map_(pa.string(), pa.int64())),
+            pa.field("id", pa.string()),
+        ]
+    )
+    fields = Catalog._convert_schema_if_needed(arrow).fields
+    assert [iceberg_type_text(f.field_type) for f in fields] == [
+        "struct<xmin: double, xmax: double>",
+        "list<string>",
+        "map<string, long>",
+        "string",
+    ]

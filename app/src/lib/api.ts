@@ -33,6 +33,63 @@ export interface TableInfo {
   public?: boolean;
 }
 
+export interface Snapshot {
+  id: number;
+  timestamp: string;
+  operation: string | null;
+  added_rows: number | null;
+  added_bytes: number | null;
+  added_files: number | null;
+  deleted_rows: number | null;
+  total_rows: number | null;
+  current: boolean;
+  expirable: boolean;
+}
+
+/** `lakelet tables describe`: the list's fields plus partitioning, the snapshots, and what `expire` would take. */
+export interface TableDescription extends TableInfo {
+  partitioning: string;
+  expirable_snapshots: number;
+  reclaimable_bytes: number;
+  keep_days: number;
+  last_commit: { snapshot_id?: number; operation?: string | null; timestamp?: string };
+  snapshots: number;
+  format_version: number;
+  snapshot_list: Snapshot[];
+}
+
+export interface ExpireReport {
+  name: string;
+  keep_days: number;
+  snapshots_before: number;
+  snapshots_removed: number;
+  files_removed: number;
+  bytes_reclaimed: number;
+}
+
+/** A recorded run (`/api/history`), the fields the Gauge screen reads. */
+export interface HistoryRun {
+  id: number;
+  ts: string;
+  verdict: string | null;
+  ran: boolean;
+  ran_where: string;
+  est_bytes: number | null;
+  est_wall_local: number | null;
+  actual_wall: number | null;
+  actual_bytes: number | null;
+  error: string | null;
+  sql_text: string;
+}
+
+export interface GaugeSummary {
+  runs: number;
+  compared: number;
+  within_2x: number;
+  within_2x_share: number | null;
+  green_over_3min: number;
+}
+
 export interface PreviewColumn {
   name: string;
   duckdb_type: string;
@@ -130,6 +187,43 @@ export class Api {
   /** `lakelet tables attach <name> [--anonymous] <prefix>`: registered in place, nothing copied. */
   attach(name: string, source: string, anonymous = false): Promise<TableInfo> {
     return this.post<TableInfo>('/tables/attach', { name, source, anonymous });
+  }
+
+  history(last = 200): Promise<HistoryRun[]> {
+    return this.get<HistoryRun[]>(`/history?last=${last}`);
+  }
+
+  gaugeSummary(): Promise<GaugeSummary> {
+    return this.get<GaugeSummary>('/gauge/summary');
+  }
+
+  /** `lakelet gauge export`: written into the project, nothing sent. */
+  gaugeExport(): Promise<{ path: string; runs: number }> {
+    return this.post('/gauge/export', {});
+  }
+
+  /** `lakelet gauge reset --yes`. */
+  gaugeReset(): Promise<{ removed: number }> {
+    return this.post('/gauge/reset', {});
+  }
+
+  /** `lakelet gauge probe`: measure the disk again. */
+  gaugeProbe(): Promise<{ mbps: number; method: string; size_bytes: number }> {
+    return this.post('/gauge/probe', {});
+  }
+
+  describe(name: string): Promise<TableDescription> {
+    return this.get<TableDescription>(`/tables/${encodeURIComponent(name)}`);
+  }
+
+  /** `lakelet tables sample <name> -n 5`: the first rows, as objects keyed by column. */
+  sample(name: string, n = 5): Promise<Record<string, unknown>[]> {
+    return this.get<Record<string, unknown>[]>(`/tables/${encodeURIComponent(name)}/sample?n=${n}&truncate=80`);
+  }
+
+  /** `lakelet tables expire <name>`: snapshots past the retention and the files only they used. */
+  expire(name: string): Promise<ExpireReport> {
+    return this.post<ExpireReport>(`/tables/${encodeURIComponent(name)}/expire`, {});
   }
 
   /** `lakelet tables refresh <name>`: the files new under the prefix since the attach. */

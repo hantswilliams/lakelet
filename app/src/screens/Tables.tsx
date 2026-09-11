@@ -7,13 +7,14 @@
 // /api/tables/attach; an attached table's Refresh is /api/tables/{name}/refresh.
 
 import { useEffect, useState } from 'react';
-import { Api, ApiError, type Health, type ImportMode, type Preview, type TableInfo } from '../lib/api';
-import { attachCommand, importCommand, defaultName, isRemote, refreshCommand } from '../lib/command';
+import { Api, ApiError, humanBytes, type Health, type ImportMode, type Preview, type TableDescription, type TableInfo } from '../lib/api';
+import { attachCommand, expireCommand, importCommand, defaultName, isRemote, refreshCommand } from '../lib/command';
 import { inTauri, onDrop, pickFiles, type Session } from '../lib/session';
 import { Command } from '../components/Command';
 import { DropZone } from '../components/DropZone';
 import { PreviewPanel } from '../components/PreviewPanel';
 import { TablesPanel } from '../components/TablesPanel';
+import { TableDetail } from '../components/TableDetail';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const humanFiles = (n: number | null | undefined) => `${(n ?? 0).toLocaleString()} ${n === 1 ? 'file' : 'files'}`;
@@ -50,6 +51,7 @@ export function Tables({ session, tables, aws, onChanged }: TablesProps) {
   const [dropError, setDropError] = useState<string>();
   const [pending, setPending] = useState<Pending>();
   const [done, setDone] = useState<Done>();
+  const [detail, setDetail] = useState<{ table: TableDescription; sample?: Record<string, unknown>[]; error?: string }>();
 
   // A9: a drop previews first. Many files dropped at once: the first is previewed and the
   // rest are named, until a partner asks for more (brief §7's last unknown).
@@ -58,6 +60,7 @@ export function Tables({ session, tables, aws, onChanged }: TablesProps) {
     if (!path) return;
     setDropError(undefined);
     setDone(undefined);
+    setDetail(undefined);
     const remote = isRemote(path);
     setBusy(remote ? 'listing the prefix…' : `reading ${path.split(/[\\/]/).pop()}…`);
     try {
@@ -131,8 +134,66 @@ export function Tables({ session, tables, aws, onChanged }: TablesProps) {
         text: `Refreshed ${r.name}: ${r.added} ${r.added === 1 ? 'file' : 'files'} added; ${r.files} files, ${r.rows.toLocaleString()} rows.`,
       });
       await onChanged();
+      if (detail?.table.name === name) setDetail({ table: await api.describe(name) });
+    } catch (e: unknown) {
+      if (detail?.table.name === name) setDetail({ ...detail, error: message(e) });
+      else setDropError(message(e));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  // An open detail follows the table: a statement on screen 2 that wrote it (a delete, an
+  // insert) changes the list, and the detail re-reads `describe` when its row changes.
+  const detailName = detail?.table.name;
+  const detailKey = tables.find((t) => t.name === detailName)?.freshness ?? null;
+  useEffect(() => {
+    if (!detailName || !detailKey) return;
+    let live = true;
+    api.describe(detailName).then((table) => { if (live) setDetail((d) => (d && d.table.name === detailName ? { ...d, table } : d)); }).catch(() => {});
+    return () => { live = false; };
+  }, [detailName, detailKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // R7: a row opens `describe` as a panel; sample and expire are the verbs they say.
+  async function open(name: string) {
+    setDropError(undefined);
+    setPending(undefined);
+    setBusy(`describing ${name}…`);
+    try {
+      setDetail({ table: await api.describe(name) });
     } catch (e: unknown) {
       setDropError(message(e));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  async function sample() {
+    if (!detail) return;
+    setBusy('reading rows…');
+    try {
+      setDetail({ ...detail, sample: await api.sample(detail.table.name), error: undefined });
+    } catch (e: unknown) {
+      setDetail({ ...detail, error: message(e) });
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  async function expire() {
+    if (!detail) return;
+    const name = detail.table.name;
+    setBusy('expiring…');
+    try {
+      const r = await api.expire(name);
+      setDone({
+        line: expireCommand(name),
+        text: `Expired ${r.snapshots_removed} of ${r.snapshots_before} ${r.snapshots_before === 1 ? 'snapshot' : 'snapshots'} of ${r.name}; ${r.files_removed} ${r.files_removed === 1 ? 'file' : 'files'} removed, ${humanBytes(r.bytes_reclaimed)} reclaimed.`,
+      });
+      await onChanged();
+      setDetail({ table: await api.describe(name) });
+    } catch (e: unknown) {
+      setDetail({ ...detail, error: message(e) });
     } finally {
       setBusy(undefined);
     }
@@ -157,14 +218,25 @@ export function Tables({ session, tables, aws, onChanged }: TablesProps) {
 
   return (
     <>
-      <TablesPanel tables={tables} busy={busy} onRefresh={(name) => void refresh(name)} />
+      <TablesPanel tables={tables} busy={busy} onRefresh={(name) => void refresh(name)} onOpen={(name) => void open(name)} />
       {done && (
         <section className="notice" data-testid="imported">
           <b>{done.text}</b>
           <Command line={done.line} />
         </section>
       )}
-      {pending ? (
+      {detail ? (
+        <TableDetail
+          table={detail.table}
+          sample={detail.sample}
+          busy={busy}
+          error={detail.error}
+          onSample={() => void sample()}
+          onExpire={() => void expire()}
+          onRefresh={() => void refresh(detail.table.name)}
+          onClose={() => setDetail(undefined)}
+        />
+      ) : pending ? (
         <PreviewPanel
           path={pending.path}
           folder={pending.folder}

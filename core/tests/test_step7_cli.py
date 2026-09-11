@@ -186,6 +186,39 @@ def test_gauge_history_lists_runs(project_dir, tmp_path) -> None:
     assert "green" in history.output and "select count(*)" in history.output
 
 
+def test_gauge_export_carries_no_names_and_reset_forgets(project_dir, tmp_path) -> None:
+    """Real-data brief R8, ship brief S11: the export is the F0.3.9 fields and nothing that
+    could name a table, a column, a value or the statement; reset empties the record."""
+    import json
+
+    assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
+    invoke(project_dir, "sql", "select customer, sum(amt) from orders where id > 990 group by 1")
+    invoke(project_dir, "sql", "select * from nope")  # a failure is recorded, without its text
+    exported = invoke(project_dir, "gauge", "export", "--out", "-")
+    assert exported.exit_code == 0, exported.output
+    lines = [json.loads(line) for line in exported.output.splitlines() if line.startswith("{")]
+    assert len(lines) >= 2
+    text = exported.output.lower()
+    for forbidden in ("orders", "customer", "amt", "select", "nope", "sql", "990", "reason"):
+        assert forbidden not in text, forbidden
+    record = next(r for r in lines if r["verdict"] == "green" and r["ran"])
+    assert record["machine"]["ram_gb"] is not None and record["machine"]["threads"]
+    assert record["operator_counts"] and record["est_wall_local"] is not None
+    assert record["actual_wall"] is not None and record["fingerprint"]
+    assert any(r["failed"] for r in lines)
+
+    written = invoke(project_dir, "gauge", "export")
+    assert written.exit_code == 0 and "run(s) written to" in written.output
+    exports = list((project_dir / ".lakelet" / "exports").glob("gauge-*.jsonl"))
+    assert len(exports) == 1 and len(exports[0].read_text().splitlines()) == len(lines)
+
+    history = invoke(project_dir, "gauge", "history")
+    assert "run(s) recorded" in history.output
+    reset = invoke(project_dir, "gauge", "reset", "--yes")
+    assert reset.exit_code == 0 and "forgotten" in reset.output
+    assert "0 run(s) recorded" in invoke(project_dir, "gauge", "history").output
+
+
 def test_not_a_project_is_a_clear_exit_1(tmp_path) -> None:
     result = invoke(tmp_path, "tables", "list")
     assert result.exit_code == 1 and "not a Lakelet project" in result.output

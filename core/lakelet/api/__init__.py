@@ -85,6 +85,10 @@ class QuestionBody(BaseModel):
     sql: str
 
 
+class ProbeBody(BaseModel):
+    mb: int = 512
+
+
 class RunBody(BaseModel):
     allow_red: bool = False
 
@@ -465,5 +469,29 @@ def create_router(project: Project, token: str) -> APIRouter:
     @router.get("/history", dependencies=guarded)
     def history(last: int = 50) -> list[dict[str, Any]]:
         return _plain(project.history.recent(last))
+
+    # -- the gauge screen (real-data brief R8) -----------------------------------------
+
+    @router.get("/gauge/summary", dependencies=guarded)
+    def gauge_summary() -> dict[str, Any]:
+        return project.history.summary()
+
+    @router.post("/gauge/export", dependencies=guarded)
+    def gauge_export() -> dict[str, Any]:
+        """`lakelet gauge export`: the file is written into the project, nothing is sent."""
+        path, count = project.export_gauge()
+        return {"path": str(path), "runs": count}
+
+    @router.post("/gauge/reset", dependencies=guarded)
+    def gauge_reset() -> dict[str, Any]:
+        return {"removed": project.history.reset()}
+
+    @router.post("/gauge/probe", dependencies=guarded)
+    def gauge_probe(body: ProbeBody | None = None) -> dict[str, Any]:
+        """`lakelet gauge probe`: measure the disk again; the health tiles read the result."""
+        from lakelet.project import run_probe
+
+        probe = run_probe(project.root, body.mb if body else 512)
+        return {"mbps": probe.mbps, "method": probe.method, "size_bytes": probe.size_bytes}
 
     return router

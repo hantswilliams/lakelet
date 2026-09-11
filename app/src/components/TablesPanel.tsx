@@ -10,6 +10,8 @@ export interface TablesPanelProps {
   tables: TableInfo[];
   busy?: string;
   onRefresh?: (name: string) => void;
+  /** A row opens the table's detail (real-data brief R7). */
+  onOpen?: (name: string) => void;
 }
 
 function Where({ t }: { t: TableInfo }) {
@@ -21,7 +23,7 @@ function Where({ t }: { t: TableInfo }) {
   );
 }
 
-export function TablesPanel({ tables, busy, onRefresh }: TablesPanelProps) {
+export function TablesPanel({ tables, busy, onRefresh, onOpen }: TablesPanelProps) {
   return (
     <section className="tables" data-testid="tables">
       <h2>Tables</h2>
@@ -32,7 +34,7 @@ export function TablesPanel({ tables, busy, onRefresh }: TablesPanelProps) {
           <thead><tr><th>Table</th><th>Rows</th><th>Size</th><th>Columns</th><th>Updated</th><th>Where</th></tr></thead>
           <tbody>
             {tables.map((t) => (
-              <tr key={t.name} data-testid={`table-${t.name}`}>
+              <tr key={t.name} data-testid={`table-${t.name}`} className={onOpen ? 'clickable' : ''} onClick={() => onOpen?.(t.name)} title={onOpen ? `lakelet tables describe ${t.name}` : undefined}>
                 <td className="mono">{t.name}</td>
                 <td>{t.rows.toLocaleString()}</td>
                 <td>{humanBytes(t.bytes)}</td>
@@ -41,7 +43,7 @@ export function TablesPanel({ tables, busy, onRefresh }: TablesPanelProps) {
                 <td>
                   <Where t={t} />
                   {t.source && onRefresh && (
-                    <button type="button" className="quiet small" onClick={() => onRefresh(t.name)} disabled={!!busy} data-testid={`refresh-${t.name}`}>Refresh</button>
+                    <button type="button" className="quiet small" onClick={(e) => { e.stopPropagation(); onRefresh(t.name); }} disabled={!!busy} data-testid={`refresh-${t.name}`}>Refresh</button>
                   )}
                 </td>
               </tr>

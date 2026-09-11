@@ -354,6 +354,8 @@ Options:
 
 Commands:
   probe    Measure local disk throughput again and record it for the gauge (a...
+  export   Write the calibration record as JSON lines: fingerprint, machine class,...
+  reset    Forget every recorded run and what the gauge learned from them.
   history  Recent runs: verdict, estimate, actual.
 ```
 
@@ -368,6 +370,32 @@ Usage: lakelet gauge probe [OPTIONS]
 Options:
   --mb <int>  Size of the probe file.  [default: 512]
   --help      Show this message and exit.
+```
+
+#### `lakelet gauge export`
+
+```text
+Usage: lakelet gauge export [OPTIONS]
+
+  Write the calibration record as JSON lines: fingerprint, machine class, operator
+  counts, estimate, actual. Never SQL, table or column names, or values (PRD F0.3.9).
+
+Options:
+  --out <str>  Where to write; '-' for stdout. Default:
+               .lakelet/exports/gauge-<time>.jsonl
+  --help       Show this message and exit.
+```
+
+#### `lakelet gauge reset`
+
+```text
+Usage: lakelet gauge reset [OPTIONS]
+
+  Forget every recorded run and what the gauge learned from them.
+
+Options:
+  --yes   Do not ask.
+  --help  Show this message and exit.
 ```
 
 #### `lakelet gauge history`

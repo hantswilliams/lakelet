@@ -42,6 +42,11 @@ test('every request goes to the dev server or the sidecar on loopback, nowhere e
   await page.keyboard.press(`${mod}+,`);
   await expect(page.getByTestId('settings')).toBeVisible();
   await page.keyboard.press('Escape');
+  // The Gauge screen (real-data round): the scatter, and an export that writes a file, sends nothing.
+  await page.getByTestId('screen-gauge').click();
+  await expect(page.getByTestId('scatter').locator('svg')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('export').click();
+  await expect(page.getByTestId('gauge-notice')).toContainText('written to');
 
   const allowed = new Set(['localhost:5173', `127.0.0.1:${s.port}`]);
   const strangers = [...hosts].filter((h) => !allowed.has(h));
