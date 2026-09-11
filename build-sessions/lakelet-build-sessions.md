@@ -2,6 +2,8 @@
 
 *Amended September 8, 2026 by `build-sessions/core-v0.5-plan.md` §8. The brief is the authority for the core; this file is the map of the sessions around it.*
 
+*Amended September 11, 2026, later the same day: session 9 is widened into the real-data round (`real-data-plan.md`: real S3, dbt views, the Gauge, table-detail and Models screens) and comes before session 10, whose brief (`ship-v0-plan.md`) is accepted and waits.*
+
 *Amended September 11, 2026 (Hants, in conversation): session 7, the ask box, is deprioritised; it stays in the map but is not next. Session 6 is at step 5 of `app-v0-plan.md`. The order after step 5 is decided and kept in `TASKS.md` ("Next, in order"): the two core items, then session 10, 9, 8, 5; `TASKS.md` is the only place status lives.*
 
 ## Before session 1 (decisions, not code)

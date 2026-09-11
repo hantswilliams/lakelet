@@ -4,7 +4,7 @@
 
 ## Now
 
-**Session 10, ship**: needs its own brief with decisions first (`ship-v0-plan.md`, in the shape of the app brief): the bundled sidecar (how the Python core is frozen and where it lives in the bundle), signed installers for macOS and Ubuntu, the "under 200 MB" claim measured, the frozen sidecar's spawn-to-ready against the 1.5 s budget, brew tap, the per-operator-class correction (M7), the engines smoke test through `catalog serve`, instrumentation export, partner onboarding. Session 6 closed 2026-09-11 with step 5: `app-v0-plan.md` §6 measured line by line, `/docs/app`, `lakelet-session-6-desktop-shell.md`.
+**The real-data round** (session 9 widened): the brief is written and waiting on Hants: `real-data-plan.md`, R1 to R10 (the step 8 suite against a real bucket, the demo bucket, attach from the app, the table detail, the Gauge screen with export, `lakelet run` with the DAG by verdict, dbt views as Iceberg views in the catalog, the Models panel and Simple mode, the first flush). Decided 2026-09-11: ship (`ship-v0-plan.md`, S1 to S14 accepted the same day) waits until this round is done. Needs from Hants before step 0: a private bucket and an IAM user scoped to it; before step 1: a public-read bucket for the demo.
 
 ## Next, in order
 
@@ -12,10 +12,11 @@ Decided 2026-09-11 (Hants, in conversation). Each item names the document that s
 
 1. ~~Core: the disk-throughput probe~~ **done 2026-09-11** (`decisions-for-review_091126.md` 1 to 3): the probe reads with the cache bypassed (`O_DIRECT`, `F_NOCACHE`), the method is recorded, `lakelet gauge probe` measures again, health and the app's tile flag a cached figure. To run on the Mac: `lakelet gauge probe` in `~/lakelet-demo`.
 2. ~~Core: snapshot expiry~~ **done 2026-09-11** (decision 4): `lakelet tables expire [<name>|--all] [--keep-days N]`, `catalog.keep_snapshots_days` (7, settable), `describe` names what is reclaimable, `POST /api/tables/{name}/expire`; attached tables refused; orphans from `import --replace` swept after an hour's grace. Five tests in `test_expire.py`.
-3. **Session 10, ship** (`lakelet-build-sessions.md`): signed installers with the sidecar and the DuckDB extensions bundled (D33), the "under 200 MB" claim measured, the frozen sidecar's spawn-to-ready measured against the 1.5 s budget (the app brief's last known unknown), brew tap, the per-operator-class correction (M7), the `catalog serve` engines smoke test through the real verb, instrumentation export, partner onboarding. Needs its own brief with decisions first.
-4. **Session 9, dbt and the Simple/Technical screens**: the materialisation already ships (2026-09-09); still inherited: lifting `tests/dbt_plugin.py` into the package, git auto-commit on save, table-level lineage (D30, D32), the DAG by verdict, the vocabulary mapping. Needs its own brief.
-5. **Session 8, burst end to end**: control plane, job token, cap → budget, catalog lease pushing the metadata tree (D26), `publish`. Partner intake (five questions) runs before it. Session 3 (the Fargate worker spike, throwaway) can run any time in parallel and should run before this.
-6. **Session 5, `lakelet mcp`** (after session 8, M6).
+3. **The real-data round** (`real-data-plan.md`, session 9 widened; decided 2026-09-11 to come before ship): real S3 (the step 8 suite against Hants' bucket; the demo bucket), attach from the app, the table detail, the Gauge screen with `gauge export`, `lakelet run` with the DAG by verdict, dbt `view` models as Iceberg views in the catalog, the Models panel and Simple/Technical, the first Arrow flush. Git auto-commit and screen 9 go to the round after. **Brief written 2026-09-11, R1 to R10 waiting to be ticked.**
+4. **Session 10, ship** (`lakelet-build-sessions.md`): signed installers with the sidecar and the DuckDB extensions bundled (D33), the "under 200 MB" claim measured, the frozen sidecar's spawn-to-ready measured against the 1.5 s budget (the app brief's last known unknown), brew tap, the per-operator-class correction (M7), the `catalog serve` engines smoke test through the real verb, instrumentation export, partner onboarding. **Brief written and S1 to S14 accepted 2026-09-11 (`ship-v0-plan.md`); the build follows the real-data round.**
+5. **Session 9, the rest**: what the real-data round leaves: git auto-commit on save, screen 9 (versions, restore), table-level lineage (D32). Needs a brief of its own after the round.
+6. **Session 8, burst end to end**: control plane, job token, cap → budget, catalog lease pushing the metadata tree (D26), `publish`. Partner intake (five questions) runs before it. Session 3 (the Fargate worker spike, throwaway) can run any time in parallel and should run before this.
+7. **Session 5, `lakelet mcp`** (after session 8, M6).
 
 **Parked**: **Session 7, the ask box** and `lakelet ask` (M11), deprioritised 2026-09-11; ⌘/Ctrl+K stays reserved for it, and the settings for model providers with it.
 
@@ -24,7 +25,10 @@ Decided 2026-09-11 (Hants, in conversation). Each item names the document that s
 - [ ] Clean-machine quickstart on a Mac and an Ubuntu under ten minutes (core brief §6, step 7 gate).
 - [ ] Reference-laptop (16 GB) timings: `LAKELET_PERF=1` CSV imports, the ten-thousand-file registration against RustFS, the TPC-H SF1 time table with `LAKELET_TPCH=1`; the v0 gauge constants were tuned on an 18-thread, 64 GB machine.
 - [ ] Demo-path bucket (core brief §6): a Lakelet-owned bucket with a public dataset, prepared with `tables attach` and nothing else, Red with the bandwidth sentence from a laptop, pyiceberg reading it from another process.
-- [ ] Trademark search for "Lakelet" (USPTO, and the PyPI name); PRD D4.3 says before publishing, and the repo is public.
+- [ ] Trademark search for "Lakelet" (USPTO, and the PyPI name); PRD D4.3 says before publishing, and the repo is public. Session 10 publishes to PyPI (`ship-v0-plan.md` S7), so the name is needed then; `lakelet-cli` is the fallback.
+- [ ] An Apple Developer Program membership (US$99 a year) for signing and notarising the DMG (`ship-v0-plan.md` S4): the Developer ID certificate and an App Store Connect API key, into the repository's secrets.
+- [ ] A clean Mac (never seen Lakelet) and an Ubuntu 22.04 VM for session 10's install measurements (`ship-v0-plan.md` §6).
+- [ ] AWS for the real-data round (`real-data-plan.md` R2, R3): a private bucket and an IAM user with list, get, put and delete on that bucket only, for the step 8 suite; a public-read bucket for the demo dataset. Keys stay in the shell's environment, never in the repo or `lakelet.toml`.
 - [ ] The founder uses the app daily on a real dataset for a week (app brief §6). `examples/sample-data/make_sample.py` and any CSV are enough to start.
 
 ## The map
@@ -39,8 +43,8 @@ The sessions of `lakelet-build-sessions.md`, with where each stands. That file i
 | 7 | Ask box, `lakelet ask` | **parked** 2026-09-11 | `lakelet-build-sessions.md` |
 | 8 | Burst end to end | not started; partner intake first | `lakelet-build-sessions.md` |
 | 5 | `lakelet mcp` | not started; after 8 | `lakelet-build-sessions.md` |
-| 9 | dbt and the Simple/Technical screens | not started; the materialisation shipped early (2026-09-09) | `lakelet-build-sessions.md` |
-| 10 | Ship: installers, brew tap, correction, smoke test, instrumentation, onboarding | **next**; brief to write | `lakelet-build-sessions.md` |
+| 9 | dbt and the Simple/Technical screens, widened with real S3 and three app screens | **next**; brief written 2026-09-11, R1 to R10 waiting on Hants; git auto-commit and screen 9 to a later brief | `real-data-plan.md` |
+| 10 | Ship: installers, brew tap, correction, smoke test, instrumentation, onboarding | S1 to S14 accepted 2026-09-11; build after the real-data round | `ship-v0-plan.md` |
 
 ## Session 6, the desktop shell (`app-v0-plan.md` §4)
 
@@ -99,7 +103,9 @@ Closed:
 
 ## Decisions waiting on Hants
 
-None open. Decided: `decisions-for-review_091126.md`, all four (2026-09-11), shipped the same day; `app-v0-plan.md` A1 to A14 (2026-09-10); `decisions-for-review_090926.md`, all three (2026-09-09); the order of what follows step 5 (2026-09-11, above).
+- [ ] `real-data-plan.md` R1 to R10 (2026-09-11), the real-data round.
+
+Decided: `ship-v0-plan.md` S1 to S14 (2026-09-11), build held until the real-data round; `decisions-for-review_091126.md`, all four (2026-09-11), shipped the same day; `app-v0-plan.md` A1 to A14 (2026-09-10); `decisions-for-review_090926.md`, all three (2026-09-09); the order of what follows step 5 (2026-09-11, above).
 
 ## Done
 
@@ -107,4 +113,4 @@ None open. Decided: `decisions-for-review_091126.md`, all four (2026-09-11), shi
 - 2026-09-08 — Remote-data decisions R1 to R6 accepted; `core-v0.2-plan.md`. MinIO replaced by Moto, measured. Site and deck compared; M1 to M12 accepted; `core-v0.3-plan.md`, `core-v0.4-plan.md`. §10 wording applied to `web/src` and the deck. Readiness review; gitignore decision; `CLAUDE.md`, `AGENTS.md`, README; `core-v0.5-plan.md` (revision 7). Steps 0 through 9 built and their gates passing on the Mac; Postgres, RustFS, Spark and Trino verified through `compose.yaml`.
 - 2026-09-09 — Repo hygiene commit `7f0ff4a`; CI failed then green after the credential chain and descriptor-leak fixes; developer docs on the site; the dbt materialisation through the catalog; `/docs/transactions`; the desktop shell brief.
 - 2026-09-10 — `app-v0-plan.md` A1 to A14 accepted; steps 0 to 4 of the desktop shell built, each verified on the Mac; core additions along the way (`serve --memory-limit`, `LAKELET_DEV_ORIGIN`, `freshness`, folder preview, verdict headers over CORS, interrupt on disconnect, `config show|set`, `/api/settings`); `examples/sample-data/`. See `lakelet-build-sessions_091026.md`.
-- 2026-09-11 — Session 7 deprioritised; this file restructured (Now, Next in order, the map); the two core items decided (`decisions-for-review_091126.md`) and built: the probe with the cache bypassed and `lakelet gauge probe`, `lakelet tables expire` with `keep_snapshots_days`; step 5 of the app brief, closing session 6. See `lakelet-build-sessions_091126.md` and `lakelet-session-6-desktop-shell.md`.
+- 2026-09-11 — Session 7 deprioritised; this file restructured (Now, Next in order, the map); the two core items decided (`decisions-for-review_091126.md`) and built: the probe with the cache bypassed and `lakelet gauge probe`, `lakelet tables expire` with `keep_snapshots_days`; step 5 of the app brief, closing session 6; the session 10 brief written and accepted (`ship-v0-plan.md`), held behind the real-data round, whose brief was written (`real-data-plan.md`). See `lakelet-build-sessions_091126.md` and `lakelet-session-6-desktop-shell.md`.
