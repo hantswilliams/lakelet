@@ -16,7 +16,7 @@ uv sync
 uv run lakelet --version        # lakelet 0.1.0.dev0
 ```
 
-`uv sync` creates `core/.venv` with the runtime and the development dependencies (pytest, dbt, the S3 mock). To use `lakelet` from any folder, `uv tool install --editable .` in `core/` puts it on your path; the examples below use `uv run` from `core/` and point at a project folder with `-C`.
+`uv sync` creates `core/.venv` with the runtime and the development dependencies (pytest, dbt, the S3 mock); an install from the package needs the `dbt` extra (`lakelet[dbt]`) for `lakelet run`. To use `lakelet` from any folder, `uv tool install --editable .` in `core/` puts it on your path; the examples below use `uv run` from `core/` and point at a project folder with `-C`.
 
 ## The quickstart
 

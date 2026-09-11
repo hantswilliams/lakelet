@@ -232,12 +232,34 @@ class Result:
         self.actual.bytes = int(bytes_total)
 
 
+def _through_views(project: Project, names: list[str]) -> list[str]:
+    """A name that is a catalog view (real-data brief R6) stands for the tables its SQL
+    reads, recursively; the plan's scans are of those tables, never of the view."""
+    views = project.engine.views
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in seen:
+            return
+        seen.add(name)
+        if name in views:
+            for inner in inputs.base_tables(project.engine, views[name]):
+                visit(inner)
+        elif name not in out:
+            out.append(name)
+
+    for name in names:
+        visit(name)
+    return out
+
+
 def _table_scans(project: Project, sql: str, plan: list[dict[str, Any]]) -> tuple[list, list]:
     """The catalog tables the statement reads with their current snapshot ids, and the
     plan's scan nodes each attributed to one of them (by projected columns, then by order),
     pruned with the filters DuckDB pushed down (brief D20)."""
     known = []
-    for name in inputs.base_tables(project.engine, sql):
+    for name in _through_views(project, inputs.base_tables(project.engine, sql)):
         try:
             location = project.store.get_table(NAMESPACE, name)
         except NotFound:
@@ -263,7 +285,7 @@ def _table_scans(project: Project, sql: str, plan: list[dict[str, Any]]) -> tupl
         candidates = [t for t in known if projected and projected <= t["columns"]]
         table = candidates[0] if len(candidates) == 1 else (unassigned[0] if unassigned else None)
         if table is None:
-            scan.update(bytes=0, rows=0, files=0, pruning="full")
+            scan.update(bytes=0, rows=0, files=0, pruning="full", bytes_per_row=8.0, fraction=1.0)
             continue
         if table in unassigned:
             unassigned.remove(table)

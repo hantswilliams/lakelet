@@ -1,0 +1,289 @@
+# Copyright 2026 Lakelet contributors
+# SPDX-License-Identifier: Apache-2.0
+"""Real-data brief R5 and R6, step 5: `lakelet run` builds the dbt DAG through the gauge
+and the catalog; a `view` model is an Iceberg view in Lakelet's catalog that a second
+process, the API and the engine all read; a replaced view gets a version, a removed model's
+view goes; the plugin gives a bare `dbt run` the catalog's views; `--burst auto` refuses;
+a Red model refuses the run until `--run-anyway`; every model is in history."""
+
+import json
+from pathlib import Path
+
+import httpx
+import pytest
+from typer.testing import CliRunner
+
+from lakelet import Project
+from lakelet.cli import app
+from lakelet.dbt import runner
+from lakelet.views import BadView, NoSuchView
+
+pytest.importorskip("dbt.cli.main")
+
+runner_cli = CliRunner()
+
+
+def _models(root: Path) -> None:
+    (root / "models" / "stg_orders.sql").write_text("select id, c, amt from src where amt > 0\n")
+    (root / "models" / "by_c.sql").write_text(
+        "{{ config(materialized='table') }}\n"
+        "select c, sum(amt) as total from {{ ref('stg_orders') }} group by 1\n"
+    )
+    (root / "models" / "top.sql").write_text(
+        "select c from {{ ref('by_c') }} order by total desc limit 1\n"
+    )
+
+
+@pytest.fixture
+def project(tmp_path):
+    root = tmp_path / "proj"
+    Project.init(root, probe_mb=0)
+    _models(root)
+    p = Project.open(root, serve=True)
+    p.engine.execute(
+        "create table lakelet.main.src as "
+        "select range as id, 'c' || (range % 3) as c, range * 1.5 as amt from range(300)"
+    )
+    yield p
+    p.close()
+
+
+def test_views_in_the_catalog(project) -> None:
+    p = project
+    v = p.views.put("by_c_view", "select c, count(*) as n from src group by 1")
+    assert v.version_id == 1 and [f.name for f in v.schema.fields] == ["c", "n"]
+    assert v.schema.fields[0].field_id == 1, "fresh field ids, not pyiceberg's -1"
+    assert v.metadata_location.endswith(".view.metadata.json")
+    assert p.engine.execute("select sum(n) from by_c_view").fetchone()[0] == 300
+    over = p.views.put("over", "select n * 2 as m from by_c_view")
+    assert over.version_id == 1
+    assert p.engine.execute("select sum(m) from over").fetchone()[0] == 600
+    # the same SQL again is not a new version; a change is
+    assert p.views.put("by_c_view", "select c, count(*) as n from src group by 1").version_id == 1
+    changed = p.views.put("by_c_view", "select c, count(*) * 10 as n from src group by 1")
+    assert changed.version_id == 2 and changed.versions == 2
+    assert p.engine.execute("select sum(m) from over").fetchone()[0] == 6000
+    # the gauge sees through the view to the table it reads
+    est = p.estimate("select * from over")
+    assert [t["name"] for t in est.tables] == ["src"] and est.verdict == "green"
+    # refusals
+    with pytest.raises(BadView, match="nope"):
+        p.views.put("bad", "select * from nope")
+    with pytest.raises(BadView, match="is a table"):
+        p.views.put("src", "select 1")
+    # listed beside the tables, as a view
+    listed = {t.name: t for t in p.tables.list()}
+    assert (
+        listed["over"].kind == "view"
+        and listed["over"].view_sql == "select n * 2 as m from by_c_view"
+    )
+    assert listed["src"].kind == "table"
+    assert "`over` (view:" in (p.root / "AGENTS.md").read_text()
+    # a second process reads the views through the catalog
+    root = p.root
+    with Project.open(root) as q:
+        assert q.engine.execute("select sum(m) from over").fetchone()[0] == 6000
+        assert [v.name for v in q.views.list()] == ["by_c_view", "over"]
+    # the REST routes, as Spark would use them
+    c = httpx.Client(base_url=p.catalog_url)
+    assert [
+        i["name"] for i in c.get("/v1/lakelet/namespaces/main/views").json()["identifiers"]
+    ] == [
+        "by_c_view",
+        "over",
+    ]
+    md = c.get("/v1/lakelet/namespaces/main/views/over").json()["metadata"]
+    assert md["format-version"] == 1 and md["current-version-id"] == 1
+    assert md["versions"][0]["representations"] == [
+        {"type": "sql", "sql": "select n * 2 as m from by_c_view", "dialect": "duckdb"}
+    ]
+    created = c.post(
+        "/v1/lakelet/namespaces/main/views",
+        json={
+            "name": "theirs",
+            "schema": {
+                "type": "struct",
+                "schema-id": 0,
+                "fields": [{"id": 1, "name": "d", "required": False, "type": "long"}],
+            },
+            "view-version": {
+                "version-id": 1,
+                "schema-id": 0,
+                "summary": {"engine-name": "spark"},
+                "representations": [{"type": "sql", "sql": "select 1 as d", "dialect": "spark"}],
+                "default-namespace": ["main"],
+            },
+            "properties": {},
+        },
+    )
+    assert created.status_code == 200
+    replaced = c.post(
+        "/v1/lakelet/namespaces/main/views/theirs",
+        json={
+            "updates": [
+                {
+                    "action": "add-view-version",
+                    "view-version": {
+                        "version-id": -1,
+                        "schema-id": -1,
+                        "summary": {},
+                        "representations": [
+                            {"type": "sql", "sql": "select 2 as d", "dialect": "spark"}
+                        ],
+                        "default-namespace": ["main"],
+                    },
+                },
+                {"action": "set-current-view-version", "view-version-id": -1},
+            ]
+        },
+    )
+    assert replaced.json()["metadata"]["current-version-id"] == 2
+    assert c.delete("/v1/lakelet/namespaces/main/views/theirs").status_code == 204
+    assert c.get("/v1/lakelet/namespaces/main/views/theirs").status_code == 404
+    p.views.drop("over")
+    with pytest.raises(NoSuchView):
+        p.views.get("over")
+    assert "over" not in p.engine.views
+
+
+def test_lakelet_run_builds_the_dag_and_records_views(project) -> None:
+    p = project
+    report = runner.run(p)
+    assert [m.name for m in report.models] == ["stg_orders", "by_c", "top"], "dependency order"
+    assert [m.verdict for m in report.models] == ["green", "green", "green"]
+    assert [m.materialized for m in report.models] == ["view", "table", "view"]
+    assert all(r.status == "success" for r in report.results) and report.ok
+    assert report.views_recorded == ["stg_orders", "top"]
+    assert p.tables.describe("by_c").rows == 3
+    assert p.engine.execute("select * from top").fetchone() == ("c2",)
+    top = p.views.get("top")
+    assert top.sql == 'select c from "main"."by_c" order by total desc limit 1'
+    assert top.properties == {"lakelet.dbt-model": "model.proj.top"}
+    # history has a run per model with the estimate and dbt's actual
+    runs = {r.sql_text: r for r in p.history.recent(10)}
+    assert any("sum(amt)" in sql and r.actual_wall for sql, r in runs.items())
+    # the DAG's lines
+    lines = runner.dag_lines(report.models)
+    assert lines[0].startswith("  stg_orders  view   green")
+    # a second process, the API and the engine all read the view
+    with Project.open(p.root) as q:
+        assert q.engine.execute("select * from top").fetchone() == ("c2",)
+    client = httpx.Client(base_url=p.catalog_url, headers={"Authorization": f"Bearer {p.token}"})
+    response = client.post("/api/query", json={"sql": "select * from top"})
+    assert response.status_code == 200 and response.headers["x-lakelet-verdict"] == "green"
+    described = client.get("/api/tables/top").json()
+    assert described["kind"] == "view" and described["snapshots"] == 1
+    assert described["view_sql"] == top.sql and described["snapshot_list"] == []
+    kinds = {t["name"]: t["kind"] for t in client.get("/api/tables").json()}
+    assert kinds == {"by_c": "table", "src": "table", "stg_orders": "view", "top": "view"}
+    # a changed view model is a new version; a removed one goes; --select prunes nothing
+    (p.root / "models" / "top.sql").write_text(
+        "select c from {{ ref('by_c') }} order by total asc limit 1\n"
+    )
+    runner.run(p, select=["top"])
+    assert p.views.get("top").version_id == 2
+    assert p.engine.execute("select * from top").fetchone() == ("c0",)
+    assert [v.name for v in p.views.list()] == ["stg_orders", "top"]
+    (p.root / "models" / "top.sql").unlink()
+    report = runner.run(p)
+    assert report.views_dropped == ["top"] and [v.name for v in p.views.list()] == ["stg_orders"]
+    assert "top" not in p.engine.views
+
+
+def test_burst_auto_refuses_and_red_refuses_until_run_anyway(project) -> None:
+    p = project
+    with pytest.raises(runner.NoBurstYet, match="session 8"):
+        runner.run(p, burst="auto")
+    toml = p.root / "lakelet.toml"
+    toml.write_text(
+        toml.read_text()
+        .replace("green_max_seconds = 60", "green_max_seconds = 0.0000001")
+        .replace("yellow_max_seconds = 600", "yellow_max_seconds = 0.0000002")
+    )
+    root = p.root
+    p.close()
+    with Project.open(root) as q:
+        with pytest.raises(runner.RedRefusedRun, match="need more machine"):
+            runner.run(q)
+        assert [v.name for v in q.views.list()] == []
+        report = runner.run(q, run_anyway=True)
+        assert report.ok and [m.verdict for m in report.models] == ["red", "red", "red"]
+
+
+def test_a_bare_dbt_run_reads_catalog_views_and_warns_about_its_own(project) -> None:
+    """The plugin gives every dbt connection the catalog's views, so a model may read a
+    view that is not a dbt model. A bare `dbt run` builds a `view` model for its session
+    only and says so, one line per view; under `lakelet run` the line is not printed,
+    because the views are recorded afterwards (the docs' "build with lakelet run")."""
+    import os
+
+    from tests.test_step2_dbt_spike import dbt_main
+
+    p = project
+    p.views.put("orders_v", "select id, amt from src where id < 10")
+    (p.root / "models" / "from_v.sql").write_text(
+        "{{ config(materialized='table') }}\nselect count(*) as n from orders_v\n"
+    )
+    (p.root / "models" / "bare_v.sql").write_text("select id from src where id > 290\n")
+    (p.root / "profiles.yml").write_text(runner.profiles_yml(p.catalog_url))
+    os.environ.pop("LAKELET_RUN", None)
+    result = dbt_main.dbtRunner().invoke(
+        [
+            "run",
+            "--select",
+            "from_v",
+            "bare_v",
+            "--project-dir",
+            str(p.root),
+            "--profiles-dir",
+            str(p.root),
+            "--log-path",
+            str(p.root / "bare-logs"),
+            "--no-use-colors",
+            "--quiet",
+        ]
+    )
+    assert result.success, result.exception
+    assert p.engine.execute("select n from from_v").fetchone()[0] == 10
+    bare_log = (p.root / "bare-logs" / "dbt.log").read_text()
+    assert "view bare_v is built for this dbt session only" in bare_log
+    assert "run `lakelet run` to record it" in bare_log
+    assert "bare_v" not in [v.name for v in p.views.list()], "a bare dbt run records nothing"
+
+    runner.run(p, select=["bare_v"])
+    assert "bare_v" in [v.name for v in p.views.list()]
+    lakelet_log = (p.root / ".lakelet" / "dbt" / "logs" / "dbt.log").read_text()
+    assert "built for this dbt session only" not in lakelet_log
+
+
+def test_the_cli_and_the_routes(project) -> None:
+    p = project
+    root = str(p.root)
+    p.close()
+    plan = runner_cli.invoke(app, ["-C", root, "run", "--plan"])
+    assert plan.exit_code == 0, plan.output
+    assert "stg_orders" in plan.output and "green" in plan.output
+    ran = runner_cli.invoke(app, ["-C", root, "run"])
+    assert ran.exit_code == 0, ran.output
+    assert "views in the catalog: stg_orders, top" in ran.output
+    assert "3 model(s) in" in ran.output
+    burst = runner_cli.invoke(app, ["-C", root, "run", "--burst", "auto"])
+    assert burst.exit_code == 1 and "session 8" in burst.output
+    with Project.open(root, serve=True) as q:
+        client = httpx.Client(
+            base_url=q.catalog_url, headers={"Authorization": f"Bearer {q.token}"}
+        )
+        planned = client.get("/api/run/plan").json()
+        assert [m["name"] for m in planned] == ["stg_orders", "by_c", "top"]
+        assert planned[0]["verdict"] == "green" and planned[0]["materialized"] == "view"
+        done = client.post("/api/run", json={"select": ["by_c"]}).json()
+        assert done["ok"] and [r["name"] for r in done["results"]] == ["by_c"]
+        refused = client.post("/api/run", json={"burst": "auto"})
+        assert refused.status_code == 400 and refused.json()["error"] == "no_burst_yet"
+    # the profile lakelet run writes is a real one
+    profile = (Path(root) / ".lakelet" / "dbt" / "profiles.yml").read_text()
+    assert "module: lakelet.dbt.plugin" in profile
+    assert (Path(root) / ".lakelet" / "dbt" / "target" / "manifest.json").exists()
+    assert json.loads((Path(root) / ".lakelet" / "dbt" / "target" / "manifest.json").read_text())[
+        "nodes"
+    ]

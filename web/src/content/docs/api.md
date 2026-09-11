@@ -32,7 +32,7 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 | Route | Body | Returns |
 |---|---|---|
 | `GET /health` | | `lakelet` and `duckdb` versions, `project` name and `root`, the `machine` profile (RAM, free disk, threads, memory limit), `throughput_local_mbps` and `bandwidth_mbps` from the cache, `throughput_probe` (`nocache`, `direct`, `cached` or `none`: how the disk figure was measured), and `aws` (`configured`, `source`: `environment`, `profile` or `none`, `profile`, `region`, `endpoint`; never a key). |
-| `GET /tables` | | The list: name, rows, bytes, columns, location, snapshot id, `freshness` (when the current snapshot was committed, ISO 8601), `source` (the prefix an attached table was registered from; null for a table Lakelet wrote), `public` (read without credentials). |
+| `GET /tables` | | The list: name, rows, bytes, columns, location, snapshot id, `freshness` (when the current snapshot was committed, ISO 8601), `source` (the prefix an attached table was registered from; null for a table Lakelet wrote), `public` (read without credentials), `kind` (`table`, or `view` for a catalog view, with its `view_sql`; a view's rows and bytes are 0). |
 | `GET /tables/discover?prefix=s3://…&anonymous=false` | | Candidate prefixes with kind, files and bytes; `anonymous=true` lists a public bucket without credentials. 400 `not_registrable` when there are no credentials and the bucket is not declared public. |
 | `GET /tables/{name}` | | `describe`: the list's fields plus partitioning, freshness, last commit, snapshots, format version, `expirable_snapshots`, `reclaimable_bytes`, `keep_days` for `expire`, and `snapshot_list` (every snapshot newest first: `id`, `timestamp`, `operation`, `added_rows`, `added_files`, `deleted_rows`, `total_rows` with deletes taken off, `current`, `expirable`). 404 `no_such_table`. |
 | `GET /tables/{name}/sample?n=5&truncate=80` | | The first rows. |
@@ -47,6 +47,8 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 | `POST /questions` | `{title, sql}` | The saved question. 400 `sql_error`. |
 | `POST /questions/{slug}/run` | `{allow_red}` | An Arrow IPC stream, and the question's `last_run` is updated when it completes. 404 `no_such_question`. |
 | `GET /history?last=50` | | Recent runs from `.lakelet/history.db`, newest first. |
+| `GET /run/plan?select=a,b` | | `lakelet run --plan`: the dbt models in dependency order with `materialized`, `depends_on`, `compiled_sql`, the verdict, `words`, `reason`, `est_wall_local`, `est_bytes`, or `error`. 400 `dbt` when dbt is missing or the compile failed. |
+| `POST /run` | `{select, burst, run_anyway}` | `lakelet run`: the plan, dbt's per-model `results` (status, seconds, message), `views_recorded`, `views_dropped`, `seconds`, `ok`. 400 `no_burst_yet`, 409 `red_refused` (a model is Red and `run_anyway` is false), 400 `dbt`. |
 | `GET /gauge/summary` | | `runs`, `compared`, `within_2x`, `within_2x_share`, `green_over_3min`: what `gauge history` opens with and the app's Gauge tiles show. |
 | `POST /gauge/export` | `{}` | `lakelet gauge export`: writes `.lakelet/exports/gauge-<time>.jsonl` in the project and answers `{path, runs}`; nothing is sent. |
 | `POST /gauge/reset` | `{}` | `lakelet gauge reset --yes`: `{removed}`. |

@@ -15,6 +15,8 @@ table's ``data/`` directory to exist on a local warehouse.
 from __future__ import annotations
 
 import os
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +42,7 @@ from pyiceberg.table.update import TableRequirement, TableUpdate
 from pyiceberg.typedef import IcebergBaseModel
 
 from lakelet.catalog import commit as ic
+from lakelet.catalog import viewmeta
 from lakelet.catalog.store import AlreadyExists, Conflict, NotFound, Store
 
 PREFIX = "lakelet"
@@ -290,6 +293,118 @@ def create_app(
         purgeRequested: bool = False,  # noqa: N803
     ) -> Response:
         store.drop_table(_namespace(ns), table)
+        return Response(status_code=204)
+
+    # -- views (real-data brief R6): the REST view routes, the view spec's JSON --------------
+
+    @app.get("/v1/{prefix}/namespaces/{ns}/views")
+    def list_views(prefix: str, ns: str) -> JSONResponse:
+        name = _namespace(ns)
+        return JSONResponse(
+            {"identifiers": [{"namespace": [name], "name": v} for v in store.list_views(name)]}
+        )
+
+    def _view(ns: str, view: str) -> JSONResponse:
+        location = store.get_view(ns, view)
+        return JSONResponse(
+            {
+                "metadata-location": location,
+                "metadata": viewmeta.read_view_metadata(mio, location),
+                "config": {},
+            }
+        )
+
+    @app.get("/v1/{prefix}/namespaces/{ns}/views/{view}")
+    def load_view(prefix: str, ns: str, view: str) -> JSONResponse:
+        return _view(_namespace(ns), view)
+
+    @app.head("/v1/{prefix}/namespaces/{ns}/views/{view}")
+    def head_view(prefix: str, ns: str, view: str) -> Response:
+        store.get_view(_namespace(ns), view)
+        return Response(status_code=204)
+
+    @app.post("/v1/{prefix}/namespaces/{ns}/views")
+    async def create_view(prefix: str, ns: str, request: Request) -> JSONResponse:
+        """A client's create: the schema and the first version come in the body; the
+        location is the warehouse's unless given."""
+        name = _namespace(ns)
+        store.get_namespace(name)
+        body = await request.json()
+        view = body["name"]
+        if view in store.list_views(name):
+            raise AlreadyExists(f"view {name}.{view}")
+        location = (body.get("location") or f"{warehouse}/{name}/{view}").rstrip("/")
+        version = dict(body["view-version"])
+        version["version-id"] = 1
+        version.setdefault("timestamp-ms", int(time.time() * 1000))
+        metadata = {
+            "view-uuid": str(uuid.uuid4()),
+            "format-version": 1,
+            "location": location,
+            "schemas": [{**body["schema"], "schema-id": version.get("schema-id", 0)}],
+            "current-version-id": 1,
+            "versions": [version],
+            "version-log": [{"timestamp-ms": version["timestamp-ms"], "version-id": 1}],
+            "properties": dict(body.get("properties") or {}),
+        }
+        _ensure_local_layout(location)
+        metadata_location = viewmeta.view_metadata_location(location, 0)
+        viewmeta.write_view_metadata(mio, metadata, metadata_location)
+        store.put_view(name, view, metadata_location)
+        return _view(name, view)
+
+    @app.post("/v1/{prefix}/namespaces/{ns}/views/{view}")
+    async def commit_view(prefix: str, ns: str, view: str, request: Request) -> JSONResponse:
+        """A replace: `add-schema`, `add-view-version` and `set-current-view-version`
+        applied to the current metadata; other updates are set-properties or ignored."""
+        name = _namespace(ns)
+        current_location = store.get_view(name, view)
+        base = viewmeta.read_view_metadata(mio, current_location)
+        body = await request.json()
+        metadata = {**base, "schemas": list(base["schemas"]), "versions": list(base["versions"])}
+        metadata["version-log"] = list(base["version-log"])
+        metadata["properties"] = dict(base.get("properties", {}))
+        last_schema = max(s["schema-id"] for s in metadata["schemas"])
+        last_version = max(v["version-id"] for v in metadata["versions"])
+        for update in body.get("updates", []):
+            action = update.get("action")
+            if action == "add-schema":
+                schema = dict(update["schema"])
+                if schema.get("schema-id", -1) < 0 or schema.get("schema-id") == last_schema:
+                    last_schema += 1
+                    schema["schema-id"] = last_schema
+                metadata["schemas"].append(schema)
+            elif action == "add-view-version":
+                version = dict(update["view-version"])
+                last_version += 1
+                version["version-id"] = last_version
+                if version.get("schema-id", -1) < 0:
+                    version["schema-id"] = last_schema
+                version.setdefault("timestamp-ms", int(time.time() * 1000))
+                metadata["versions"].append(version)
+            elif action == "set-current-view-version":
+                wanted = update.get("view-version-id", -1)
+                target = last_version if wanted == -1 else wanted
+                metadata["current-version-id"] = target
+                stamp = next(
+                    v["timestamp-ms"] for v in metadata["versions"] if v["version-id"] == target
+                )
+                metadata["version-log"].append({"timestamp-ms": stamp, "version-id": target})
+            elif action == "set-properties":
+                metadata["properties"].update(update.get("updates", {}))
+            elif action == "remove-properties":
+                for key in update.get("removals", []):
+                    metadata["properties"].pop(key, None)
+        new_location = viewmeta.view_metadata_location(
+            metadata["location"], int(current_location.rsplit("/", 1)[1].split("-", 1)[0]) + 1
+        )
+        viewmeta.write_view_metadata(mio, metadata, new_location)
+        store.put_view(name, view, new_location)
+        return _view(name, view)
+
+    @app.delete("/v1/{prefix}/namespaces/{ns}/views/{view}")
+    def drop_view(prefix: str, ns: str, view: str) -> Response:
+        store.drop_view(_namespace(ns), view)
         return Response(status_code=204)
 
     @app.post("/v1/{prefix}/tables/rename")

@@ -89,6 +89,9 @@ Paths follow the Iceberg REST spec. `GET /v1/config` answers with `overrides.pre
 | `DELETE /v1/{prefix}/namespaces/{ns}/tables/{table}` | Drop. |
 | `POST /v1/{prefix}/tables/rename` | Rename. |
 | `POST …/tables/{table}/metrics` | Accepted and ignored. |
+| `GET`, `POST /v1/{prefix}/namespaces/{ns}/views` | List, create a view (the view spec's JSON: a schema and a first version with its SQL representations). |
+| `GET`, `HEAD`, `DELETE /v1/{prefix}/namespaces/{ns}/views/{view}` | Load, exists, drop. |
+| `POST /v1/{prefix}/namespaces/{ns}/views/{view}` | Replace: `add-schema`, `add-view-version`, `set-current-view-version` and the property updates, a new metadata file, the pointer moved. |
 
 Two things learned from the clients and built in: DuckDB expects a table's `data/` directory to exist on a local warehouse, so the server creates `data/` and `metadata/` when a create is staged; and the Java clients omit `identifier` on a per-table commit, which the server accepts.
 

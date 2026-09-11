@@ -11,6 +11,8 @@ import Terminal from '../components/Terminal.astro';
 import Logo from '../components/Logo.astro';
 import { plans } from '../data/pricing';
 import { site } from '../data/nav';
+import { overture, fmtRows } from '../data/demo';
+import { facts } from '../data/facts';
 ---
 <Base title="Lakelet" description="An open-source lakehouse in one binary: DuckDB, Iceberg and dbt, local by default. Every query gets a pre-flight verdict; the ones that don't fit burst to a worker in your own cloud with a hard cost cap.">
 
@@ -26,10 +28,11 @@ import { site } from '../data/nav';
       </div>
       <h1>Your data fits on your laptop.</h1>
       <p class="lede">An open-source lakehouse in one binary: DuckDB, Iceberg and dbt, local by default. Every query gets a pre-flight verdict; the ones that don't fit burst to a worker in your own cloud with a hard cost cap. Humans ask in English or SQL. Agents call it over MCP.</p>
-      <Waitlist stack layout="stacked" note="Private beta on macOS and Linux. Free forever on the laptop. No spam." />
+      <Waitlist stack layout="stacked" note="Developer preview on macOS and Linux — clone it and run it today. Free forever on the laptop. No spam." />
       <div class="cta small">
-        <code class="install">$ brew install lakelet</code>
-        <span>Source opens with the Day 1 launch</span>
+        <code class="install">$ git clone …/lakelet && cd core && uv sync</code>
+        <a href={site.github} rel="noopener">Source, today, on GitHub</a>
+        <a href={url("/docs/install")}>Run it in ten minutes</a>
         <a href={url("/app")}>See the app</a>
       </div>
     </div>
@@ -37,7 +40,7 @@ import { site } from '../data/nav';
   </div>
 
 <div class="statbar">
-    <span>v0.1.0 · private beta</span><span>Apache 2.0</span><span>macOS 13+ · Ubuntu 22.04+</span><span><b>brew</b> · <b>pipx</b> · signed DMG</span><span>DuckDB 1.5 · Apache Iceberg · dbt Core 2</span><span>source at the Day 1 launch</span><span><a href="#engineers">docs</a></span><span><a href={url("/agents")}>for agents</a></span>
+    <span><b>v0.1.0.dev0</b> · developer preview</span><span>Apache 2.0</span><span>macOS 13+ · Ubuntu 22.04+</span><span>runs <b>from source</b>; installers at Day 1</span><span>DuckDB 1.5 · Apache Iceberg · dbt Core 1.12</span><span><a href={site.github} rel="noopener">source on GitHub</a></span><span><a href={url("/docs")}>what's built, and what isn't →</a></span><span><a href={url("/agents")}>for agents</a></span>
   </div>
 
   <svg class="wave" viewBox="0 0 1080 28" preserveAspectRatio="none" aria-hidden="true"><path d="M0 14 C90 4, 180 24, 270 14 S450 4, 540 14 S720 24, 810 14 S990 4, 1080 14" stroke="#7FB3D5" stroke-width="2" fill="none"/></svg>
@@ -50,7 +53,7 @@ import { site } from '../data/nav';
         <div class="sub">
           <p>A cloud warehouse makes sense at a petabyte. Below a terabyte, a laptop with DuckDB is usually faster, and it doesn't tick.</p>
           <p>Lakelet keeps your tables as Apache Iceberg in your own bucket, runs dbt Core against them on your machine, and checks each run before it starts. If it fits, it runs for free. If it doesn't, one click sends that one run to a worker that lives for a few minutes and shuts itself off.</p>
-          <p>Nothing is locked in. Point Spark or Trino at the same bucket tomorrow and everything is still there. Snowflake and Athena read it through the Team catalog.</p>
+          <p>Nothing is locked in. Point Spark or Trino at the same bucket tomorrow and everything is still there — both are tested against Lakelet's catalog today. Snowflake and Athena will read it through the Team catalog when that ships.</p>
         </div>
       </div>
       <CompareBars note="Same workload, same bucket. Lakelet's number is five Team seats, nine burst runs and S3 storage; 1,231 runs happen on laptops for $0. <a href='/pricing'>Every assumption, and where Lakelet isn't cheaper →</a>" />
@@ -60,22 +63,23 @@ import { site } from '../data/nav';
   <section id="how">
     <div class="eyebrow"># the gauge</div>
     <h2 class="sec">Three verdicts. You see them before anything runs.</h2>
-    <p class="sub">Lakelet reads the Iceberg manifests and DuckDB's own query plan to estimate scan size, peak memory and wall time, then compares that to the machine you're sitting at. Same laptop, three questions, three different answers.</p>
+    <p class="sub">Lakelet reads the Iceberg manifests and DuckDB's own query plan to estimate scan size, peak memory and wall time, then compares that to the machine you're sitting at. Below is a real session against <a href={overture.registry} rel="noopener">Overture Maps</a> — a public bucket, no AWS account, {fmtRows(overture.addresses.rows)} rows — so you can run it yourself and check every number.</p>
     <div class="gauge-demo">
       <ReplayTerminal />
       <Verdicts stack />
     </div>
-    <p class="fine" style="margin-top:14px">Every verdict shows its reasoning in one line. That sentence is the product.</p>
+    <p class="fine" style="margin-top:14px">Every verdict shows its reasoning in one line. That sentence is the product. <a href={url("/docs/remote")}>The five commands that produce this session →</a></p>
   </section>
 
 <section id="ask">
     <div class="eyebrow"># one box</div>
     <h2 class="sec">One box. Ask in English or write SQL. Either way, you see the SQL.</h2>
     <p class="sub">Type a question and Lakelet writes the query in front of you, editable, and runs the gauge before it runs anything. Type SQL and it just runs. The engineer ignores the English; the founder ignores the SQL. Nobody is asked which one they are.</p>
+    <p class="fine" style="margin:-8px 0 16px">Half of this is real today: the SQL side of the box runs, with the verdict on screen before the first row. The English side is not built — it is the next thing after the data work, and <code>⌘K</code> is already held for it. <a href={url("/docs/app")}>What the app does today →</a></p>
     <div class="two">
       <div class="panel who">
         <h3>If you write SQL</h3>
-        <p>Your dbt project as-is. DAG coloured by verdict. <code>lakelet run --burst auto</code> in CI with a per-project cap. Your tables readable from Spark, Trino or Snowflake through an open Iceberg catalog.</p>
+        <p>Your dbt project as-is. <code>lakelet run</code> builds it with the DAG coloured by verdict, today. <code>--burst auto</code> in CI with a per-project cap comes with burst. Your tables readable from Spark, Trino or Snowflake through an open Iceberg catalog.</p>
       </div>
       <div class="panel who">
         <h3>If you don't</h3>
@@ -152,8 +156,8 @@ import { site } from '../data/nav';
     <p class="scroll-hint">← scroll the diagram →</p>
     <div class="facts">
       <div><b>Under 1 TB</b><span>where a laptop beats an X-Small warehouse on most analytical queries</span></div>
-      <div><b>One binary</b><span>DuckDB, Iceberg write support and dbt Core, installed with brew or pip</span></div>
-      <div><b>Cap shown first</b><span>every burst run displays its maximum cost before you confirm it</span></div>
+      <div><b>One package</b><span>DuckDB, Iceberg write support and dbt Core in one install; from a clone today, brew and pip at Day 1</span></div>
+      <div><b>Cap shown first</b><span>planned: every burst run will display its maximum cost before you confirm it. Burst is not built yet — <a href={url("/docs")}>what is</a></span></div>
       <div><b>Your bucket, open catalog</b><span>Iceberg REST catalog, readable by anything that speaks Iceberg</span></div>
     </div>
   </section>
@@ -161,7 +165,7 @@ import { site } from '../data/nav';
 <section id="agents">
     <div class="eyebrow"># for agents</div>
     <h2 class="sec">Agents are about to run a lot of SQL. Give them a lakehouse with a budget.</h2>
-    <p class="sub">More than 60% of new Supabase databases are now launched by an AI tool rather than a person. Analytics is next: agents that load data, write models and answer questions on their own. Lakelet is built to be used that way from the first release, and it ships with the guardrail the incumbents lack: an agent has to ask the gauge before it runs, and it cannot spend past the cap you wrote.</p>
+    <p class="sub">More than 60% of new Supabase databases are now launched by an AI tool rather than a person. Analytics is next: agents that load data, write models and answer questions on their own. Lakelet is designed to be used that way from the first release, with the guardrail the incumbents lack: an agent has to ask the gauge before it runs, and it cannot spend past the cap you wrote. The gauge and the cap are specified below and the core is built; <code>lakelet mcp</code> itself is not, and <a href={url("/agents")}>the agent page says exactly where it stands</a>.</p>
     <div class="agents">
       <Terminal title="~/.config/claude/mcp.json · lakelet mcp">
 <pre class="softwrap"><span class="d">// one line to give an agent your tables, the gauge, and a budget</span>
@@ -214,37 +218,44 @@ write  import_file · save_question · publish · burst(cap_usd)   <span class="
       <div><b>An open catalog, not a Lakelet one</b><span>Lakelet ships its own Iceberg REST catalog: SQLite in the binary, Postgres when hosted. It is Polaris-compatible; attaching your own Polaris, Lakekeeper or S3 Tables catalog comes with the Day 1 launch. Spark and Trino read what Lakelet writes through <code>catalog serve</code>; Snowflake and Athena through the Team catalog.</span></div>
       <div><b>The engine stays MIT</b><span>AWS acquired DuckLabs on Aug 26, 2026. The DuckDB project was explicitly not acquired and remains under the independent DuckDB Foundation. Lakelet owns the catalog, the gauge and the burst path, not the engine.</span></div>
     </div>
+    <ul class="dated">
+      {facts.map(f => <li><time>{f.date}</time><b>{f.title}</b><span>{f.body}</span></li>)}
+    </ul>
     <div class="engines">
-      <span>DuckDB 1.5</span><span>Apache Iceberg</span><span>Iceberg REST catalog</span><span>dbt Core v2 · Rust runtime</span><span>Apache Polaris compatible</span><span>Parquet on your S3; GCS and R2 later</span>
+      <span>DuckDB 1.5</span><span>Apache Iceberg</span><span>Iceberg REST catalog</span><span>dbt Core 1.12 · dbt-duckdb</span><span>Apache Polaris compatible</span><span>Parquet on your S3; GCS and R2 later</span>
     </div>
     <div class="techgrid">
       <div class="panel ladder">
         <h3>Burst worker sizes</h3>
         <p>Sized from the gauge's peak-memory estimate with a 1.5× margin, launched in your bucket's region. AWS Fargate list price per hour before Lakelet's 15%; most jobs run for minutes.</p>
         <WorkerLadder />
-        <small>Spot and a Lambda backend for jobs under 10 GB follow the private beta. Cold start today is 30–60 s on Fargate, and the timer shows it.</small>
+        <small>Planned, not built (session 8): the ladder above is Fargate list price plus 15%, not a measurement. Spot and a Lambda backend for jobs under 10 GB follow. Fargate cold start is 30–60 s and the timer will show it.</small>
       </div>
       <Terminal title="the whole thing from a terminal" class="eng-term">
         <pre class="softwrap">$ lakelet init
   catalog   ./.lakelet/catalog.db   (Iceberg REST, SQLite)
   warehouse ./warehouse             (Parquet + Iceberg)
 
-$ lakelet sql "select count(*) from s3_events"
-  <span class="g">● Runs here</span> · scans 2.1 GB · ~4 s
-  9,412,880
+$ lakelet tables attach places --anonymous s3://overturemaps-us-west-2/release/…
+  <span class="g">✓</span> 73,631,092 rows · 16 files · 10.5 GB · nothing copied
 
-$ lakelet estimate -f dau_by_country.sql
-  <span class="r">● Needs more machine</span> · 48 GB from s3://acme-data,
-  ~34 min at 190 Mbps · burst ~1.5 min · cap $0.41
+$ lakelet sql "select count(*) from places where bbox.xmin between -73.2 and -73.0"
+  <span class="g">● Runs here</span> · scans 104.8 MB of 10.5 GB · ~8 s at your 111 Mbps
+  126,285                                            <span class="d">ran in 4.1 s</span>
 
-$ lakelet run --burst auto        # dbt, CI, per-project cap in lakelet.toml
-  12 models · 9 local · 3 burst · est $0.58 · cap $5.00
-  <span class="r">&gt;(°)&lt;</span> ~~~~~~&gt;  bursting fct_daily_active · 16 vCPU / 64 GB · us-east-1
+$ lakelet estimate "select * from addresses"
+  <span class="r">● Needs more machine</span> · scans 21.9 GB · ~26 min at your 111 Mbps
+  <span class="d">exit code 2 · nothing ran · --run-anyway overrides it</span>
 
-$ lakelet catalog serve --port 8181   # let Spark or Trino read your tables</pre>
+$ lakelet catalog serve --port 8181   # let Spark or Trino read your tables
+
+$ lakelet run                     # dbt, every model with its own verdict first
+  <span class="g">●</span> 5 models · 4 green, 1 yellow · built through the catalog · <span class="w">$0.00</span>
+
+<span class="d">$ lakelet run --burst auto         # the --burst part is session 8, not built</span></pre>
       </Terminal>
     </div>
-    <p class="sub" style="margin-top:22px">Security in one paragraph: hosted Lakelet stores catalog metadata, job specs and metrics, never data files. Workers get a single-use job token and storage credentials scoped to the table prefixes in that job, expiring with it. No inbound network on a worker; outbound only to your bucket, the catalog and the control plane. SQL text is kept for the duration of the job unless you opt into history.</p>
+    <p class="sub" style="margin-top:22px">Security in one paragraph, as designed (nothing hosted exists yet; today everything is on your machine and <code>lakelet audit network</code> measures zero outbound calls): hosted Lakelet will store catalog metadata, job specs and metrics, never data files. Workers get a single-use job token and storage credentials scoped to the table prefixes in that job, expiring with it. No inbound network on a worker; outbound only to your bucket, the catalog and the control plane. SQL text is kept for the duration of the job unless you opt into history.</p>
   </section>
 
   <section id="pricing">
@@ -262,7 +273,7 @@ $ lakelet catalog serve --port 8181   # let Spark or Trino read your tables</pre
   <section class="final dark" id="waitlist">
     <Logo width={360} dark class="final-logo" />
     <h2 class="sec">Send us your last warehouse bill. We'll show you the Lakelet version.</h2>
-    <p class="lede">Private beta on macOS and Linux. Free forever on the laptop.</p>
+    <p class="lede">Developer preview on macOS and Linux, open source today. Free forever on the laptop.</p>
     <Waitlist dark />
   </section>
 
@@ -323,6 +334,12 @@ $ lakelet catalog serve --port 8181   # let Spark or Trino read your tables</pre
   .ladder p{color:var(--muted);font-size:14px;margin-bottom:12px}
   .ladder small{display:block;color:var(--muted);font-size:12px;margin-top:10px}
   .techgrid :global(.eng-term .bar em){text-transform:none}
+  .dated{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:12px}
+  .dated li{display:grid;grid-template-columns:170px 1fr;gap:4px 18px;align-items:baseline;padding-top:12px;border-top:1px solid var(--line)}
+  .dated time{font:600 12px var(--mono);color:var(--muted);white-space:nowrap}
+  .dated b{font-size:15px}
+  .dated span{grid-column:2;color:var(--muted);font-size:13.5px;line-height:1.5}
+  @media (max-width:640px){ .dated li{grid-template-columns:1fr} .dated span{grid-column:1} }
   /* pricing */
   .plan{padding:22px}
   .plan b{display:block;font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1}

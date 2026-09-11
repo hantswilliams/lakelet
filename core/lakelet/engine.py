@@ -15,6 +15,12 @@ from pathlib import Path
 import duckdb
 
 EXTENSIONS = ("iceberg", "httpfs", "excel", "aws")
+SEARCH_PATH = "lakelet.main,memory.main"
+
+
+def _quote(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
 
 # The AWS default chain through the aws extension (brief D36), used when the environment
 # holds no explicit keys. DuckDB 1.5 resolves the chain when the secret is created and
@@ -116,7 +122,10 @@ class Engine:
             f"ATTACH 'lakelet' AS lakelet (TYPE ICEBERG, ENDPOINT '{catalog_url}', "
             "AUTHORIZATION_TYPE 'none', DEFAULT_SCHEMA 'main')"
         )
-        self.con.execute("USE lakelet.main")
+        # Tables are lakelet.main's; views live in this session's memory.main (DuckDB's
+        # Iceberg catalog cannot hold a view), so both resolve unqualified, tables first.
+        self.con.execute(f"SET search_path = '{SEARCH_PATH}'")
+        self._views: dict[str, str] = {}
         if proxy := os.environ.get("LAKELET_HTTP_PROXY"):
             # `lakelet audit network`: DuckDB's HTTP client is not a Python socket, so the
             # audit watches it through a loopback proxy that forwards loopback targets only.
@@ -134,6 +143,22 @@ class Engine:
             return False
         self.s3_error = None
         return True
+
+    def put_view(self, name: str, sql: str) -> None:
+        """This session's DuckDB view for a catalog view (real-data brief R6): the catalog's
+        own cannot hold one, so it lives in memory.main and resolves through the search
+        path. Raises DuckDB's error when the SQL does not bind."""
+        if self._views.get(name) != sql:
+            self.con.execute(f"CREATE OR REPLACE VIEW memory.main.{_quote(name)} AS {sql}")
+            self._views[name] = sql
+
+    def drop_view(self, name: str) -> None:
+        self.con.execute(f"DROP VIEW IF EXISTS memory.main.{_quote(name)}")
+        self._views.pop(name, None)
+
+    @property
+    def views(self) -> dict[str, str]:
+        return dict(self._views)
 
     def allow_public(self, secret_sql: str) -> None:
         """A bucket read without credentials (real-data brief R3): one scoped secret."""

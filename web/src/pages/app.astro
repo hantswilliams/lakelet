@@ -1,15 +1,18 @@
 ---
 import Base from '../layouts/Base.astro';
 import { url } from '../lib/url';
+import BuildState from '../components/BuildState.astro';
 ---
-<Base title="The app" description="Ten screens from the Lakelet private beta: an ask box that takes English or SQL, a gauge that runs before anything else does, a burst button with its own price cap, and a Simple / Technical switch.">
+<Base title="The app" description="Ten screens of the Lakelet desktop app: three built and running today, the rest designed. An ask box that takes English or SQL, a gauge that runs before anything else does, a burst button with its own price cap, and a Simple / Technical switch.">
   <div class="tour">
     <h1>One app. Two kinds of people.</h1>
-    <p class="lede">Ten screens from the private beta. A text box that takes English or SQL and always shows its work, a gauge that runs before anything else does, a burst button that carries its own price cap, and a Simple / Technical switch that hides dbt and git without turning them off. Mockups; the shipped app will differ in detail and not in intent.</p>
+    <p class="lede">Ten screens, drawn before they were built: a text box that takes English or SQL and always shows its work, a gauge that runs before anything else does, a burst button that carries its own price cap, and a Simple / Technical switch that hides dbt and git without turning them off. Three of them are real software today. The rest is the plan, and the strip below says which is which.</p>
   </div>
 
+  <BuildState page="app" />
+
   <section class="shot" id="s1">
-    <div class="hd"><h2>Start with nothing. Drop a file.</h2><span class="n">Screen 1 of 10</span></div>
+    <div class="hd"><h2>Start with nothing. Drop a file.</h2><span class="n"><b class="real">built</b> Screen 1 of 10</span></div>
     <p class="blurb">First launch in an empty folder. A non-developer drags a CSV onto the window; an engineer runs <code>lakelet init</code>. Both land in the same place.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">acme-analytics · local</span><span class="team">Team: not set up</span></div>
@@ -35,7 +38,7 @@ import { url } from '../lib/url';
   </section>
 
   <section class="shot" id="s2">
-    <div class="hd"><h2>Ask in English, keep the SQL.</h2><span class="n">Screen 2 of 10</span></div>
+    <div class="hd"><h2>Ask in English, keep the SQL.</h2><span class="n"><b class="real">built</b> Screen 2 of 10</span></div>
     <p class="blurb">The question becomes SQL in front of you, editable. The gauge says Green before the run button is pressed. Result and auto-chart share the panel.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">acme-analytics · local</span><span class="team">Team: not set up</span></div>
@@ -89,7 +92,7 @@ group by 1, 2 order by 1, 3 desc</div>
   </section>
 
   <section class="shot" id="s3">
-    <div class="hd"><h2>When it doesn't fit, the button tells you the cap.</h2><span class="n">Screen 3 of 10</span></div>
+    <div class="hd"><h2>When it doesn't fit, the button tells you the cap.</h2><span class="n"><b class="soon">planned</b> Screen 3 of 10</span></div>
     <p class="blurb">Same box, a 48 GB table in S3. The gauge says Red in one sentence; the run button becomes the burst button with the cap on it. One confirmation, no modal chain.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">acme-analytics · local</span><span class="team">Burst: AWS us-east-1</span></div>
@@ -130,7 +133,7 @@ group by 1, 2 order by 1, 3 desc</div>
   </section>
 
   <section class="shot" id="s4">
-    <div class="hd"><h2>Nothing waits without a number.</h2><span class="n">Screen 4 of 10</span></div>
+    <div class="hd"><h2>Nothing waits without a number.</h2><span class="n"><b class="soon">planned</b> Screen 4 of 10</span></div>
     <p class="blurb">Elapsed time, running cost, bytes read and the stage are live. The leased table is marked read-only in the sidebar. Cancel is always one click.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">acme-analytics · local</span><span class="team">Burst: AWS us-east-1</span></div>
@@ -166,7 +169,7 @@ group by 1, 2 order by 1, 3 desc</div>
   </section>
 
   <section class="shot" id="s5">
-    <div class="hd"><h2>The gauge shows its record.</h2><span class="n">Screen 5 of 10</span></div>
+    <div class="hd"><h2>The gauge shows its record.</h2><span class="n"><b class="real">built</b> Screen 5 of 10</span></div>
     <p class="blurb">Estimate versus actual for every run on this machine, what the gauge has learned, and the sharing toggle with a plain statement of what leaves the laptop.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">Gauge · this machine</span><span class="team">Calibration: sharing on</span></div>
@@ -223,7 +226,7 @@ group by 1, 2 order by 1, 3 desc</div>
   </section>
 
   <section class="shot" id="s6">
-    <div class="hd"><h2>Bring your own model. Or none.</h2><span class="n">Screen 6 of 10</span></div>
+    <div class="hd"><h2>Bring your own model. Or none.</h2><span class="n"><b class="soon">planned</b> Screen 6 of 10</span></div>
     <p class="blurb">Text-to-SQL is model-agnostic: Anthropic, OpenAI, OpenRouter, or a local Ollama model, assigned per task. Keys stay in the OS keychain, every byte that leaves the laptop is a toggle, and the same config lives in <code>lakelet.toml</code> so a team can commit it.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">Settings · Models</span><span class="team">Simple / <b>Technical</b></span></div>
@@ -289,7 +292,7 @@ daily_cap_usd  = 2.00
   </section>
 
   <section class="shot" id="s7">
-    <div class="hd"><h2>Underneath, it is a dbt project under git.</h2><span class="n">Screen 7 of 10</span></div>
+    <div class="hd"><h2>Underneath, it is a dbt project under git.</h2><span class="n"><b class="soon">planned</b> Screen 7 of 10</span></div>
     <p class="blurb">Technical mode. Models are real dbt models on disk; the DAG is coloured by the gauge; a model panel shows its SQL, tests, last run and the commit that changed it. <code>lakelet run</code> splits the run: Green models locally, Red ones on a worker.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">acme-analytics · main · 2 uncommitted</span><span class="mode"><span>Simple</span><span class="on">Technical</span></span></div>
@@ -351,7 +354,7 @@ group by 1, 2</div>
   </section>
 
   <section class="shot" id="s8">
-    <div class="hd"><h2>The same project, with the machinery hidden.</h2><span class="n">Screen 8 of 10</span></div>
+    <div class="hd"><h2>The same project, with the machinery hidden.</h2><span class="n"><b class="soon">planned</b> Screen 8 of 10</span></div>
     <p class="blurb">Simple mode, same folder. Models are "questions," tests are "checks," commits are "versions," and freshness is a note on the card. A non-developer saves a question and gets a versioned, tested dbt model without being told.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">acme-analytics</span><span class="mode"><span class="on">Simple</span><span>Technical</span></span></div>
@@ -380,7 +383,7 @@ group by 1, 2</div>
   </section>
 
   <section class="shot" id="s9">
-    <div class="hd"><h2>Every save is a version. Restore is one click.</h2><span class="n">Screen 9 of 10</span></div>
+    <div class="hd"><h2>Every save is a version. Restore is one click.</h2><span class="n"><b class="soon">planned</b> Screen 9 of 10</span></div>
     <p class="blurb">One question's history. Simple mode reads it in plain words with a Restore button; Technical mode shows the git log and the diff. Same commits either way.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">Daily active users by country · history</span><span class="mode"><span>Simple</span><span class="on">Technical</span></span></div>
@@ -424,7 +427,7 @@ group by 1, 2</div>
   </section>
 
   <section class="shot" id="s10">
-    <div class="hd"><h2>Agents get the same rules, and a budget.</h2><span class="n">Screen 10 of 10</span></div>
+    <div class="hd"><h2>Agents get the same rules, and a budget.</h2><span class="n"><b class="soon">planned</b> Screen 10 of 10</span></div>
     <p class="blurb">Settings › Agents. Which coding agents are connected, what each may do, a daily cap, and a log of every call. Read tools on by default, write tools are switches, and no agent can edit its own permissions.</p>
     <div class="frame-wrap"><div class="frame"><div class="win">
   <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="title">Settings · Agents</span><span class="team">Simple / <b>Technical</b></span></div>
@@ -626,6 +629,11 @@ daily_cap_usd = 2.00
   .diff{font:11.5px/1.55 ui-monospace,Menlo,monospace;background:var(--soft);border-radius:8px;padding:10px 12px;white-space:pre;overflow:hidden}
   .diff .add{background:#E3F4EA;display:block}.diff .del{background:#FBE5E2;display:block;color:#8A2E22}
   .git{font:11px ui-monospace,Menlo,monospace;color:var(--muted);margin-top:8px}
+  /* built / planned badges on each screen header (src/data/status.ts is the source of truth
+     for the page-level strip; these two only mark which mockups have shipped) */
+  .hd .n .real,.hd .n .soon{font:700 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:2px 6px;margin-right:8px;vertical-align:1px}
+  .hd .n .real{background:#DCE8DF;color:var(--local);border:1px solid var(--local)}
+  .hd .n .soon{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
 </style>
 
 <script>

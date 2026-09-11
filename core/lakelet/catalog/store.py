@@ -40,6 +40,16 @@ tables = sa.Table(
     sa.Column("updated", sa.DateTime(timezone=True), nullable=False),
 )
 
+views = sa.Table(
+    "views",
+    metadata,
+    sa.Column("namespace", sa.String(255), sa.ForeignKey("namespaces.name"), primary_key=True),
+    sa.Column("name", sa.String(255), primary_key=True),
+    sa.Column("metadata_location", sa.Text, nullable=False),
+    sa.Column("created", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("updated", sa.DateTime(timezone=True), nullable=False),
+)
+
 meta = sa.Table(
     "meta",
     metadata,
@@ -186,6 +196,61 @@ class Store:
             ).rowcount
         if not deleted:
             raise NotFound(f"{namespace}.{name}")
+
+    # -- views (real-data brief R6): Iceberg views, one metadata file each -----------------
+
+    def list_views(self, namespace: str) -> list[str]:
+        self.get_namespace(namespace)
+        with self.engine.connect() as c:
+            return list(
+                c.execute(
+                    sa.select(views.c.name)
+                    .where(views.c.namespace == namespace)
+                    .order_by(views.c.name)
+                ).scalars()
+            )
+
+    def get_view(self, namespace: str, name: str) -> str:
+        with self.engine.connect() as c:
+            row = c.execute(
+                sa.select(views.c.metadata_location).where(
+                    views.c.namespace == namespace, views.c.name == name
+                )
+            ).scalar()
+        if row is None:
+            raise NotFound(f"view {namespace}.{name}")
+        return row
+
+    def put_view(self, namespace: str, name: str, metadata_location: str) -> bool:
+        """Create or replace: returns True when the view was new."""
+        self.get_namespace(namespace)
+        now = _now()
+        with self.engine.begin() as c:
+            moved = c.execute(
+                views.update()
+                .where(views.c.namespace == namespace, views.c.name == name)
+                .values(metadata_location=metadata_location, updated=now)
+            ).rowcount
+            if moved:
+                return False
+            c.execute(
+                views.insert().values(
+                    namespace=namespace,
+                    name=name,
+                    metadata_location=metadata_location,
+                    created=now,
+                    updated=now,
+                )
+            )
+        return True
+
+    def drop_view(self, namespace: str, name: str) -> None:
+        with self.engine.begin() as c:
+            deleted = c.execute(
+                views.delete().where(views.c.namespace == namespace, views.c.name == name)
+            ).rowcount
+        if not deleted:
+            raise NotFound(f"view {namespace}.{name}")
 
     def rename_table(self, namespace: str, name: str, new_namespace: str, new_name: str) -> None:
         self.get_namespace(new_namespace)

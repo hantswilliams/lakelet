@@ -12,7 +12,7 @@ interface Env { WAITLIST: KVNamespace }
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const fd = await request.formData().catch(() => null);
   if (!fd) return json({ ok: false, error: 'bad form' }, 400);
-  if (fd.get('website')) return json({ ok: true });                       // honeypot: pretend success
+  if (fd.get('_gotcha')) return json({ ok: true });                       // honeypot: pretend success
 
   const email = String(fd.get('email') || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ ok: false, error: 'invalid email' }, 400);

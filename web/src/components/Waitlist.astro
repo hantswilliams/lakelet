@@ -14,7 +14,9 @@ const { stack = false, dark = false, layout = 'inline', note, id } = Astro.props
     <button class:list={['btn', { fish: dark }]} type="submit">{site.cta.label}</button>
   </div>
   {layout === 'stacked' && stack && <select name="stack" aria-label="What do you use today?"><option value="">What do you use today? (optional)</option>{site.stackOptions.map(o => <option>{o}</option>)}</select>}
-  <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+  <!-- honeypot. Named _gotcha because Formspree drops a submission that fills it, so this is
+       caught twice: here before the POST, and again at the provider. -->
+  <input type="text" name="_gotcha" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
   {note && <p class="fine">{note}</p>}
   <p class="fine done" hidden>You're on the list. We'll be in touch.</p>
 </form>

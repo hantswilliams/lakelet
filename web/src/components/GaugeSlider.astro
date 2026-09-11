@@ -1,42 +1,71 @@
 ---
-// The hero terminal: one question, a slider for the size of `events`, and the
-// gauge changing its verdict as the table grows.
+// The hero terminal: a real public dataset attached with no AWS account, and the gauge's
+// verdict on two queries over it as you move the one number that differs per visitor --
+// your link speed. Scan sizes are measured (src/data/demo.ts, from /docs/remote); the
+// time is the gauge's own I/O arithmetic, done in the browser, at the thresholds the
+// product actually uses. Nothing here is invented, and none of it needs an account.
 import Terminal from './Terminal.astro';
+import { overture, demoQueries, fmtRows } from '../data/demo';
+const a = overture.addresses;
 ---
-<Terminal title="zsh · ~/acme-analytics · MacBook Pro 16 GB · 190 Mbps" class="gauge-slider" label="Interactive terminal: drag the slider to change the size of the events table and watch the verdict change">
-<pre><span class="p">$</span> lakelet init
-  catalog   ./.lakelet/catalog.db   <span class="d">(Iceberg REST, SQLite)</span>
-  warehouse ./warehouse             <span class="d">(Parquet + Iceberg)</span>
+<Terminal
+  title={`zsh · ~/lakelet-open · no AWS account · ${overture.laptopMbps} Mbps`}
+  class="gauge-slider"
+  label="Interactive terminal: a 472-million-row public dataset attached without credentials, with the gauge's verdict on two queries. Drag the slider to change the link speed and watch the verdicts change.">
+<pre><span class="p">$</span> lakelet tables attach addresses --anonymous \
+    <span class="o">{a.prefix}</span>
+  <span class="g">✓</span> {fmtRows(a.rows)} rows · {a.files} files · {a.gb} GB <span class="d">· nothing copied</span>
+  <span class="d">public bucket · no credentials · metadata written to ./warehouse</span>
 
-<span class="p">$</span> lakelet ask "daily active users by country, last 90 days"
-  <span class="b">select</span> event_date, country, <span class="b">count</span>(<span class="b">distinct</span> user_id) <span class="b">as</span> dau
-  <span class="b">from</span> events <span class="b">where</span> event_date &gt;= current_date - <span class="b">interval</span> 90 day
-  <span class="b">group by</span> 1, 2 <span class="b">order by</span> 1, 3 <span class="b">desc</span>
+<span class="p">$</span> lakelet estimate <span class="o">"{demoQueries[0].sql}"</span>
+  <span id="q0dot" class="g">●</span> <span id="q0verdict" class="w">Runs here</span> <span id="q0detail" class="d">· scans 218.9 MB of 21.9 GB · ~16 s at your 111 Mbps</span>
 
-  <span id="tDot" class="g">●</span> <span id="tVerdict" class="w">Runs here</span> <span id="tDetail" class="d">· scans 0.4 GB · fits in memory · ~2 s</span>
-<span id="tBurst" style="display:none">  <span class="o">&gt;(°)&lt;</span> <span class="d">~~~~~~&gt;</span> burst? 16 vCPU / 64 GB · us-east-1 · cap <span class="w" id="tCap">$0.41</span>   <span class="d">[y/N]</span></span></pre>
-  <div class="ctlrow"><span>size of <code>events</code></span><output id="sizeOut">40 GB</output></div>
-  <input type="range" id="size" min="1" max="400" value="40" step="1" aria-label="Size of events table">
+<span class="p">$</span> lakelet estimate <span class="o">"{demoQueries[1].sql}"</span>
+  <span id="q1dot" class="r">●</span> <span id="q1verdict" class="w">Needs more machine</span> <span id="q1detail" class="d">· scans 21.9 GB · ~26 min at your 111 Mbps</span></pre>
+  <div class="ctlrow"><span>your downlink</span><output id="mbpsOut">{overture.laptopMbps} Mbps · measured</output></div>
+  <input type="range" id="mbps" min="5" max="400" value={overture.laptopMbps} step="1" aria-label="Your downlink speed in megabits per second">
 </Terminal>
+
+<script>
+  import { demoQueries, overture, secondsAt, verdictFor, verdictWords } from '../data/demo';
+
+  const slider = document.getElementById('mbps') as HTMLInputElement | null;
+  const out = document.getElementById('mbpsOut');
+  if (slider && out) {
+    const cls = { green: 'g', yellow: 'y', red: 'r' } as const;
+    const fmt = (sec: number) =>
+      sec < 90 ? Math.round(sec) + ' s'
+      : sec < 5400 ? Math.round(sec / 60) + ' min'
+      : (sec / 3600).toFixed(1) + ' h';
+    const mb = (n: number) => (n >= 1000 ? (n / 1000).toFixed(1) + ' GB' : n.toFixed(1) + ' MB');
+
+    const rows = demoQueries.map((q, i) => ({
+      q,
+      dot: document.getElementById(`q${i}dot`),
+      verdict: document.getElementById(`q${i}verdict`),
+      detail: document.getElementById(`q${i}detail`),
+    }));
+
+    const update = () => {
+      const mbps = +slider.value;
+      out.textContent = mbps + ' Mbps' + (mbps === overture.laptopMbps ? ' · measured' : '');
+      for (const r of rows) {
+        if (!r.dot || !r.verdict || !r.detail) continue;
+        const sec = secondsAt(r.q.scanMb, mbps);
+        const v = verdictFor(sec);
+        r.dot.className = cls[v];
+        r.verdict.textContent = verdictWords[v];
+        r.detail.textContent =
+          `· scans ${mb(r.q.scanMb)}${r.q.scanMb < 1000 ? ' of ' + r.q.of : ''} · ~${fmt(sec)} at your ${mbps} Mbps`;
+      }
+    };
+    slider.addEventListener('input', update);
+    update();
+  }
+</script>
 
 <style>
   .ctlrow{display:flex;justify-content:space-between;align-items:center;padding:6px 16px 4px;font-size:12px;color:#9AA8B6}
+  .ctlrow output{font-family:var(--mono);color:#C9D2DC}
   :global(.gauge-slider) input[type=range]{width:calc(100% - 32px);margin:0 16px 14px;accent-color:#F5A623}
 </style>
-
-<script>
-  const RAM = 16;
-  const s = document.getElementById('size') as HTMLInputElement, out = document.getElementById('sizeOut')!;
-  const dot = document.getElementById('tDot')!, ver = document.getElementById('tVerdict')!, det = document.getElementById('tDetail')!, bl = document.getElementById('tBurst')!, cap = document.getElementById('tCap')!;
-  const fmt = (sec: number) => sec < 60 ? Math.round(sec) + ' s' : sec < 3600 ? Math.round(sec / 60) + ' min' : (sec / 3600).toFixed(1) + ' h';
-  function update() {
-    const gb = +s.value; out.textContent = gb + ' GB';
-    const need = gb * 0.15 + 0.1, spill = need > RAM * 0.8, sec = spill ? gb * 6 : gb * 0.22;
-    const state = need > RAM * 1.6 ? 'r' : spill ? 'y' : 'g';
-    dot.className = state; bl.style.display = state === 'r' ? 'block' : 'none';
-    if (state === 'g') { ver.textContent = 'Runs here'; det.textContent = '· scans ' + (gb * 0.01).toFixed(1) + ' GB · fits in memory · ~' + fmt(sec); }
-    else if (state === 'y') { ver.textContent = 'Runs here, slowly'; det.textContent = '· spills to disk · ~' + fmt(sec) + ' · ' + need.toFixed(1) + ' / ' + RAM + ' GB'; }
-    else { ver.textContent = 'Needs more machine'; det.textContent = '· ' + gb + ' GB from s3://acme-data · ~' + fmt(gb * 0.85) + ' at 190 Mbps · burst ~' + fmt(gb * 0.12); cap.textContent = '$' + (0.4 + gb * 0.006).toFixed(2); }
-  }
-  s.addEventListener('input', update); update();
-</script>

@@ -31,6 +31,9 @@ export interface TableInfo {
   source?: string | null;
   /** Read without credentials (a public bucket). */
   public?: boolean;
+  /** `table`, or `view` for a catalog view (real-data R6), whose rows and bytes are 0. */
+  kind?: 'table' | 'view';
+  view_sql?: string | null;
 }
 
 export interface Snapshot {

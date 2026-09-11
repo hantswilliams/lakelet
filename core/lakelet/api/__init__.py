@@ -89,6 +89,12 @@ class ProbeBody(BaseModel):
     mb: int = 512
 
 
+class DbtRunBody(BaseModel):
+    select: list[str] = []
+    burst: str = "never"
+    run_anyway: bool = False
+
+
 class RunBody(BaseModel):
     allow_red: bool = False
 
@@ -211,6 +217,22 @@ async def _query_watching_disconnect(request: Request, start: Any, interrupt: An
     except asyncio.CancelledError:
         interrupt()
         raise
+
+
+def _plan_json(m: Any) -> dict[str, Any]:
+    return {
+        "name": m.name,
+        "unique_id": m.unique_id,
+        "materialized": m.materialized,
+        "depends_on": m.depends_on,
+        "compiled_sql": m.compiled_sql,
+        "verdict": m.verdict,
+        "words": m.words,
+        "reason": m.reason,
+        "est_wall_local": m.est_wall_local,
+        "est_bytes": m.est_bytes,
+        "error": m.error,
+    }
 
 
 def create_router(project: Project, token: str) -> APIRouter:
@@ -469,6 +491,44 @@ def create_router(project: Project, token: str) -> APIRouter:
     @router.get("/history", dependencies=guarded)
     def history(last: int = 50) -> list[dict[str, Any]]:
         return _plain(project.history.recent(last))
+
+    # -- dbt: the DAG through the gauge (real-data brief R5) -----------------------------
+
+    @router.get("/run/plan", dependencies=guarded)
+    def run_plan(select: str | None = None):
+        from lakelet.dbt import runner
+
+        with lock:
+            try:
+                models = runner.plan(project, select.split(",") if select else None)
+            except (runner.DbtMissing, runner.DbtFailed) as e:
+                return error(400, "dbt", str(e))
+        return [_plan_json(m) for m in models]
+
+    @router.post("/run", dependencies=guarded)
+    def run_models(body: DbtRunBody | None = None):
+        from lakelet.dbt import runner
+
+        body = body or DbtRunBody()
+        with lock:
+            try:
+                report = runner.run(
+                    project, body.select or None, burst=body.burst, run_anyway=body.run_anyway
+                )
+            except runner.NoBurstYet as e:
+                return error(400, "no_burst_yet", str(e))
+            except runner.RedRefusedRun as e:
+                return error(409, "red_refused", str(e))
+            except (runner.DbtMissing, runner.DbtFailed) as e:
+                return error(400, "dbt", str(e))
+        return {
+            "models": [_plan_json(m) for m in report.models],
+            "results": [dataclasses.asdict(r) for r in report.results],
+            "views_recorded": report.views_recorded,
+            "views_dropped": report.views_dropped,
+            "seconds": report.seconds,
+            "ok": report.ok,
+        }
 
     # -- the gauge screen (real-data brief R8) -----------------------------------------
 

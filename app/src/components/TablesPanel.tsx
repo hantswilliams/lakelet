@@ -15,6 +15,7 @@ export interface TablesPanelProps {
 }
 
 function Where({ t }: { t: TableInfo }) {
+  if (t.kind === 'view') return <span title={t.view_sql ?? ''} data-testid={`where-${t.name}`}>view</span>;
   if (!t.source) return <span>local</span>;
   return (
     <span title={t.source} className="where" data-testid={`where-${t.name}`}>
@@ -36,8 +37,8 @@ export function TablesPanel({ tables, busy, onRefresh, onOpen }: TablesPanelProp
             {tables.map((t) => (
               <tr key={t.name} data-testid={`table-${t.name}`} className={onOpen ? 'clickable' : ''} onClick={() => onOpen?.(t.name)} title={onOpen ? `lakelet tables describe ${t.name}` : undefined}>
                 <td className="mono">{t.name}</td>
-                <td>{t.rows.toLocaleString()}</td>
-                <td>{humanBytes(t.bytes)}</td>
+                <td>{t.kind === 'view' ? '—' : t.rows.toLocaleString()}</td>
+                <td>{t.kind === 'view' ? '—' : humanBytes(t.bytes)}</td>
                 <td>{t.columns.length}</td>
                 <td title={t.freshness ?? ''}>{ago(t.freshness)}</td>
                 <td>

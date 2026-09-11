@@ -3,6 +3,7 @@ import Base from '../layouts/Base.astro';
 import { url } from '../lib/url';
 import Terminal from '../components/Terminal.astro';
 import Waitlist from '../components/Waitlist.astro';
+import BuildState from '../components/BuildState.astro';
 ---
 <Base title="For agents" description="Everything a coding agent, an autonomous pipeline or a platform needs to use Lakelet: setup per client, the tool list, permissions and budgets, the AGENTS.md contract, and the platforms API.">
   <div class="doc">
@@ -11,6 +12,8 @@ import Waitlist from '../components/Waitlist.astro';
     <p class="lede">Everything a coding agent, an autonomous pipeline or a platform needs to use Lakelet: setup per client, the tool list, permissions and budgets, the AGENTS.md contract, and the platforms API. Same core as the CLI and the app; the gauge and the cap apply to every call.</p>
     <div class="toc"><a href="#setup">setup</a><a href="#tools">tools</a><a href="#permissions">permissions &amp; budget</a><a href="#agentsmd">AGENTS.md</a><a href="#prompts">prompts</a><a href="#audit">audit</a><a href="#platforms">platforms</a><a href="#security">security</a><a href="#faq">faq</a></div>
   </div>
+
+  <BuildState page="agents" />
 
   <section id="setup">
     <div class="eyebrow"># setup · one line per client</div>
@@ -197,7 +200,7 @@ dbt project at ./ (dbt-duckdb). Models in models/. Run with <span class="b">lake
 
   <section class="final dark" id="waitlist">
     <h2 class="sec">Connect an agent to the beta.</h2>
-    <p class="lede">Private beta on macOS and Linux. Bring your own agent; the gauge and the cap are already there.</p>
+    <p class="lede">Developer preview on macOS and Linux. The gauge and the core are built; the MCP server is not. Tell us what your agent needs and it will shape the tool list above.</p>
     <Waitlist dark />
   </section>
 </Base>

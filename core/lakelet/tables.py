@@ -86,6 +86,10 @@ class TableInfo:
     #: Lakelet wrote. ``public`` is true when it is read without credentials.
     source: str | None = None
     public: bool = False
+    #: "table", or "view" for a view in the catalog (real-data brief R6), whose rows and
+    #: bytes are 0 and whose `view_sql` is its query.
+    kind: str = "table"
+    view_sql: str | None = None
 
 
 @dataclass
@@ -266,10 +270,46 @@ class Tables:
             public=md.properties.get("lakelet.anonymous", "").lower() == "true",
         )
 
-    def list(self) -> list[TableInfo]:
-        return [self._info(name) for name in self.project.store.list_tables(NAMESPACE)]
+    def list(self, views: bool = True) -> list[TableInfo]:
+        infos = [self._info(name) for name in self.project.store.list_tables(NAMESPACE)]
+        if views:
+            infos += [self._view_info(v) for v in self.project.views.list()]
+        return infos
+
+    @staticmethod
+    def _view_info(v) -> TableInfo:
+        return TableInfo(
+            name=v.name,
+            rows=0,
+            bytes=0,
+            columns=[(f.name, str(f.field_type)) for f in v.schema.fields],
+            location=v.location,
+            snapshot_id=None,
+            freshness=datetime.fromtimestamp(v.timestamp_ms / 1000, tz=UTC),
+            kind="view",
+            view_sql=v.sql,
+        )
 
     def describe(self, name: str) -> TableDescription:
+        if name not in self.project.store.list_tables(NAMESPACE):
+            from lakelet.views import NoSuchView
+
+            try:
+                view = self.project.views.get(name)
+            except NoSuchView:
+                raise NoSuchTable(name) from None
+            info = self._view_info(view)
+            return TableDescription(
+                **info.__dict__,
+                partitioning="a view",
+                keep_days=self.project.config.catalog.keep_snapshots_days,
+                last_commit={
+                    "operation": f"view version {view.version_id}",
+                    "timestamp": info.freshness.isoformat() if info.freshness else None,
+                },
+                snapshots=view.versions,
+                format_version=1,
+            )
         md = self._metadata(name)
         info = self._info(name)
         snapshot = md.current_snapshot()
@@ -548,7 +588,9 @@ class Tables:
         if TABLES_START not in text or TABLES_END not in text:
             return
         lines = [
-            f"- `{t.name}` ({_human_bytes(t.bytes)}, {t.rows:,} rows, {self._where(t.name)})"
+            f"- `{t.name}` (view: `{t.view_sql}`)"
+            if t.kind == "view"
+            else f"- `{t.name}` ({_human_bytes(t.bytes)}, {t.rows:,} rows, {self._where(t.name)})"
             for t in self.list()
         ] or [
             "No tables yet. `lakelet import <file>` adds one; "

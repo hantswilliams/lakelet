@@ -22,6 +22,7 @@ export interface TableDetailProps {
 const cell = (v: unknown) => (v === null || v === undefined ? '∅' : typeof v === 'object' ? JSON.stringify(v) : String(v));
 
 function Where({ t }: { t: TableDescription }) {
+  if (t.kind === 'view') return <span>a view in the catalog: <span className="mono">{t.view_sql}</span></span>;
   if (!t.source) return <span>local, under the project's warehouse</span>;
   return <span>{t.public ? 'public bucket, read without credentials' : 'attached'}: <span className="mono">{t.source}</span></span>;
 }

@@ -13,7 +13,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -248,6 +248,8 @@ def tables_list() -> None:
 
 def _where(i) -> str:
     """The list's last column: where the data is, not where the metadata is."""
+    if i.kind == "view":
+        return "view"
     if i.source:
         return ("public " if i.public else "attached ") + i.source
     return "local" if i.location.startswith("file://") else i.location
@@ -307,7 +309,7 @@ def tables_expire(
     if bool(name) == all_tables:
         _fail("give a table name, or --all")
     with _open() as p:
-        names = [t.name for t in p.tables.list()] if all_tables else [name]
+        names = [t.name for t in p.tables.list(views=False)] if all_tables else [name]
         for n in names:
             try:
                 r = p.tables.expire(n, keep_days=keep_days)
@@ -587,6 +589,17 @@ def estimate(
 # -- catalog ----------------------------------------------------------------------
 
 
+def _write_dbt_profile(p: Any, url: str) -> Path | None:
+    """The dbt profile for a catalog this process serves (real-data brief R5), so a
+    `dbt run` or `dbt test` by hand has one; nothing if the folder cannot be written."""
+    from lakelet.dbt.runner import write_profile
+
+    try:
+        return write_profile(p, url)
+    except OSError:
+        return None
+
+
 @catalog_app.command("serve")
 def catalog_serve(
     port: Annotated[
@@ -605,12 +618,14 @@ def catalog_serve(
     p = _open()
     server = EmbeddedCatalog(create_app(p.store, warehouse=p.warehouse_url), port=port)
     url = server.start()
+    profile = _write_dbt_profile(p, url)
     out.print(f"catalog at {url} (Iceberg REST, warehouse {p.warehouse_url})", highlight=False)
     out.print(
         f'pyiceberg: RestCatalog("lakelet", uri="{url}")\n'
         f"duckdb:    ATTACH 'lakelet' AS lakelet (TYPE ICEBERG, ENDPOINT '{url}', "
         "AUTHORIZATION_TYPE 'none', DEFAULT_SCHEMA 'main')\n"
-        "Ctrl-C stops it.",
+        + (f"dbt:       dbt run --profiles-dir {profile.parent}\n" if profile else "")
+        + "Ctrl-C stops it.",
         highlight=False,
     )
     sys.stdout.flush()
@@ -679,6 +694,61 @@ def question_run(
         _run_sql(p, q.sql, fmt, output, run_anyway, limit)
         if p.history.recent(1) and p.history.recent(1)[0].sql_text == q.sql:
             p.history.record_question_run(slug, p.history.recent(1)[0].id)
+
+
+# -- run: the dbt DAG through the gauge (real-data brief R5) --------------------------
+
+
+@app.command("run")
+def run_models(
+    select: Annotated[
+        list[str] | None, typer.Argument(help="dbt selectors; none means every model.")
+    ] = None,
+    burst: Annotated[
+        str, typer.Option("--burst", help="never (here) or auto (session 8; refuses today).")
+    ] = "never",
+    run_anyway: Annotated[
+        bool, typer.Option("--run-anyway", help="Run the DAG here even if a model is Red.")
+    ] = False,
+    plan_only: Annotated[
+        bool, typer.Option("--plan", help="Print the DAG with its verdicts and stop.")
+    ] = False,
+) -> None:
+    """Build the project's dbt models through the catalog, each with its verdict first.
+    A `view` model becomes a view in the catalog; a `table` model an Iceberg table."""
+    from lakelet.dbt import runner
+
+    with _open() as p:
+        try:
+            if plan_only:
+                models = runner.plan(p, select)
+                out.print("\n".join(runner.dag_lines(models)), highlight=False)
+                return
+            report = runner.run(p, select, burst=burst, run_anyway=run_anyway)
+        except runner.NoBurstYet as e:
+            _fail(str(e))
+        except runner.RedRefusedRun as e:
+            err.print(str(e), highlight=False)
+            raise typer.Exit(EXIT_RED) from None
+        except (runner.DbtMissing, runner.DbtFailed) as e:
+            _fail(str(e))
+    out.print("\n".join(runner.dag_lines(report.models)), highlight=False)
+    for r in report.results:
+        line = f"  {r.name}: {r.status} in {r.seconds:.2f} s"
+        if r.message and r.status != "success":
+            line += f" ({r.message})"
+        out.print(line, highlight=False)
+    if report.views_recorded:
+        out.print(f"views in the catalog: {', '.join(report.views_recorded)}", highlight=False)
+    if report.views_dropped:
+        out.print(f"views dropped: {', '.join(report.views_dropped)}", highlight=False)
+    out.print(
+        f"{len(report.results)} model(s) in {report.seconds:.1f} s"
+        + ("" if report.ok else "; some failed"),
+        highlight=False,
+    )
+    if not report.ok:
+        raise typer.Exit(1)
 
 
 # -- gauge history and audit -----------------------------------------------------
@@ -869,6 +939,7 @@ def serve(
         p = Project.open(_root(), serve=True, port=port, memory_limit=memory_limit)
     except NotAProject:
         _fail(f"not a Lakelet project: no lakelet.toml in {_root()}; run `lakelet init`")
+    _write_dbt_profile(p, p.catalog_url)
     out.print(
         f"serving {p.catalog_url}: /api (bearer token in {p.serve_json}) and /v1 (the catalog)",
         highlight=False,

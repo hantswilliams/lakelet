@@ -13,7 +13,7 @@ export const site = {
   github: 'https://github.com/hantswilliams/lakelet',
   cta: { label: 'Get early access', href: '/#waitlist' },
   footer: {
-    left: 'Lakelet · Open source under Apache 2.0 · Private beta, macOS and Linux',
+    left: 'Lakelet · Open source under Apache 2.0 · Developer preview, macOS and Linux',
     right: 'Built on DuckDB, Apache Iceberg and dbt Core',
   },
   stackOptions: ['Snowflake', 'BigQuery', 'Databricks', 'MotherDuck', 'DuckDB on my laptop', 'Postgres', 'Other'],

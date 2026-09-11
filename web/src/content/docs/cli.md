@@ -31,6 +31,7 @@ Commands:
   import    Import a file or a folder of files into Iceberg tables.
   sql       Run SQL: the gauge line first (stderr), then the rows (stdout).
   estimate  The gauge only: verdict, bytes, memory, time, the burst half.
+  run       Build the project's dbt models through the catalog, each with its...
   serve     Run the core as the app's sidecar: catalog and API on one loopback...
   tables    List, describe and sample tables.
   catalog   The Iceberg REST catalog.
@@ -108,6 +109,24 @@ Options:
   -f, --file <path>  Read the SQL from a file.
   --json             The numbers as JSON instead of the line.
   --help             Show this message and exit.
+```
+
+### `lakelet run`
+
+```text
+Usage: lakelet run [OPTIONS] [select]...
+
+  Build the project's dbt models through the catalog, each with its verdict first. A
+  `view` model becomes a view in the catalog; a `table` model an Iceberg table.
+
+Arguments:
+  select...  dbt selectors; none means every model.
+
+Options:
+  --burst <str>  never (here) or auto (session 8; refuses today).  [default: never]
+  --run-anyway   Run the DAG here even if a model is Red.
+  --plan         Print the DAG with its verdicts and stop.
+  --help         Show this message and exit.
 ```
 
 ### `lakelet serve`

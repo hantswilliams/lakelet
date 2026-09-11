@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from lakelet.query import Result
     from lakelet.questions import Questions
     from lakelet.tables import Tables
+    from lakelet.views import Views
 
 NAMESPACE = "main"
 GITIGNORE_LINES = ("warehouse/", ".lakelet/", ".DS_Store")
@@ -153,6 +154,44 @@ models:
 '''
 
 
+LAKELET_VIEW_MACROS = """\
+{#- Lakelet's view materialisation, written by `lakelet init` (real-data brief R6). DuckDB's
+    Iceberg catalog cannot hold a view, so a view model lives in the session's `memory`
+    database (`generate_database_name` sends it there, and every `ref()` to it follows),
+    and `lakelet run` records it in Lakelet's catalog afterwards as an Iceberg view, which
+    every later session (the CLI, the app, Spark through the REST catalog) sees. -#}
+
+{% macro generate_database_name(custom_database_name=none, node=none) -%}
+  {%- if node is not none and node.resource_type == 'model'
+        and node.config.get('materialized') == 'view' -%}
+    memory
+  {%- elif custom_database_name is none -%}
+    {{ target.database }}
+  {%- else -%}
+    {{ custom_database_name | trim }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% materialization view, adapter="duckdb" %}
+  {%- set target_relation = this.incorporate(type='view') -%}
+  {%- if env_var('LAKELET_RUN', '') != '1' -%}
+    {{ log("Lakelet: view " ~ this.identifier ~ " is built for this dbt session only; "
+           ~ "run `lakelet run` to record it in the catalog so the app, later sessions "
+           ~ "and other engines see it.", info=true) }}
+  {%- endif -%}
+  {{ run_hooks(pre_hooks, inside_transaction=False) }}
+  {{ run_hooks(pre_hooks, inside_transaction=True) }}
+  {% call statement('main') -%}
+    create or replace view {{ target_relation }} as {{ compiled_code }}
+  {%- endcall %}
+  {{ run_hooks(post_hooks, inside_transaction=True) }}
+  {{ adapter.commit() }}
+  {{ run_hooks(post_hooks, inside_transaction=False) }}
+  {{ return({'relations': [target_relation]}) }}
+{% endmaterialization %}
+"""
+
+
 @dataclass
 class InitReport:
     root: Path
@@ -192,6 +231,7 @@ class Project:
         self._catalog: EmbeddedCatalog | None = None
         self._engine: Engine | None = None
         self._tables: Tables | None = None
+        self._views: Views | None = None
         self._history: History | None = None
         self._questions: Questions | None = None
         self.token: str | None = None
@@ -222,6 +262,7 @@ class Project:
         write_if_absent("dbt_project.yml", dbt_project_yml(name))
         write_if_absent("models/.gitkeep", "")
         write_if_absent("macros/lakelet.sql", LAKELET_MACROS)
+        write_if_absent("macros/lakelet_views.sql", LAKELET_VIEW_MACROS)
         gitignore = root / ".gitignore"
         text = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
         missing = [line for line in GITIGNORE_LINES if line not in text.splitlines()]
@@ -317,6 +358,7 @@ class Project:
         )
         for bucket, region in load_public_buckets(self.lakelet_dir).items():
             self._engine.allow_public(self.s3.anonymous_secret(bucket, region))
+        self.views.sync_engine()  # the catalog's views, as DuckDB views in this session (R6)
 
     def export_gauge(self, out: Path | None = None) -> tuple[Path, int]:
         """`lakelet gauge export`: the calibration record as JSON lines, the F0.3.9 fields
@@ -388,6 +430,14 @@ class Project:
 
             self._questions = Questions(self)
         return self._questions
+
+    @property
+    def views(self) -> Views:
+        if self._views is None:
+            from lakelet.views import Views
+
+            self._views = Views(self)
+        return self._views
 
     @property
     def tables(self) -> Tables:

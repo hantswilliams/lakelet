@@ -23,6 +23,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
   <meta property="og:url" content={canonical}>
   <meta name="twitter:card" content="summary">
   <link rel="icon" type="image/svg+xml" href={url("/favicon.svg")}>
+  <meta name="lakelet:repo" content={site.github}>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -38,35 +39,76 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
   <script>
     // ---- Waitlist -----------------------------------------------------------
     // Every <Waitlist/> form on the site posts through submitWaitlist().
-    // Replace its body with a real provider when ready, e.g.
-    //   Cloudflare Pages Function (in this repo):  fetch('/api/waitlist', {method:'POST', body:fd})
-    //   Formspree:  fetch('https://formspree.io/f/XXXX', {method:'POST', body:fd, headers:{Accept:'application/json'}})
-    //   Buttondown: fetch('https://api.buttondown.email/v1/subscribers', ...)  (needs a proxy for the key)
-    // The "stack" field ("What do you use today?") is the useful signal; keep it.
-    async function submitWaitlist(fd: FormData): Promise<boolean> {
-      if (import.meta.env.PUBLIC_WAITLIST_URL) {
-        const r = await fetch(import.meta.env.PUBLIC_WAITLIST_URL, { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
-        return r.ok;
+    //
+    // The endpoint is the PUBLIC_WAITLIST_URL repo variable, set in
+    // .github/workflows/deploy-pages.yml. Today that is a Formspree form:
+    //   https://formspree.io/f/<id>      (decided 2026-09-11; see web/TASKS.md)
+    // Formspree takes a multipart POST and answers JSON when Accept says so, so the
+    // "stack" field ("What do you use today?") arrives as a normal field. Keep it;
+    // it is the only qualifying signal the form collects.
+    //
+    // functions/api/waitlist.ts in this repo is for Cloudflare Pages Functions and
+    // does NOT run on GitHub Pages. It stays for the day the site moves.
+    //
+    // IMPORTANT: with no endpoint configured this must not report success. It used
+    // to log to the console and return true, so every signup between 2026-09-09 and
+    // 2026-09-11 was shown "You're on the list" and thrown away. Never again: an
+    // unconfigured form says so, and the build warns (see astro.config.mjs).
+    type Outcome = 'ok' | 'unconfigured' | 'error';
+
+    async function submitWaitlist(fd: FormData): Promise<Outcome> {
+      const endpoint = import.meta.env.PUBLIC_WAITLIST_URL;
+      if (!endpoint) return 'unconfigured';
+      try {
+        const r = await fetch(endpoint, { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
+        return r.ok ? 'ok' : 'error';
+      } catch {
+        return 'error';
       }
-      console.log('waitlist (no PUBLIC_WAITLIST_URL set)', Object.fromEntries(fd));
-      return true;
     }
+
+    const repo = document.querySelector<HTMLMetaElement>('meta[name="lakelet:repo"]')?.content
+      || 'https://github.com/hantswilliams/lakelet';
+
     document.querySelectorAll<HTMLFormElement>('form[data-waitlist]').forEach(f => {
       f.addEventListener('submit', async e => {
         e.preventDefault();
         const fd = new FormData(f);
-        if (fd.get('website')) return;                      // honeypot
+        if (fd.get('_gotcha')) return;                      // honeypot; Formspree drops it server-side too
         const email = String(fd.get('email') || '').trim();
+        const row = f.querySelector<HTMLElement>('.row')!;
+        const done = f.querySelector<HTMLElement>('.fine.done')!;
         let fine = f.querySelector<HTMLElement>('.fine:not(.done)');
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        const say = (html: string, err = true) => {
           if (!fine) { fine = document.createElement('p'); fine.className = 'fine'; f.appendChild(fine); }
-          fine.textContent = 'Please enter a valid email.'; fine.classList.add('err'); (f.elements.namedItem('email') as HTMLInputElement).focus(); return;
+          fine.innerHTML = html; fine.hidden = false; fine.classList.toggle('err', err);
+        };
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          say('Please enter a valid email.');
+          (f.elements.namedItem('email') as HTMLInputElement).focus();
+          return;
         }
-        const btn = f.querySelector<HTMLButtonElement>('button[type=submit]')!; btn.disabled = true;
-        const ok = await submitWaitlist(fd).catch(() => false);
-        btn.disabled = false;
-        if (ok) { f.querySelector<HTMLElement>('.row')!.hidden = true; if (fine) fine.hidden = true; f.querySelector<HTMLElement>('.fine.done')!.hidden = false; }
-        else if (fine) { fine.textContent = 'Something went wrong. Try again?'; fine.classList.add('err'); }
+
+        const btn = f.querySelector<HTMLButtonElement>('button[type=submit]')!;
+        const label = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Sending…';
+        const outcome = await submitWaitlist(fd);
+        btn.disabled = false; btn.textContent = label;
+
+        if (outcome === 'ok') {
+          row.hidden = true;
+          if (fine) fine.hidden = true;
+          done.hidden = false;
+          return;
+        }
+        // Anything else leaves the form standing, with the email still in it, and
+        // tells the truth about why nothing was sent.
+        if (outcome === 'unconfigured') {
+          say(`Early access isn't open for signups yet — this form has nowhere to go, so we're not going to pretend it does. Lakelet is public and buildable today: <a href="${repo}" rel="noopener">watch the repo</a> and you'll see the beta the moment it opens.`, false);
+        } else {
+          say(`Something went wrong sending that. Try again, or open an issue on <a href="${repo}" rel="noopener">GitHub</a>.`);
+        }
       });
     });
   </script>

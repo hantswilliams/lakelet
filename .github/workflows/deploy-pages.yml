@@ -6,8 +6,12 @@
 # Optional repo variables (Settings → Secrets and variables → Actions → Variables):
 #   SITE_URL             e.g. https://lakelet.dev   — set this when a custom domain is configured
 #                        (also add the domain under Settings → Pages). Unset = https://<owner>.github.io/<repo>
-#   PUBLIC_WAITLIST_URL  a Formspree / Buttondown / your-own endpoint for the waitlist forms.
-#                        GitHub Pages can't run functions/api/waitlist.ts; that one is for Cloudflare Pages.
+#   PUBLIC_WAITLIST_URL  REQUIRED for the waitlist to capture anything. Today:
+#                        https://formspree.io/f/meaqdnjv  (a form id is not a secret -- Astro
+#                        inlines PUBLIC_ vars into the browser bundle -- so this is a variable.)
+#                        Unset = the forms tell visitors signups are not open; they never fake
+#                        success. GitHub Pages can't run functions/api/waitlist.ts; that one is
+#                        for Cloudflare Pages.
 name: Deploy site to GitHub Pages
 
 on:
@@ -39,6 +43,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Warn if the waitlist has nowhere to post
+        if: ${{ !vars.PUBLIC_WAITLIST_URL }}
+        run: |
+          echo "::warning title=Waitlist not configured::PUBLIC_WAITLIST_URL is unset, so this deploy captures no signups. The forms will tell visitors signups are not open (they never fake success -- see web/TASKS.md item 1). Set the repo variable to https://formspree.io/f/meaqdnjv under Settings -> Secrets and variables -> Actions -> Variables."
       - run: npm ci
       - run: npm run build
         env:

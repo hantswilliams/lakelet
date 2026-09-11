@@ -4,31 +4,35 @@
 // prefers-reduced-motion); with motion allowed it's lifted out and replayed.
 // Lines are <span class="ln ...">; "cmd" lines are typed, a line with
 // data-input="y" pauses then types the answer, "cmd end" is the final prompt.
+//
+// The session below is real and reproducible: Overture Maps, a public bucket,
+// no AWS account, measured 2026-09-11 (src/data/demo.ts, /docs/remote). It used
+// to be an invented workload that ended in a burst, which is not built -- see
+// web/TASKS.md, item 3. Three verdicts, one laptop, numbers anyone can check.
 import Terminal from './Terminal.astro';
 ---
-<Terminal title="zsh · ~/acme-analytics · lakelet sql" class="term-replay" label="A lakelet terminal session: one query runs here in two seconds, one runs here slowly and spills to disk, and one needs more machine and bursts to a worker with a $0.41 cap, finishing for $0.29.">
+<Terminal title="zsh · ~/lakelet-open · lakelet · no AWS account" class="term-replay" label="A lakelet terminal session against a public 472-million-row dataset: one query runs here in four seconds, one runs here slowly, and one needs more machine, with no cloud account involved.">
   <button slot="bar" type="button" class="replay" id="gaugeReplay" aria-label="Replay">↻ replay</button>
-<pre id="gaugeTerm" class="softwrap"><span class="ln cmd"><span class="p">$</span> lakelet sql <span class="o">"select region, sum(amount) from orders where order_date &gt;= '2026-08-01' group by 1"</span></span>
-<span class="ln"><span class="g">●</span> <span class="w">Runs here</span> <span class="d">· scans 210 MB · fits in memory · ~2 s</span></span>
-<span class="ln tbl">  ┌──────────┬─────────────┐</span>
-<span class="ln tbl">  │ region   │ sum(amount) │</span>
-<span class="ln tbl">  ├──────────┼─────────────┤</span>
-<span class="ln tbl">  │ EMEA     │   4,182,930 │</span>
-<span class="ln tbl">  │ NA       │   9,517,204 │</span>
-<span class="ln tbl">  │ APAC     │   2,904,118 │</span>
-<span class="ln tbl">  └──────────┴─────────────┘</span>
-<span class="ln"><span class="d">  3 rows · 1.8 s</span></span>
+<pre id="gaugeTerm" class="softwrap"><span class="ln cmd"><span class="p">$</span> lakelet tables attach places --anonymous <span class="o">s3://overturemaps-us-west-2/release/2026-08-19.0/theme=places/type=place/</span></span>
+<span class="ln"><span class="g">✓</span> <span class="w">73,631,092 rows</span> <span class="d">· 16 files · 10.5 GB · nothing copied · no credentials used</span></span>
+<span class="ln"><span class="d">  metadata written to ./warehouse · the Parquet stays where it is</span></span>
 <span class="ln gap"></span>
-<span class="ln cmd"><span class="p">$</span> lakelet sql -f models/customer_ltv.sql</span>
-<span class="ln"><span class="y">●</span> <span class="w">Runs here, slowly</span> <span class="d">· scans 6.4 GB · peak 14 GB of 12.8 GB limit · <span class="y">spills to disk</span> · ~3 min</span></span>
-<span class="ln"><span class="d">  burst would be ~40 s · cap $0.08 · add --burst to send it instead</span></span>
-<span class="ln"><span class="g">✓</span> 2.9M rows · 2m 41s <span class="d">· spilled 3.1 GB to disk</span></span>
+<span class="ln cmd"><span class="p">$</span> lakelet sql <span class="o">"select count(*) from places where bbox.xmin between -73.2 and -73.0 and bbox.ymin between 40.85 and 40.95"</span></span>
+<span class="ln"><span class="g">●</span> <span class="w">Runs here</span> <span class="d">· scans 104.8 MB of 10.5 GB · ~8 s at your 111 Mbps</span></span>
+<span class="ln tbl">  ┌──────────────┐</span>
+<span class="ln tbl">  │ count_star() │</span>
+<span class="ln tbl">  ├──────────────┤</span>
+<span class="ln tbl">  │      126,285 │</span>
+<span class="ln tbl">  └──────────────┘</span>
+<span class="ln"><span class="d">  1 row · </span><span class="g">4.1 s</span><span class="d"> · the estimate said 8 s</span></span>
 <span class="ln gap"></span>
-<span class="ln cmd"><span class="p">$</span> lakelet sql -f models/sessions_rollup.sql</span>
-<span class="ln"><span class="r">●</span> <span class="w">Needs more machine</span> <span class="d">· 48 GB from s3://acme-data · ~34 min at your 190 Mbps</span></span>
-<span class="ln ask" data-input="y">  <span class="o">&gt;(°)&lt;</span> <span class="d">~~~~~~&gt;</span> burst? 16 vCPU / 64 GB · us-east-1 · cap <span class="w">$0.41</span>   <span class="d">[y/N]</span> <span class="ti">y</span></span>
-<span class="ln"><span class="d">  job brst_7k2q started in us-east-1 · worker lives for this run only</span></span>
-<span class="ln"><span class="g">✓</span> done · 1m 24s · 48 GB scanned · <span class="w">$0.29</span> <span class="d">of $0.41 cap · result registered as temp table</span></span>
+<span class="ln cmd"><span class="p">$</span> lakelet estimate <span class="o">"select country, count(*) from addresses group by 1"</span></span>
+<span class="ln"><span class="y">●</span> <span class="w">Runs here, slowly</span> <span class="d">· scans 218.9 MB of 21.9 GB · ~2 min at 15 Mbps on hotel wifi</span></span>
+<span class="ln"><span class="d">  one column of 472,797,160 rows · the other 21.7 GB is never read</span></span>
+<span class="ln gap"></span>
+<span class="ln cmd"><span class="p">$</span> lakelet estimate <span class="o">"select * from addresses"</span></span>
+<span class="ln"><span class="r">●</span> <span class="w">Needs more machine</span> <span class="d">· scans 21.9 GB · ~26 min at your 111 Mbps</span></span>
+<span class="ln"><span class="d">  bandwidth is the limit, not memory · nothing ran, and the exit code is 2</span></span>
 <span class="ln gap"></span>
 <span class="ln cmd end"><span class="p">$</span> </span></pre>
 </Terminal>

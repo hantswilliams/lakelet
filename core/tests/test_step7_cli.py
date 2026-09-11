@@ -252,6 +252,47 @@ def test_catalog_serve_is_readable_from_another_process(project_dir, tmp_path) -
     assert refused.exit_code == 1 and "loopback" in refused.output
 
 
+def test_catalog_serve_writes_the_dbt_profile(project_dir) -> None:
+    """Real-data brief R5: a `dbt run` by hand needs a live catalog and a profile naming it;
+    `lakelet catalog serve` (and `lakelet serve`) write `.lakelet/dbt/profiles.yml` for
+    theirs when they start."""
+    import subprocess
+    import sys
+    import time
+
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "lakelet.cli",
+            "-C",
+            str(project_dir),
+            "catalog",
+            "serve",
+            "--port",
+            "0",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        line = proc.stdout.readline()
+        assert line.startswith("catalog at http://127.0.0.1:"), line
+        url = line.split()[2]
+        for _ in range(50):
+            profile = project_dir / ".lakelet" / "dbt" / "profiles.yml"
+            if profile.exists() and url in profile.read_text():
+                break
+            time.sleep(0.1)
+        text = profile.read_text()
+        assert url in text and "module: lakelet.dbt.plugin" in text
+        assert "dbt run --profiles-dir" in text or "lakelet catalog serve" in text
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+
+
 def test_audit_network_reports_nothing_left_the_machine(project_dir) -> None:
     result = invoke(project_dir, "audit", "network")
     assert result.exit_code == 0, result.output
