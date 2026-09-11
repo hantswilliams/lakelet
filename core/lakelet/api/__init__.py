@@ -30,7 +30,7 @@ from lakelet.gauge import inputs
 from lakelet.query import Interrupted, RedRefused
 from lakelet.questions import NoSuchQuestion
 from lakelet.register import MissingFiles, NotRegistrable
-from lakelet.tables import NoSuchTable, TableExists, UnsupportedFile
+from lakelet.tables import NoSuchTable, NotExpirable, TableExists, UnsupportedFile
 
 if TYPE_CHECKING:
     from lakelet.project import Project
@@ -67,6 +67,10 @@ class SqlBody(BaseModel):
 
 class EstimateBody(BaseModel):
     sql: str
+
+
+class ExpireBody(BaseModel):
+    keep_days: int | None = None
 
 
 class SettingBody(BaseModel):
@@ -231,6 +235,7 @@ def create_router(project: Project, token: str) -> APIRouter:
             "root": str(project.root),
             "machine": machine,
             "throughput_local_mbps": cache.get("throughput_local_mbps"),
+            "throughput_probe": inputs.probe_method(cache),
             "bandwidth_mbps": cache.get("bandwidth_mbps"),
         }
 
@@ -319,6 +324,19 @@ def create_router(project: Project, token: str) -> APIRouter:
                 return error(404, "no_such_table", f"no table named {name}")
             except (NotRegistrable, MissingFiles) as e:
                 return error(409, "refresh_failed", str(e))
+
+    @router.post("/tables/{name}/expire", dependencies=guarded)
+    def expire(name: str, body: ExpireBody | None = None):
+        """`lakelet tables expire`: the one route that deletes data files."""
+        with lock:
+            try:
+                return _plain(
+                    project.tables.expire(name, keep_days=body.keep_days if body else None)
+                )
+            except NoSuchTable:
+                return error(404, "no_such_table", f"no table named {name}")
+            except NotExpirable as e:
+                return error(409, "not_expirable", str(e))
 
     # -- settings (the panel is `lakelet config set`) ---------------------------------
 

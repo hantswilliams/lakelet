@@ -16,6 +16,7 @@ const FIELDS: Array<{ key: SettingKey; label: string; help: string; kind: 'text'
   { key: 'engine.memory_limit', label: 'Memory limit for the CLI', help: '"auto" (DuckDB\'s 80% of RAM) or a size such as 8GB. Each app window gets its own share of RAM instead.', kind: 'text' },
   { key: 'engine.threads', label: 'Threads', help: '"auto" or a count.', kind: 'text' },
   { key: 'gauge.share_calibration', label: 'Share calibration', help: 'Whether this project would contribute anonymous gauge calibration. Nothing is sent yet; the switch is here so the file is ready.', kind: 'bool' },
+  { key: 'catalog.keep_snapshots_days', label: 'Keep snapshots for', help: 'Days of table history `lakelet tables expire` keeps; the current snapshot always stays. Expiry runs only when asked.', kind: 'text' },
 ];
 
 export function SettingsPanel({ api, onClose }: { api: Api; onClose: () => void }) {

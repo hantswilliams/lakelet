@@ -139,7 +139,13 @@ def init(
         )
     else:
         out.print(f"  DuckDB extensions already in {report.extension_directory}", highlight=False)
-    if report.throughput_local_mbps:
+    if report.throughput_local_mbps and report.throughput_probe == "cached":
+        out.print(
+            f"  local disk reads at up to {report.throughput_local_mbps:,.0f} MB/s "
+            "(measured through the cache; the disk itself could not be measured here)",
+            highlight=False,
+        )
+    elif report.throughput_local_mbps:
         out.print(
             f"  local disk reads at {report.throughput_local_mbps:,.0f} MB/s", highlight=False
         )
@@ -256,6 +262,12 @@ def tables_describe(name: str) -> None:
         highlight=False,
     )
     out.print(f"partitioning: {d.partitioning}", highlight=False)
+    if d.expirable_snapshots:
+        out.print(
+            f"{d.expirable_snapshots} snapshot(s) older than {d.keep_days} days, "
+            f"{_human_bytes(d.reclaimable_bytes)} reclaimable: lakelet tables expire {d.name}",
+            highlight=False,
+        )
     if d.freshness:
         out.print(
             f"freshness: {d.freshness.isoformat(timespec='seconds')}  "
@@ -268,6 +280,41 @@ def tables_describe(name: str) -> None:
     for c, typ in d.columns:
         t.add_row(c, typ)
     out.print(t)
+
+
+@tables_app.command("expire")
+def tables_expire(
+    name: Annotated[str | None, typer.Argument(help="A table; or --all.")] = None,
+    all_tables: Annotated[bool, typer.Option("--all", help="Every table Lakelet wrote.")] = False,
+    keep_days: Annotated[
+        int | None,
+        typer.Option("--keep-days", help="Days of snapshots to keep; lakelet.toml's by default."),
+    ] = None,
+) -> None:
+    """Drop snapshots older than the retention and delete the files only they referenced,
+    plus any file under the table that no snapshot references and that is over an hour old
+    (what a previous --replace left). The current snapshot always stays; a table registered
+    with `tables attach` is never touched. The one verb that deletes data files."""
+    from lakelet.tables import NoSuchTable, NotExpirable
+
+    if bool(name) == all_tables:
+        _fail("give a table name, or --all")
+    with _open() as p:
+        names = [t.name for t in p.tables.list()] if all_tables else [name]
+        for n in names:
+            try:
+                r = p.tables.expire(n, keep_days=keep_days)
+            except NoSuchTable:
+                _fail(f"no table named {n}")
+            except NotExpirable as e:
+                out.print(f"{n}: skipped, {e}", highlight=False)
+                continue
+            out.print(
+                f"{n}: {r.snapshots_removed} of {r.snapshots_before} snapshot(s) expired "
+                f"(keeping {r.keep_days} days), {r.files_removed} file(s) removed, "
+                f"{_human_bytes(r.bytes_reclaimed)} reclaimed",
+                highlight=False,
+            )
 
 
 @tables_app.command("sample")
@@ -651,13 +698,48 @@ def config_set(
     out.print(f"{key} = {parsed}  (in {toml}; applies from the next start)", highlight=False)
 
 
+@gauge_app.command("probe")
+def gauge_probe(
+    mb: Annotated[int, typer.Option("--mb", help="Size of the probe file.")] = 512,
+) -> None:
+    """Measure local disk throughput again and record it for the gauge (a project set up
+    before September 11, 2026 measured the page cache, not the disk)."""
+    from lakelet.project import run_probe
+
+    root = _root()
+    if not (root / "lakelet.toml").is_file():
+        _fail(f"{root} is not a Lakelet project (no lakelet.toml)")
+    probe = run_probe(root, mb)
+    how = {
+        "nocache": "cache bypassed",
+        "direct": "cache bypassed",
+        "cached": "through the cache, capped",
+    }[probe.method]
+    out.print(
+        f"local disk reads at {probe.mbps:,.0f} MB/s ({how}); recorded in .lakelet/cache",
+        highlight=False,
+    )
+
+
 @gauge_app.command("history")
 def gauge_history(last: Annotated[int, typer.Option("--last", help="Runs to show.")] = 20) -> None:
     """Recent runs: verdict, estimate, actual."""
+    from lakelet.gauge import inputs
     from lakelet.gauge.verdict import human_bytes, human_seconds
 
     with _open() as p:
         runs = p.history.recent(last)
+        cache = inputs.load_machine_cache(p.cache_dir)
+    mbps = cache.get("throughput_local_mbps")
+    method = inputs.probe_method(cache)
+    if mbps and method == "cached":
+        out.print(
+            f"local disk: up to {mbps:,.0f} MB/s, measured through the cache; "
+            "run `lakelet gauge probe` to measure the disk",
+            highlight=False,
+        )
+    elif mbps:
+        out.print(f"local disk: {mbps:,.0f} MB/s (cache bypassed)", highlight=False)
     t = Table()
     for column in ("when", "verdict", "est", "actual", "bytes", "where", "sql"):
         t.add_column(column)

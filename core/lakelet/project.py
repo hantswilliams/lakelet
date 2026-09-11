@@ -160,6 +160,20 @@ class InitReport:
     extensions_installed: list[str] = field(default_factory=list)
     extension_directory: str = ""
     throughput_local_mbps: float | None = None
+    throughput_probe: str | None = None
+
+
+def run_probe(root: Path, probe_mb: int = 512):
+    """The disk-throughput probe, at `init` and on `lakelet gauge probe`: the figure and its
+    method are what the gauge reads from `.lakelet/cache/machine.json`."""
+    from lakelet.gauge import inputs
+
+    cache_dir = root / ".lakelet" / "cache"
+    probe = inputs.probe_throughput(root / "warehouse", probe_mb)
+    cache = inputs.load_machine_cache(cache_dir)
+    cache.update({"throughput_local_mbps": probe.mbps, "probe_mb": probe_mb, "probe": probe.method})
+    inputs.save_machine_cache(cache_dir, cache)
+    return probe
 
 
 class Project:
@@ -223,13 +237,9 @@ class Project:
         report.created.append(".lakelet/catalog.db")
         report.extensions_installed, report.extension_directory = install_extensions()
         if probe_mb:
-            from lakelet.gauge import inputs
-
-            mbps = inputs.probe_throughput(root / "warehouse", probe_mb)
-            inputs.save_machine_cache(
-                root / ".lakelet" / "cache", {"throughput_local_mbps": mbps, "probe_mb": probe_mb}
-            )
-            report.throughput_local_mbps = mbps
+            probe = run_probe(root, probe_mb)
+            report.throughput_local_mbps = probe.mbps
+            report.throughput_probe = probe.method
         return report
 
     @classmethod

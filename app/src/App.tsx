@@ -187,7 +187,10 @@ export default function App() {
                 <div><b>{health.lakelet}</b><span>lakelet</span></div>
                 <div><b>{health.duckdb}</b><span>DuckDB</span></div>
                 <div><b>{health.machine.memory_limit_text ?? '—'}</b><span>memory limit, this window</span></div>
-                <div><b>{health.throughput_local_mbps ? `${Math.round(health.throughput_local_mbps)} MB/s` : '—'}</b><span>local disk</span></div>
+                <div title={health.throughput_probe === 'cached' ? 'Measured through the page cache and capped; run `lakelet gauge probe` in the project to measure the disk.' : undefined}>
+                  <b>{health.throughput_local_mbps ? `${Math.round(health.throughput_local_mbps).toLocaleString()} MB/s` : '—'}</b>
+                  <span>{health.throughput_probe === 'cached' ? 'local disk (cached; run lakelet gauge probe)' : 'local disk'}</span>
+                </div>
                 <div data-testid="ready-ms"><b>{session?.ready_ms ? `${session.ready_ms} ms` : '—'}</b><span>core ready in</span></div>
               </section>
             )}

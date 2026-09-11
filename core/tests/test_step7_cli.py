@@ -73,6 +73,14 @@ def test_import_preview_import_and_tables(project_dir, tmp_path) -> None:
     assert invoke(project_dir, "tables", "describe", "nope").exit_code == 1
 
 
+def test_gauge_probe_measures_again_and_history_names_the_method(project_dir) -> None:
+    probed = invoke(project_dir, "gauge", "probe", "--mb", "8")
+    assert probed.exit_code == 0 and "MB/s" in probed.output, probed.output
+    assert "cache bypassed" in probed.output or "through the cache" in probed.output
+    history = invoke(project_dir, "gauge", "history")
+    assert history.exit_code == 0 and "local disk:" in history.output
+
+
 def test_config_set_writes_the_file_and_the_next_open_reads_it(project_dir) -> None:
     shown = invoke(project_dir, "config", "show")
     assert shown.exit_code == 0 and "engine.memory_limit = auto" in shown.output

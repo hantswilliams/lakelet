@@ -83,6 +83,7 @@ def project(tmp_path):
     root = tmp_path / "proj"
     report = Project.init(root, probe_mb=8)
     assert report.throughput_local_mbps and report.throughput_local_mbps > 0
+    assert report.throughput_probe in ("nocache", "direct", "cached")
     p = Project.open(root)
     p.engine.execute(
         "CREATE TABLE lakelet.main.orders AS SELECT range AS id, 'c' || (range % 10) AS customer, "
@@ -230,3 +231,36 @@ def test_the_run_records_the_estimate_next_to_the_actual(project) -> None:
         run.est_bytes,
     )
     assert run.actual_rows_scanned == 1_000_000
+
+
+def test_the_probe_bypasses_the_page_cache_and_says_how(tmp_path) -> None:
+    """Decisions 1 to 3 of September 11, 2026: the figure is the disk's, not the cache's, on
+    macOS and Linux; where it cannot be, it is capped and labelled; the method is recorded
+    and a figure from before the change reads as cached."""
+    import sys
+
+    from lakelet.gauge import inputs
+    from lakelet.project import run_probe
+
+    probe = inputs.probe_throughput(tmp_path / "wh", 64)
+    assert probe.size_bytes == 64 * 1024 * 1024 and probe.mbps > 0
+    if sys.platform == "darwin":
+        assert probe.method == "nocache"
+    elif sys.platform.startswith("linux"):
+        assert probe.method == "direct"
+    else:
+        assert probe.method == "cached" and probe.mbps <= inputs.CACHED_PROBE_CEILING_MBPS
+    if probe.method != "cached":
+        # a 64 MB read through the page cache would report tens of thousands
+        assert probe.mbps < 20_000, probe
+    assert not (tmp_path / "wh" / ".lakelet-probe.bin").exists(), "the file is removed"
+
+    root = tmp_path / "proj"
+    Project.init(root, probe_mb=8)
+    cache = inputs.load_machine_cache(root / ".lakelet" / "cache")
+    assert cache["probe"] == probe.method and cache["probe_mb"] == 8
+    again = run_probe(root, 16)
+    cache = inputs.load_machine_cache(root / ".lakelet" / "cache")
+    assert cache["throughput_local_mbps"] == again.mbps and cache["probe_mb"] == 16
+    assert inputs.probe_method({}) == "none"
+    assert inputs.probe_method({"throughput_local_mbps": 84914.0}) == "cached", "before the change"

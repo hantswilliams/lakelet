@@ -60,6 +60,19 @@ lakelet tables sample orders -n 10 # the first rows
 
 Rows and bytes come from the current snapshot's manifests, so they are exact for what was written; position deletes from a `MERGE INTO` are not subtracted from the row count. `describe`'s freshness is the current snapshot's timestamp and its last commit is that snapshot's summary.
 
+## Snapshots, history and expiry
+
+Every write is an Iceberg snapshot, and an Iceberg table never deletes a data file on its own: a table rebuilt in place (a `dbt run`, a `DELETE` then `INSERT`) keeps every previous version's files until snapshots are expired, and `import --replace` drops and recreates the table, leaving the old table's files in the same folder. Nothing in Lakelet removes files unless you ask, because that is the one thing that cannot be undone.
+
+```bash
+lakelet tables describe orders                 # "14 snapshot(s) older than 7 days, 3.1 GB reclaimable: lakelet tables expire orders"
+lakelet tables expire orders                   # keep lakelet.toml's keep_snapshots_days (7)
+lakelet tables expire orders --keep-days 0     # keep only the current snapshot
+lakelet tables expire --all
+```
+
+`expire` drops every snapshot older than the retention other than the current one and any a branch or tag points at, committing that through the catalog (pyiceberg's `expire_snapshots`), then deletes the data and manifest files those snapshots referenced and no remaining snapshot does, plus any data or manifest file under the table's own folder that no snapshot references and that is over an hour old (the grace period leaves a write in flight alone). Old `metadata.json` files stay; they are small. It reports snapshots expired, files removed and bytes reclaimed. A table registered with `tables attach` is refused: its files are not Lakelet's to delete. The app's settings panel has the retention; `/api/tables/{name}/expire` is the same verb.
+
 `import` and `tables attach` also rewrite the tables block in the project's `AGENTS.md`, between `<!-- lakelet:tables:start -->` and `<!-- lakelet:tables:end -->`, so a coding agent opening the folder sees what is there.
 
 ## Attaching Parquet that is already in a bucket

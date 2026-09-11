@@ -28,6 +28,8 @@ class ProjectSection(_Section):
 class CatalogSection(_Section):
     mode: Literal["local", "team", "external"] = "local"
     url: str | None = None
+    #: `lakelet tables expire` keeps this many days of snapshots (decision 4, September 11).
+    keep_snapshots_days: int = 7
 
 
 class EngineSection(_Section):
@@ -48,6 +50,7 @@ SETTABLE: dict[str, type] = {
     "engine.memory_limit": str,
     "engine.threads": str,
     "gauge.share_calibration": bool,
+    "catalog.keep_snapshots_days": int,
 }
 
 
@@ -72,6 +75,10 @@ def parse_setting(key: str, value: str) -> str | int | bool:
         if value.isdigit() and int(value) > 0:
             return int(value)
         raise NotSettable(f"{key} takes auto or a positive integer, not {value!r}")
+    if key == "catalog.keep_snapshots_days":
+        if value.isdigit():
+            return int(value)
+        raise NotSettable(f"{key} takes a number of days (0 keeps only the current snapshot)")
     if value == "auto" or _SIZE.fullmatch(value.strip()):
         return value.strip()
     raise NotSettable(f"{key} takes auto or a size such as 8GB or 512MiB, not {value!r}")
@@ -133,6 +140,7 @@ def current_settings(config: Config) -> dict[str, str | int | bool]:
         "engine.memory_limit": config.engine.memory_limit,
         "engine.threads": config.engine.threads,
         "gauge.share_calibration": config.gauge.share_calibration,
+        "catalog.keep_snapshots_days": config.catalog.keep_snapshots_days,
     }
 
 
@@ -160,6 +168,7 @@ warehouse = "./warehouse"        # or s3://bucket/prefix, later
 
 [catalog]
 mode = "local"                    # local | team | external
+keep_snapshots_days = 7           # lakelet tables expire keeps this many days of snapshots
 
 [engine]
 memory_limit = "auto"             # DuckDB default, 80% of RAM

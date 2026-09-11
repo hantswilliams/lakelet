@@ -7,6 +7,7 @@ statement through the attached catalog; the catalog does the commit."""
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +38,11 @@ class UnsupportedFile(Exception):
 
 class TableExists(Exception):
     """The table is there already; the caller offers replace, append or another name."""
+
+
+class NotExpirable(Exception):
+    """A table `expire` will not touch: one registered with `tables attach` (its files are
+    not Lakelet's), or one whose location is outside the project's warehouse."""
 
 
 class NoSuchTable(Exception):
@@ -73,8 +79,23 @@ class TableInfo:
 
 
 @dataclass
+class ExpireReport:
+    name: str
+    keep_days: int
+    snapshots_before: int
+    snapshots_removed: int
+    files_removed: int
+    bytes_reclaimed: int
+
+
+@dataclass
 class TableDescription(TableInfo):
     partitioning: str = "unpartitioned"
+    #: Snapshots `lakelet tables expire` would remove at the project's retention, and the
+    #: bytes of the files only they reference (decision 4, September 11, 2026).
+    expirable_snapshots: int = 0
+    reclaimable_bytes: int = 0
+    keep_days: int = 7
     last_commit: dict[str, Any] = field(default_factory=dict)
     snapshots: int = 0
     format_version: int = 2
@@ -238,9 +259,18 @@ class Tables:
             if spec.fields
             else "unpartitioned"
         )
+        expirable = self._expirable(md, self.project.config.catalog.keep_snapshots_days)
+        reclaimable = 0
+        if expirable:
+            kept = self._referenced_files(md, exclude={s.snapshot_id for s in expirable})
+            gone = self._referenced_files(md, only={s.snapshot_id for s in expirable})
+            reclaimable = sum(size for path, size in gone.items() if path not in kept)
         return TableDescription(
             **info.__dict__,
             partitioning=partitioning,
+            expirable_snapshots=len(expirable),
+            reclaimable_bytes=reclaimable,
+            keep_days=self.project.config.catalog.keep_snapshots_days,
             last_commit=(
                 {
                     "snapshot_id": snapshot.snapshot_id,
@@ -294,6 +324,118 @@ class Tables:
             )
         self.refresh_agents_md()
         return self._info(name)
+
+    # -- expiry (decision 4, September 11, 2026) ---------------------------------------
+
+    @staticmethod
+    def _expirable(md, keep_days: int) -> list:
+        """Snapshots older than the retention, other than the current one and any a branch
+        or tag points at; what `expire` removes."""
+        cutoff_ms = (time.time() - keep_days * 86400) * 1000
+        protected = {md.current_snapshot_id} | {ref.snapshot_id for ref in md.refs.values()}
+        return [
+            s for s in md.snapshots if s.snapshot_id not in protected and s.timestamp_ms < cutoff_ms
+        ]
+
+    def _referenced_files(self, md, only=None, exclude=None) -> dict[str, int]:
+        """Every file the given snapshots reference (manifest lists, manifests, data and
+        delete files) with its size; the sweep deletes what the expired ones referenced and
+        the kept ones do not."""
+        io = self.project.metadata_io.io
+        files: dict[str, int] = {}
+        for snap in md.snapshots:
+            if only is not None and snap.snapshot_id not in only:
+                continue
+            if exclude is not None and snap.snapshot_id in exclude:
+                continue
+            if snap.manifest_list:
+                try:
+                    files[snap.manifest_list] = len(io.new_input(snap.manifest_list))
+                except Exception:  # noqa: BLE001 - a missing list is nothing to reclaim
+                    files[snap.manifest_list] = 0
+            for manifest in snap.manifests(io):
+                files[manifest.manifest_path] = manifest.manifest_length
+                for entry in manifest.fetch_manifest_entry(io, discard_deleted=False):
+                    files[entry.data_file.file_path] = entry.data_file.file_size_in_bytes
+        return files
+
+    #: An unreferenced file younger than this is left alone: it may be a write in flight.
+    ORPHAN_GRACE_SECONDS = 3600
+
+    def expire(
+        self, name: str, keep_days: int | None = None, orphan_grace_seconds: int | None = None
+    ) -> ExpireReport:
+        """`lakelet tables expire`: drop the snapshots older than the retention through the
+        catalog (pyiceberg's `expire_snapshots`), then delete the files that only they
+        referenced, and any data or manifest file under the table's own location that no
+        remaining snapshot references (a previous `import --replace` leaves those) once it
+        is older than the grace period. Only a table Lakelet wrote into the project's
+        warehouse; an attached table is refused."""
+        from pyiceberg.catalog.rest import RestCatalog
+
+        from lakelet.register import SOURCE_PROPERTY
+
+        if keep_days is None:
+            keep_days = self.project.config.catalog.keep_snapshots_days
+        md = self._metadata(name)
+        if SOURCE_PROPERTY in md.properties:
+            source = md.properties[SOURCE_PROPERTY]
+            raise NotExpirable(f"{name} is registered from {source}; its files are not Lakelet's")
+        if not md.location.startswith(self.project.warehouse_url):
+            raise NotExpirable(f"{name} lives outside the warehouse ({md.location})")
+        grace = self.ORPHAN_GRACE_SECONDS if orphan_grace_seconds is None else orphan_grace_seconds
+        before = len(md.snapshots)
+        expirable = self._expirable(md, keep_days)
+        was = self._referenced_files(md)
+        if expirable:
+            catalog = RestCatalog(
+                "lakelet", uri=self.project.catalog_url, **self.project.io_properties
+            )
+            table = catalog.load_table(f"{NAMESPACE}.{name}")
+            newest_ms = max(s.timestamp_ms for s in expirable)
+            table.maintenance.expire_snapshots().older_than(
+                datetime.fromtimestamp((newest_ms + 1) / 1000, tz=UTC)
+            ).commit()
+        md_after = self._metadata(name)
+        kept = self._referenced_files(md_after)
+        doomed: dict[str, int] = {p: s for p, s in was.items() if p not in kept}
+        doomed.update(self._orphans(md_after.location, kept, grace))
+        io = self.project.metadata_io.io
+        removed = 0
+        reclaimed = 0
+        for path, size in doomed.items():
+            try:
+                io.delete(path)
+            except FileNotFoundError:
+                continue
+            removed += 1
+            reclaimed += size
+        # the manifest cache is keyed by the current snapshot, which expiry never touches
+        return ExpireReport(
+            name, keep_days, before, before - len(md_after.snapshots), removed, reclaimed
+        )
+
+    @staticmethod
+    def _orphans(location: str, kept: dict[str, int], grace_seconds: int) -> dict[str, int]:
+        """Data and manifest files under a local table's location that no snapshot
+        references and that are older than the grace period; metadata JSON files stay."""
+        if not location.startswith("file://"):
+            return {}  # a remote warehouse has no listing here; expired files only
+        root = Path(location.removeprefix("file://"))
+        kept_paths = {Path(p.removeprefix("file://")) for p in kept}
+        cutoff = time.time() - grace_seconds
+        found: dict[str, int] = {}
+        for sub in ("data", "metadata"):
+            folder = root / sub
+            if not folder.is_dir():
+                continue
+            for f in folder.rglob("*"):
+                if not f.is_file() or f.suffix not in (".parquet", ".avro") or f in kept_paths:
+                    continue
+                if f.stat().st_mtime > cutoff:
+                    continue
+                found[f"file://{f}"] = f.stat().st_size
+        return found
 
     def refresh(self, name: str):
         from lakelet import register

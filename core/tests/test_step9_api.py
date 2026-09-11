@@ -42,6 +42,7 @@ def served(tmp_path):
 def test_token_health_and_the_open_catalog(served) -> None:
     p, client, _ = served
     health = client.get("/api/health")
+    assert health.json()["throughput_probe"] in ("nocache", "direct", "cached")
     assert health.status_code == 200, health.text
     data = health.json()
     assert data["lakelet"] and data["duckdb"] == duckdb.__version__
@@ -96,6 +97,7 @@ def test_settings_over_http_write_lakelet_toml(served) -> None:
         "engine.memory_limit": "auto",
         "engine.threads": "auto",
         "gauge.share_calibration": False,
+        "catalog.keep_snapshots_days": 7,
     }
     assert got["path"].endswith("lakelet.toml")
     put = client.put("/api/settings", json={"key": "gauge.share_calibration", "value": "true"})
@@ -108,6 +110,26 @@ def test_settings_over_http_write_lakelet_toml(served) -> None:
     assert 'memory_limit = "2GB"' in text and "share_calibration = true" in text
     assert "# DuckDB default, 80% of RAM" in text, "the file is edited, not regenerated"
     assert p.config.engine.memory_limit == "2GB", "the running project re-read its config"
+    put = client.put("/api/settings", json={"key": "catalog.keep_snapshots_days", "value": "3"})
+    assert put.json()["settings"]["catalog.keep_snapshots_days"] == 3
+
+
+def test_expire_over_http(served) -> None:
+    p, client, tmp_path = served
+    csv = str(tmp_path / "orders.csv")
+    client.post("/api/import", json={"path": csv})
+    client.post("/api/import", json={"path": csv, "mode": "append"})
+    described = client.get("/api/tables/orders").json()
+    assert described["snapshots"] == 2 and described["expirable_snapshots"] == 0
+    assert described["keep_days"] == 7 and described["reclaimable_bytes"] == 0
+    expired = client.post("/api/tables/orders/expire", json={"keep_days": 0})
+    assert expired.status_code == 200, expired.text
+    body = expired.json()
+    assert body["snapshots_before"] == 2 and body["snapshots_removed"] == 1
+    assert body["files_removed"] >= 1 and body["bytes_reclaimed"] > 0
+    assert client.get("/api/tables/orders").json()["snapshots"] == 1
+    assert client.get("/api/tables/orders").json()["rows"] == 2000
+    assert client.post("/api/tables/nope/expire").status_code == 404
 
 
 def test_a_client_that_goes_away_stops_the_statement_and_history_shows_the_run(served) -> None:

@@ -44,6 +44,8 @@ A Red verdict on `sql` and `question run` is refused: the line goes to stderr, n
 - **Time.** The larger of the I/O time (bytes over the disk throughput `init` measured, or the bucket bandwidth for remote data) and the CPU time (a nanoseconds-per-row cost per operator class, times rows, over the thread count at 70% efficiency), plus the time to write and read back any spill.
 - **The machine.** RAM, free disk, thread count and the memory limit, read from DuckDB and the OS each run, plus the throughput from `.lakelet/cache/machine.json`.
 
+The throughput is measured once, at `init`: Lakelet writes 512 MB of random bytes in the warehouse and reads them back, both with the page cache bypassed (`O_DIRECT` on Linux, `F_NOCACHE` on macOS; the write too, because macOS serves pages the write left in memory even to a `F_NOCACHE` read), so the figure is the disk's and not the cache's; a 64 GB machine reading through the cache would report tens of thousands of MB/s and the gauge would call every local scan free. Where the cache cannot be bypassed the figure is measured through it, capped at 7,000 MB/s and labelled `cached` in `lakelet gauge history` and `/api/health`. `lakelet gauge probe` measures again, which a project set up before September 11, 2026 should run once.
+
 The constants are v0: calibrated on TPC-H at scale factor 1 on one 18-thread machine, where 18 of 22 queries land within 2× on time and all 22 within 1.5× on bytes. They will be wrong by a factor on a different machine until per-machine correction arrives; the bytes number is the trustworthy one, the time number is the shape.
 
 ## Budgets

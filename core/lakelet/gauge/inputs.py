@@ -12,6 +12,7 @@ import platform
 import re
 import shutil
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -139,29 +140,162 @@ def machine_hash(profile: dict[str, Any]) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def probe_throughput(warehouse: Path, size_mb: int = 512) -> float:
-    """Brief D36: write a Parquet file of about ``size_mb`` in the warehouse, read it twice
-    with DuckDB, keep the second time, delete it. MB per second."""
-    import duckdb
+#: What a cached read is capped at when the cache cannot be bypassed (decision 2 of
+#: September 11, 2026): a PCIe 4 NVMe's ceiling, so the gauge errs fast by a known bound.
+CACHED_PROBE_CEILING_MBPS = 7000.0
+#: Faster than this is not a disk; a bypass that reports it did not bypass, and the
+#: figure is treated as cached (macOS serves pages already in memory even under F_NOCACHE).
+IMPLAUSIBLE_MBPS = 20_000.0
+PROBE_CHUNK = 4 * 1024 * 1024
 
-    warehouse.mkdir(parents=True, exist_ok=True)
-    path = warehouse / ".lakelet-probe.parquet"
-    con = duckdb.connect()
-    rows = max(1, size_mb) * 62_500  # about 16 bytes a row before compression
-    con.execute(
-        f"COPY (SELECT range AS i, random() AS r FROM range({rows})) TO '{path}' "
-        "(FORMAT parquet, COMPRESSION uncompressed)"
-    )
+
+@dataclass
+class ProbeResult:
+    """MB per second, and how it was measured: ``nocache`` (macOS ``F_NOCACHE``), ``direct``
+    (Linux ``O_DIRECT``), or ``cached`` (through the page cache, capped)."""
+
+    mbps: float
+    method: str
+    size_bytes: int
+
+
+def _bypass_flags() -> tuple[int, str] | None:
+    """The open flag and the method name for a cache-bypassed file on this platform, or
+    None where there is neither (Windows; a filesystem that refuses)."""
+    if hasattr(os, "O_DIRECT"):
+        return os.O_DIRECT, "direct"
     try:
-        size = path.stat().st_size
-        con.execute(f"SELECT sum(i) FROM read_parquet('{path}')").fetchall()
-        started = time.perf_counter()
-        con.execute(f"SELECT sum(i) FROM read_parquet('{path}')").fetchall()
-        elapsed = max(time.perf_counter() - started, 1e-4)
+        import fcntl
+
+        if getattr(fcntl, "F_NOCACHE", None) is not None:
+            return 0, "nocache"
+    except ImportError:
+        pass
+    return None
+
+
+def _set_nocache(fd: int) -> None:
+    import fcntl
+
+    fcntl.fcntl(fd, fcntl.F_NOCACHE, 1)
+
+
+def _write_uncached(path: Path, size_bytes: int) -> str | None:
+    """Write ``size_bytes`` of random data with the cache bypassed, so no page of the file
+    is in memory when it is read back (on macOS, F_NOCACHE on the read alone leaves the
+    pages the write put there, and the read is served from them). The method, or None."""
+    import mmap
+
+    flags = _bypass_flags()
+    if flags is None:
+        return None
+    flag, method = flags
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | flag, 0o600)
+    except OSError:
+        return None
+    try:
+        if method == "nocache":
+            _set_nocache(fd)
+        buffer = mmap.mmap(-1, PROBE_CHUNK)
+        try:
+            buffer.write(os.urandom(PROBE_CHUNK))  # incompressible, so no controller shortcut
+            written = 0
+            while written < size_bytes:
+                written += os.writev(fd, [buffer])
+            os.fsync(fd)
+        finally:
+            buffer.close()
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    return method
+
+
+def _read_uncached(path: Path) -> tuple[float, str] | None:
+    """Sequential read of the whole file with the page cache bypassed; seconds and the
+    method, or None when the platform or filesystem refuses."""
+    import mmap
+
+    flags = _bypass_flags()
+    if flags is None:
+        return None
+    flag, method = flags
+    try:
+        fd = os.open(path, os.O_RDONLY | flag)
+    except OSError:
+        return None
+    try:
+        if method == "nocache":
+            _set_nocache(fd)
+        # O_DIRECT needs a page-aligned buffer; an anonymous mmap is one on every platform
+        buffer = mmap.mmap(-1, PROBE_CHUNK)
+        try:
+            started = time.perf_counter()
+            while True:
+                n = os.readv(fd, [buffer])
+                if n <= 0:
+                    break
+            return max(time.perf_counter() - started, 1e-4), method
+        except OSError:
+            return None
+        finally:
+            buffer.close()
+    finally:
+        os.close(fd)
+
+
+def _write_cached(path: Path, size_bytes: int) -> None:
+    block = os.urandom(PROBE_CHUNK)
+    with path.open("wb") as f:
+        written = 0
+        while written < size_bytes:
+            f.write(block)
+            written += len(block)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def probe_throughput(warehouse: Path, size_mb: int = 512) -> ProbeResult:
+    """Brief D36 as amended September 11, 2026: write a file of ``size_mb`` of random bytes
+    in the warehouse and read it back once, both with the page cache bypassed
+    (``O_DIRECT`` on Linux, ``F_NOCACHE`` on macOS), then delete it. Where the cache
+    cannot be bypassed, or the figure is faster than any disk, read through the cache and
+    cap the figure, saying so. MB per second and the method; the gauge divides bytes
+    scanned by the number."""
+    warehouse.mkdir(parents=True, exist_ok=True)
+    path = warehouse / ".lakelet-probe.bin"
+    size_bytes = max(1, size_mb) * PROBE_CHUNK // 4  # size_mb MiB, a multiple of the chunk
+    try:
+        bypassed = _write_uncached(path, size_bytes)
+        uncached = _read_uncached(path) if bypassed else None
+        if uncached is not None:
+            elapsed, method = uncached
+            mbps = size_bytes / 1e6 / elapsed
+            if mbps <= IMPLAUSIBLE_MBPS:
+                return ProbeResult(mbps, method, size_bytes)
+            # the bypass did not bypass: treat it as a cached read
+        if not path.exists() or path.stat().st_size < size_bytes:
+            _write_cached(path, size_bytes)
+        # the cache cannot be bypassed here: read through it, twice, keep the second, cap
+        for _ in range(2):
+            started = time.perf_counter()
+            with path.open("rb") as f:
+                while f.read(PROBE_CHUNK):
+                    pass
+            elapsed = max(time.perf_counter() - started, 1e-4)
+        return ProbeResult(
+            min(size_bytes / 1e6 / elapsed, CACHED_PROBE_CEILING_MBPS), "cached", size_bytes
+        )
     finally:
         path.unlink(missing_ok=True)
-        con.close()
-    return size / 1e6 / elapsed
+
+
+def probe_method(cache: dict[str, Any]) -> str:
+    """How the cached figure was measured; a figure from before September 11, 2026 has no
+    method recorded and was read through the cache."""
+    return str(cache.get("probe") or ("cached" if cache.get("throughput_local_mbps") else "none"))
 
 
 def load_machine_cache(cache_dir: Path) -> dict[str, Any]:

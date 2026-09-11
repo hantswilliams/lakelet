@@ -31,22 +31,23 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 
 | Route | Body | Returns |
 |---|---|---|
-| `GET /health` | | `lakelet` and `duckdb` versions, `project` name and `root`, the `machine` profile (RAM, free disk, threads, memory limit), `throughput_local_mbps` and `bandwidth_mbps` from the cache. |
+| `GET /health` | | `lakelet` and `duckdb` versions, `project` name and `root`, the `machine` profile (RAM, free disk, threads, memory limit), `throughput_local_mbps` and `bandwidth_mbps` from the cache, and `throughput_probe` (`nocache`, `direct`, `cached` or `none`: how the disk figure was measured). |
 | `GET /tables` | | The list: name, rows, bytes, columns, location, snapshot id, `freshness` (when the current snapshot was committed, ISO 8601). |
 | `GET /tables/discover?prefix=s3://…` | | Candidate prefixes with kind, files and bytes. |
-| `GET /tables/{name}` | | `describe`: the list's fields plus partitioning, freshness, last commit, snapshots, format version. 404 `no_such_table`. |
+| `GET /tables/{name}` | | `describe`: the list's fields plus partitioning, freshness, last commit, snapshots, format version, and `expirable_snapshots`, `reclaimable_bytes`, `keep_days` for `expire`. 404 `no_such_table`. |
 | `GET /tables/{name}/sample?n=5&truncate=80` | | The first rows. |
 | `POST /preview` | `{path, name?}` | The columns with DuckDB type, Iceberg type and note, and sample rows; for a folder, a list of these, one per file `import` would take. 400 `bad_file`. |
 | `POST /import` | `{path, name?, mode}` with `mode` one of `create`, `replace`, `append` | The table info, or a list of them for a folder. 409 `table_exists`, 400 `bad_file`, 409 `catalog_conflict`. |
 | `POST /tables/attach` | `{name, source, metadata_in_bucket}` | The table info. 409 `table_exists`, 400 `not_registrable` with the reason (drift, path-only partition column). |
 | `POST /tables/{name}/refresh` | | `{name, added, files, rows}`. 404 `no_such_table`, 409 `refresh_failed` when a registered file is gone. |
+| `POST /tables/{name}/expire` | `{keep_days?}` | `lakelet tables expire`: `{name, keep_days, snapshots_before, snapshots_removed, files_removed, bytes_reclaimed}`. The one route that deletes data files. 404 `no_such_table`, 409 `not_expirable` for an attached table. |
 | `POST /estimate` | `{sql}` | The estimate as JSON: `verdict`, `words`, `reason`, `line`, the numbers (`bytes_scanned`, `peak_memory`, `wall_local`, `wall_burst`, `cost_burst`, `cap`, `spill_bytes`, `memory_limit`), `pruning`, the tables and the worker. 400 `sql_error`. |
 | `POST /query` | `{sql, allow_red, batch_rows}` | An Arrow IPC stream (below). |
 | `GET /questions` | | Saved questions with slug, title, path and last run. |
 | `POST /questions` | `{title, sql}` | The saved question. 400 `sql_error`. |
 | `POST /questions/{slug}/run` | `{allow_red}` | An Arrow IPC stream, and the question's `last_run` is updated when it completes. 404 `no_such_question`. |
 | `GET /history?last=50` | | Recent runs from `.lakelet/history.db`, newest first. |
-| `GET /settings` | | `settings` (`engine.memory_limit`, `engine.threads`, `gauge.share_calibration` with their values), the `path` of `lakelet.toml`, and a `note` that the engine reads them at start. |
+| `GET /settings` | | `settings` (`engine.memory_limit`, `engine.threads`, `gauge.share_calibration`, `catalog.keep_snapshots_days` with their values), the `path` of `lakelet.toml`, and a `note` that the engine reads them at start. |
 | `PUT /settings` | `{key, value}` with `value` a string as `lakelet config set` takes it | The same as `GET`, after the one line in `lakelet.toml` is rewritten in place (comments and other sections kept). 400 `not_settable` for any other key or a value of the wrong shape. |
 
 Errors are `{"error": "<code>", "message": "…"}` with the HTTP status in the table; a malformed body is a 422 from the framework.

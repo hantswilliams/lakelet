@@ -1,88 +1,109 @@
 # Lakelet — running task list
 
-*Updated every session. The brief (`core-v0.5-plan.md`) says what each step is and what its gate is; this file says where we are. Dates are when the status changed. Sections: what is next, the nine steps, the definition of done, open items, the site, the sessions after core v0, and the dated done log.*
+*The one file to open to know where the build is. Updated every session; dates are when a status changed. The briefs say what each step is and what its gate is (`core-v0.5-plan.md` for the core, `app-v0-plan.md` for the desktop shell); `lakelet-build-sessions.md` is the map of the sessions; the dated logs (`lakelet-build-sessions_<MMDDYY>.md`) say what happened. This file only says where we are and what comes next.*
 
-## Now, in order
+## Now
 
-1. [x] **CI green** (2026-09-09, `core #2` on `bb017b8`: Ubuntu 3m 36s, macOS 4m 30s, Postgres 34s, all green; the Mac run before the push was 145 passed, 5 env-gated skips). Two product bugs came out of getting there: the credential chain and the descriptor leak, both below.
-2. [ ] **Clean-machine quickstart** on a Mac and an Ubuntu, under ten minutes (brief §6, step 7 gate).
-3. [ ] **Reference-laptop (16 GB) timings**: `LAKELET_PERF=1` CSV imports, the ten-thousand-file registration against RustFS, and the TPC-H SF1 time table with `LAKELET_TPCH=1`; the v0 gauge constants were tuned on an 18-thread, 64 GB machine.
-4. [ ] **Demo-path bucket** (brief §6): a Lakelet-owned bucket with a public dataset, prepared with `tables attach` and nothing else, Red with the bandwidth sentence from a laptop, pyiceberg reading it from another process.
-5. [ ] **Trademark search** for "Lakelet" (USPTO, and the PyPI name) — PRD D4.3 says before publishing; the repo is already public, so this is overdue.
+**Session 6, step 5 of `app-v0-plan.md`**: the §6 definition of done measured and recorded line by line (launch, streaming, verdicts, recovery, tests on both runners, nothing hidden), a docs page for the app under Develop on the site, and the session 6 log in its own file. One line of §6 is Hants', not the build's: the founder using it daily on a real dataset for a week.
 
-## Decisions waiting on Hants
+## Next, in order
 
-- [x] `app-v0-plan.md` — A1 to A14 accepted 2026-09-10 (in conversation); steps 0 and 1 built the same day.
-- [x] `decisions-for-review_090926.md` — all three accepted and shipped 2026-09-09: `init` writes `macros/lakelet.sql` (an override of dbt's `table`), `dbt run` builds saved questions through the catalog, `test_step6_materialisation.py` is the gate.
+Decided 2026-09-11 (Hants, in conversation). Each item names the document that specifies it.
 
-## Steps of the brief (§4)
+1. ~~Core: the disk-throughput probe~~ **done 2026-09-11** (`decisions-for-review_091126.md` 1 to 3): the probe reads with the cache bypassed (`O_DIRECT`, `F_NOCACHE`), the method is recorded, `lakelet gauge probe` measures again, health and the app's tile flag a cached figure. To run on the Mac: `lakelet gauge probe` in `~/lakelet-demo`.
+2. ~~Core: snapshot expiry~~ **done 2026-09-11** (decision 4): `lakelet tables expire [<name>|--all] [--keep-days N]`, `catalog.keep_snapshots_days` (7, settable), `describe` names what is reclaimable, `POST /api/tables/{name}/expire`; attached tables refused; orphans from `import --replace` swept after an hour's grace. Five tests in `test_expire.py`.
+3. **Session 10, ship** (`lakelet-build-sessions.md`): signed installers with the sidecar and the DuckDB extensions bundled (D33), the "under 200 MB" claim measured, the frozen sidecar's spawn-to-ready measured against the 1.5 s budget (the app brief's last known unknown), brew tap, the per-operator-class correction (M7), the `catalog serve` engines smoke test through the real verb, instrumentation export, partner onboarding. Needs its own brief with decisions first.
+4. **Session 9, dbt and the Simple/Technical screens**: the materialisation already ships (2026-09-09); still inherited: lifting `tests/dbt_plugin.py` into the package, git auto-commit on save, table-level lineage (D30, D32), the DAG by verdict, the vocabulary mapping. Needs its own brief.
+5. **Session 8, burst end to end**: control plane, job token, cap → budget, catalog lease pushing the metadata tree (D26), `publish`. Partner intake (five questions) runs before it. Session 3 (the Fargate worker spike, throwaway) can run any time in parallel and should run before this.
+6. **Session 5, `lakelet mcp`** (after session 8, M6).
 
-| Step | Status | Gate, in short | Test file |
+**Parked**: **Session 7, the ask box** and `lakelet ask` (M11), deprioritised 2026-09-11; ⌘/Ctrl+K stays reserved for it, and the settings for model providers with it.
+
+**Needs another machine, or Hants, not a build step** (from the core's definition of done and the PRD):
+
+- [ ] Clean-machine quickstart on a Mac and an Ubuntu under ten minutes (core brief §6, step 7 gate).
+- [ ] Reference-laptop (16 GB) timings: `LAKELET_PERF=1` CSV imports, the ten-thousand-file registration against RustFS, the TPC-H SF1 time table with `LAKELET_TPCH=1`; the v0 gauge constants were tuned on an 18-thread, 64 GB machine.
+- [ ] Demo-path bucket (core brief §6): a Lakelet-owned bucket with a public dataset, prepared with `tables attach` and nothing else, Red with the bandwidth sentence from a laptop, pyiceberg reading it from another process.
+- [ ] Trademark search for "Lakelet" (USPTO, and the PyPI name); PRD D4.3 says before publishing, and the repo is public.
+- [ ] The founder uses the app daily on a real dataset for a week (app brief §6). `examples/sample-data/make_sample.py` and any CSV are enough to start.
+
+## The map
+
+The sessions of `lakelet-build-sessions.md`, with where each stands. That file is the authority on scope; this table is the only place status lives.
+
+| Session | What | Status | Specified by |
 |---|---|---|---|
-| 0 | **done** 2026-09-09: CI green on macOS and Ubuntu (`core #2`) | `uv run pytest` passes on macOS and Ubuntu; stale doc pointers gone; a fresh clone plus `CLAUDE.md` finds the current step | `test_step0_skeleton.py` |
-| 1 | **done** 2026-09-09: suite green on both runners, Postgres job green, RustFS verified locally | Catalog: DuckDB writes through it to `file://`, pyiceberg reads; 100 concurrent-process commits lose nothing; `s3://` via Moto; Postgres behind an env var | `test_step1_*.py` |
-| 2 | done locally 2026-09-08 | `select * from orders` after a manual `CREATE TABLE`; profiler on; extensions installed by `init`; dbt-duckdb spike recorded | `test_step2_*.py` |
-| 3 | done locally 2026-09-08; timings to re-run on the reference laptop | Import matrix incl. every row of §3.7; 200 MB CSV ≤ 10 s; 2 GB CSV ≤ 90 s | `test_step3_*.py` |
-| 4 | done locally 2026-09-08 | A history row per run with profiler actuals and SQL text; a forced conflict retries then exits 4 | `test_step4_query.py` |
-| 5 | done locally 2026-09-08; time accuracy strict only on the reference run | TPC-H SF1: 80% within 2× time, 1.5× bytes; no Green over 3 min; every Yellow and Red line carries a worker size, burst time and cap | `test_step5_*.py` |
-| 6 | done locally 2026-09-08 | Questions as dbt models; `dbt parse` accepts the project | `test_step6_questions.py` |
-| 7 | done locally 2026-09-08; clean-machine quickstart pending | Ten-minute quickstart on Mac and Ubuntu; gauge line within 1 s of process start; `audit network` reports zero | `test_step7_cli.py` |
-| 8 | done locally 2026-09-08 | A Parquet prefix attaches without copying; `refresh` adds a file; a large table returns Red with the bandwidth sentence; five fixtures with one-day limits | `test_step8_remote.py` |
-| 9 | done locally 2026-09-08 | API with bearer auth and health; 401 without the token; non-loopback bind refused | `test_step9_api.py` |
+| 1–2, 4 | Core v0: catalog, engine, import, query and history, gauge, questions, CLI, remote read-only, local API | **done** 2026-09-08; CI green 2026-09-09; step 7's clean-machine quickstart and the demo bucket outstanding (above) | `core-v0.5-plan.md` |
+| 3 | Fargate worker spike (throwaway) | not started; any time, needs AWS | `lakelet-build-sessions.md` |
+| 6 | Desktop shell: Tauri, sidecar, screens 1 and 2, chart, recovery, settings | **steps 0–4 done** 2026-09-10; step 5 in progress | `app-v0-plan.md` |
+| 7 | Ask box, `lakelet ask` | **parked** 2026-09-11 | `lakelet-build-sessions.md` |
+| 8 | Burst end to end | not started; partner intake first | `lakelet-build-sessions.md` |
+| 5 | `lakelet mcp` | not started; after 8 | `lakelet-build-sessions.md` |
+| 9 | dbt and the Simple/Technical screens | not started; the materialisation shipped early (2026-09-09) | `lakelet-build-sessions.md` |
+| 10 | Ship: installers, brew tap, correction, smoke test, instrumentation, onboarding | not started; next after the two core items | `lakelet-build-sessions.md` |
 
-Last full local run (2026-09-08, under load): 140 passed, 8 skipped (5 env-gated fixtures, 3 budget assertions that skip under load). Spark 3.5 and Trino read and write a Lakelet table through the catalog (PRD F0.7 AC), `tests/smoke/`.
+## Session 6, the desktop shell (`app-v0-plan.md` §4)
 
-## Definition of done (brief §6)
+| Step | Status | What it left behind |
+|---|---|---|
+| 0 | done 2026-09-10 | `app/` (Tauri 2, React, Vite, the site's tokens); the Rust supervisor with `cargo test`s against a fake sidecar; the status dot and health panel; Playwright against a real sidecar; `app-ci.yml`. Core: `serve --memory-limit`, `LAKELET_DEV_ORIGIN` (the shell sets it in debug builds only, A12 amended). Mac: green dot, tiles. |
+| 1 | done 2026-09-10 | `projects.rs`: the recent ten, the memory share (60% of RAM halved per further window), `init` for a folder without `lakelet.toml`, one window per project, close kills the sidecar; the welcome screen; `ready_ms` on the session and the "core ready in" tile. Mac: 38.3 then 19.1 GiB across two windows; spawn to ready 871 ms cold, 441 ms warm. |
+| 2 | done 2026-09-10 | Screen 1: the tables panel with an updated column (core `TableInfo.freshness`), the drop zone (Tauri drag-drop, "Choose files…", a typed path), the preview with types and notes (a folder answers a list; `lakelet import <folder> --preview` too), import with replace-or-append on a 409, "Copy as command" from `lib/command.ts`; `Open…` as a menu of recent projects. Mac: an 18-column CSV from Finder; wide tables scroll inside their panel. |
+| 3 | done 2026-09-10 | Screen 2: CodeMirror with completion, the verdict from the headers before any row, the streaming Arrow grid (100,000-row cap), Red as a refusal with "Run anyway", Esc. Core: `X-Lakelet-*` exposed over CORS; a client that goes away interrupts DuckDB and the run is recorded as stopped early. Mac: verdict at 56 ms, first rows at 62 ms, 66,667 rows at 143 ms over 20 M rows; the tests pick ⌘ as Mod and insert SQL as text. |
+| 4 | done 2026-09-10 | The auto-chart (`lib/chart.ts`, Vega-Lite through `vega-interpreter` so no `unsafe-eval`); the window's `restarted` and `down` reactions with "Restart the core"; the settings panel over new core verbs `lakelet config show|set` and `/api/settings`, rewriting one line of `lakelet.toml` in place; ⌘/Ctrl+, and ⌘/Ctrl+K; dates, times and decimals converted per Arrow type in the grid; `examples/sample-data/`. Mac: the line chart in the Tauri window, two kills, a setting saved. |
+| 5 | in progress | §6 measured and recorded; the docs page for the app; the session 6 log. |
 
-- [ ] **Quickstart** on a clean Mac and a clean Ubuntu under ten minutes: install, `init`, `import orders.csv`, `sql` Green with rows, `estimate` Red with its sentence, `catalog serve` read by pyiceberg from another process, `audit network` zero. The sequence passes as a test here; the fresh-machine exercise is not done.
-- [x] **Tests green on both CI runners** (`core #2`, 2026-09-09) and the Postgres job.
-- [ ] **Demo path**: the Lakelet-owned bucket (Now 4). Spark read of the same table is the session 10 smoke test; the compose-network version already passes.
-- [x] **Budgets**, measured on this Mac 2026-09-08: gauge line 4 to 6 ms warm (150 ms budget); second estimate on bucket metadata 17 ms; `lakelet sql` to gauge line 0.81 s (1 s budget). Query overhead beyond DuckDB has not been measured as its own number (50 ms budget); worth one assertion.
-- [x] **Nothing hidden**: `audit network` runs the quickstart with both guards and measures zero; `/api` is 401 without the token; every server binds loopback (2026-09-08).
+Gates as of 2026-09-11: Playwright 16 against four real sidecars (one with a 20 M-row table), Vitest 26, `cargo test` 7, core 149 passed; CI green on macOS and Ubuntu for `core`, `app` and Pages.
+
+## Core v0, the steps of `core-v0.5-plan.md` §4
+
+All nine done on the Mac 2026-09-08 and green on both CI runners 2026-09-09 (`core #2`); the Postgres variant green. Test files `core/tests/test_step<N>_*.py`. Outstanding from the gates: step 3's timings on the reference laptop; step 7's clean-machine quickstart (both under "Needs another machine" above).
+
+Definition of done (core brief §6): tests green on both runners ✓; budgets measured 2026-09-08 (gauge line 4 to 6 ms warm; second estimate 17 ms; `lakelet sql` to gauge line 0.81 s; query overhead beyond DuckDB 12 to 17 ms) ✓; nothing hidden (`audit network` zero, `/api` 401 without the token, loopback only) ✓; quickstart on clean machines ✗; demo path ✗.
 
 ## Open items that are not steps
 
-- [ ] Re-export `deck/lakelet-executive-summary.pdf` from the edited docx (docx 2026-09-08 13:21, PDF still 2026-09-07; no LibreOffice on this machine).
-- [x] Query overhead beyond DuckDB (§6, 50 ms): `test_query_overhead_beyond_duckdb_is_within_the_budget` (2026-09-09), full `query()` minus DuckDB alone on the same statement, warm, best of three; 12 to 17 ms on a two-core container. Skips under load like the other budgets.
-- [ ] `old/deck-before-090826/` (pitch deck, executive summary) has been in the public repo's history since commit `6290775`. Untracked at HEAD 2026-09-09. Purging history is `git filter-repo` plus a force push; Hants' call.
-- [ ] `docs/lakelet-financial-plan.docx` is now gitignored (2026-09-09) so it stays out of the public repo; it also still says Burrow inside. `docs/lakelet-product-spec.md` still mentions Burrow once.
-- [x] Decided 2026-09-09, not adopted: the `duckdb-extension-*` PyPI wheels are a third-party repackaging (one individual's `duckdb_extensions` project, MIT, not DuckDB Labs), so they stay out of CI for a public repo. CI keeps the official `INSTALL` with the per-version cache. The wheels remain a convenience for sandboxes that cannot reach `extensions.duckdb.org`; see the 2026-09-09 log for the recipe.
-- [x] CI actions bumped 2026-09-09 to the Node 24 runtimes: `actions/checkout@v7`, `actions/cache@v5`, `astral-sh/setup-uv@v9.0.0` (setup-uv stopped publishing major tags at v8, so it is pinned exactly). `deploy-pages.yml` still has the older majors; harmless, bump when the site workflow is next touched.
-- [x] Pytest tooling: the `-q` addopt is gone from `pyproject.toml` (2026-09-09); `uv run pytest` prints the normal summary and `-q` means one `-q`.
-- [ ] The disk-throughput probe (core D36) measures the page cache, not the disk: on a 64 GB Mac it reported 84,914 MB/s, because `init` reads back the 512 MB file it just wrote. The gauge divides bytes by this number, so local I/O time is estimated as roughly zero on any machine with more RAM than the probe. Fix candidates: read with the cache bypassed (`F_NOCACHE` on macOS, `O_DIRECT` on Linux), or a file larger than RAM, or cap the recorded figure at a plausible NVMe ceiling and say so. Found by the app's health tile on 2026-09-10.
-- [ ] Snapshot expiry and orphan-file removal (Day 1): every dbt rebuild and every `import --replace` leaves the previous snapshot's data files in place, so a table rebuilt nightly grows nightly. Needs `expire_snapshots` through pyiceberg plus a file sweep, and a `lakelet tables compact` or similar verb.
+Open:
+
+- [ ] The first Arrow batch reaching the app carries several thousand rows (7,000 on the Mac, 38,000 in the container): the server has that many batches written before the browser reads the first; if the first rows are to land as early as the core produces them, the response's first flush is the place to look. Found 2026-09-10.
+- [ ] Re-export `deck/lakelet-executive-summary.pdf` from the edited docx (no LibreOffice on the Mac).
+- [ ] `old/deck-before-090826/` is in the public repo's history since `6290775`; purging is `git filter-repo` plus a force push; Hants' call.
+- [ ] `docs/lakelet-financial-plan.docx` is gitignored but still says Burrow inside; `docs/lakelet-product-spec.md` mentions Burrow once.
 - [ ] Plan filename versus internal revision number; cosmetic.
-- [ ] Sign every commit with `git commit -s` from now on (CONTRIBUTING's DCO). The commits before `7f0ff4a` are unsigned; fine for the author's own work.
-- [x] Repo hygiene (2026-09-09, commit `7f0ff4a`, signed): `.gitignore` fixed so `docs/` and `build-sessions/` are tracked; `LICENSE`, `NOTICE`, `CONTRIBUTING.md`, `CLAUDE.md`, `AGENTS.md`, `compose.yaml`, `compose/`, `core-ci.yml` and the new README committed for the first time; `.DS_Store` and `old/` untracked; Apache headers on the two `__init__.py` files that lacked them.
-- [x] A self-hosted S3-compatible store: RustFS in `compose.yaml`; the `s3://` tests pass against it (2026-09-08).
-- [x] Spark and Trino read and write a Lakelet table through the catalog: `compose.yaml` engines profile plus `tests/smoke/`, passing (2026-09-08). Session 10 repeats it through the `catalog serve` verb.
-- [x] The `web/` Astro build: Pages deploy #3 built and published the September 8 wording edits on 2026-09-09.
+- [ ] `deploy-pages.yml` still has the older action majors; bump when next touched.
+- [ ] Known unknowns still open in the core brief's §7: the 150 ms gauge budget on a never-read table (PRD allows 800 ms uncached); how much of DuckDB's filter rendering the predicate parser needs for real workloads; partner prefixes with drift or path-only partitions (fixtures pass; intake decides); the lease carrying a metadata tree. The sidecar memory split closed with A8.
+
+Closed:
+
+- [x] The disk-throughput probe measured the page cache; now bypassed, with `lakelet gauge probe` for existing projects (2026-09-11).
+- [x] Snapshot expiry and orphan-file removal: `lakelet tables expire` (2026-09-11).
+
+- [x] Query overhead beyond DuckDB measured as its own test (2026-09-09).
+- [x] `duckdb-extension-*` PyPI wheels: a third-party repackaging, kept out of CI; a convenience for sandboxes that cannot reach `extensions.duckdb.org` (2026-09-09).
+- [x] CI actions bumped to the Node 24 runtimes (2026-09-09).
+- [x] The `-q` addopt removed from `pyproject.toml` (2026-09-09).
+- [x] Repo hygiene commit `7f0ff4a`, signed (2026-09-09). Commits before it are unsigned; fine for the author's own work; `git commit -s` from then on.
+- [x] RustFS in `compose.yaml`; the `s3://` tests pass against it (2026-09-08).
+- [x] Spark and Trino read and write a Lakelet table through the catalog (2026-09-08); session 10 repeats it through `catalog serve`.
+- [x] The credential chain: a machine with no AWS credentials opens a project; `s3://` operations say which variables to set (2026-09-09).
+- [x] The descriptor leak: `Project.close()` disposes the pools; a test holds 20 open/close cycles to six leaked descriptors (2026-09-09).
 
 ## The site (`web/`, live at hantswilliams.github.io/lakelet)
 
-- [ ] `PUBLIC_WAITLIST_URL` repo variable is not set; the forms log to the console and show success, so signups are lost. Pick a provider (Formspree, Buttondown, or Cloudflare Pages with `functions/api/waitlist.ts`).
-- [x] `web/src/data/nav.ts` GitHub link points at the repo (2026-09-09).
+- [ ] `PUBLIC_WAITLIST_URL` is not set; the forms log to the console and show success, so signups are lost. Pick a provider (Formspree, Buttondown, or Cloudflare Pages with `functions/api/waitlist.ts`).
 - [ ] Domain: when bought, add under Settings → Pages and set `SITE_URL`.
-- [x] Developer docs on the site (2026-09-09): `/docs` with ten pages under `web/src/content/docs/`, a docs layout with sidebar and the developer-preview banner, the CLI reference generated by `web/scripts/gen-cli-reference.py`, `llms.txt` updated, the nav's GitHub link fixed. Built clean at both base paths; deploys with the next push to `main`.
-- [x] Docs: `/docs/transactions` (2026-09-09), what DuckDB-Iceberg refuses inside one transaction with the exact error text, why, and what it means for dbt; linked from the catalog and questions pages.
-- [ ] Docs follow-ups: re-run `gen-cli-reference.py` after any CLI change (make it a CI check later); the quickstart transcripts are illustrative until the clean-machine run replaces them with real output; add a page on `audit network` and one on history's schema once session 6 needs them.
-- [ ] The medallion page's `[burst.tags.<tag>]` caps and `[schedules.nightly]` in `lakelet.toml` are not in the architecture spec; decide whether to adopt.
+- [ ] Docs follow-ups: a CI check that `gen-cli-reference.py` is current; the quickstart transcripts are illustrative until the clean-machine run replaces them; a page on `audit network` and one on history's schema; the app page (step 5).
+- [ ] The medallion page's `[burst.tags.<tag>]` caps and `[schedules.nightly]` are not in the architecture spec; decide whether to adopt.
+- [x] Developer docs (2026-09-09): `/docs` with the pages under `web/src/content/docs/`, the CLI reference generated, `llms.txt`, the nav's GitHub link; `/docs/transactions` on what DuckDB-Iceberg refuses inside one transaction.
 
-## After core v0: the session plan (`lakelet-build-sessions.md`) and what each inherits
+## Decisions waiting on Hants
 
-- [ ] **Session 3, Fargate worker spike** (throwaway, any time in parallel): cold start, 10 GB and 100 GB scans, real cost; makes the landing page's receipt numbers real. Spike 2 (TPC-H at SF10 and SF100, local and from S3) can run alongside now that step 8 exists; the SF1 bytes number is near-tautological (§7).
-- [ ] **Session 6, desktop shell** (`app-v0-plan.md`): step 0 done 2026-09-10 — `app/` scaffold (Tauri 2, React, Vite, the site's tokens), the Rust supervisor with three `cargo test`s against a fake sidecar (start and read `serve.json`, restart once then stop, early exit surfaces stderr), `get_session`, the status dot and health panel, Playwright gate against a real sidecar (dot green in 433 ms from page open in a browser; a CLI-imported table appears), `app-ci.yml` for both runners. Core additions: `serve --memory-limit`, `LAKELET_DEV_ORIGIN`; the `serving` line already existed. Verified in the real Tauri window on the Mac 2026-09-10 (green dot, project name, health tiles, empty tables panel) after one fix: under `tauri dev` the window's origin is the Vite server, so the shell passes `LAKELET_DEV_ORIGIN` in debug builds (A12 amended). Step 1 done 2026-09-10 — `projects.rs` (recent ten in `recent.json` under the app-data dir, the memory share 60% of RAM halved per further window, `lakelet init` for a folder without `lakelet.toml`, the window registry: one project per window, `close` kills the sidecar), `lib.rs` creates windows itself (`project-N`), commands `get_session` (waits while the sidecar starts), `window_project`, `recent_projects`, `pick_folder` (native dialog from Rust, `tauri-plugin-dialog`), `open_project`; the welcome screen with the recent list; "Open…" in the bar for another window; `ready_ms` on the session and a "core ready in" tile. Gates: 7 `cargo test`, 3 Vitest, 5 Playwright (two real sidecars; the second window's limit is half the first's on the tile). Next: step 2, screen 1 (drop, preview, import, "Copy as command"). Checked on the Mac 2026-09-10: welcome screen, dialog, `lakelet-demo` at 38.3 GiB, `Open…` set up and opened a fresh `lakelet-second` in a second window at 19.1 GiB, closing it left one `serve` process; spawn-to-ready 871 ms cold, 441 ms warm (2,018 ms in the container's headless run, which is not the reference). Step 2 done 2026-09-10 — screen 1: the tables panel gains an updated column (core `TableInfo.freshness`, in `/api/tables` and `lakelet tables list`), the drop zone (Tauri's drag-drop event gives paths; "Choose files…" through a Rust `pick_files` dialog command; a typed path for a browser and for developers) with the terminal command beside it, the preview (`/api/preview`; a folder answers a list, new in the core and in `lakelet import <folder> --preview`) with columns, types, notes and first rows, import on a click with replace-or-append offered on a 409, "Copy as command" on the drop zone, the preview and the imported notice, built by `lib/command.ts` from the same rule as the CLI (`identifier`, `--name`, `--replace`, `--append`); `Open…` is a menu of the recent projects with "Other folder…". Gates: 4 Playwright, 9 Vitest, core 3 new assertions. Checked on the Mac 2026-09-10 with a real 18-column CSV from Finder (one CSS fix: wide tables scroll inside their panel). Step 3 done 2026-09-10 — screen 2: `SqlEditor` (CodeMirror 6, lang-sql with table and column completion, Cmd/Ctrl+Enter, Esc), `lib/arrow.ts` (the verdict from the headers before any row, `RecordBatchReader` over the fetch body, abort), `GaugeLine` (the site's words and colours, the count while running, the done line, Red as a refusal with "Run anyway", a stop, an error), `Grid` (TanStack Virtual; 100,000-row cap with the footer naming `lakelet sql --format parquet`), `screens/Query.tsx` (`lakelet sql '…' [--run-anyway]` as its command; stamps verdict, first-rows and done times on the section), lazily loaded so the first paint stays small (243 kB main, 580 kB for screen 2). Core: `X-Lakelet-*` in `Access-Control-Expose-Headers` (without it a window cannot read the verdict); a client that disconnects mid-query now interrupts DuckDB (`Engine.interrupt`, `query.Interrupted`, the async stream in the API) and the run is recorded as stopped early, where before the statement ran to completion holding the lock (the Esc test found it: a 20 M-row sort kept the sidecar busy for a minute). Gates: 4 Playwright (four real sidecars now, one with a 20 M-row table generated in setup), 14 Vitest, `cargo test` 7, core +2. `examples/sample-data/make_sample.py` (2026-09-10): a seeded, stdlib-only script writing four CSVs (orders, customers, products, daily sales; ~500 KB) for trying the screens; committed as a script because the repo keeps no data files. Step 4 done 2026-09-10 — the auto-chart (`lib/chart.ts`: exactly two columns, categorical + numeric is a bar chart in the rows' order, date + numeric a line, else nothing; the first 5,000 rows; at most 40 bars; `Chart.tsx` renders with Vega-Lite via `vega-embed` and `vega-interpreter` so no `unsafe-eval`, one hue from the tokens, tooltips, hairline grid, no legend); crash recovery in the window (`restarted` refetches from the new port, `down` shows the stderr tail and "Restart the core" → Rust `restart_sidecar`); settings panel (memory limit, threads, share-calibration) over new core verbs `lakelet config show|set` and `GET/PUT /api/settings` that rewrite one line of `lakelet.toml` in place with comments kept (`config.set_value`, `parse_setting`, `SETTABLE`); keys: ⌘/Ctrl+, settings, ⌘/Ctrl+K to the SQL box, Esc closes. Gates: 2 Playwright (15 in all), 20 Vitest, `cargo test` 7, core +3. Next: step 5 (§6 definition of done measured and recorded, the docs page for the app, the log), then session 7. To check on the Mac: a group-by chart in the Tauri window (the CSP question), `kill <pid>` of the sidecar → "core restarted" within five seconds and a second kill inside a minute → the last lines and the button, ⌘, and the settings saving. On the Mac 2026-09-10, all 13 Playwright tests green after three test-side fixes (⌘ as Mod, SQL inserted as text, a cross join for the slow query); on the 20 M-row table the verdict came at 56 ms and the first rows at 62 ms, all 66,667 at 143 ms; the 1.26 s in the container was the container. Still to try by hand in the window: a query on the imported tables with the gauge line, Esc on a slow one.
-- [ ] **Session 7, ask box** and `lakelet ask` as a CLI verb (M11).
-- [ ] **Session 8, burst end to end**: control plane, job token, cap → budget, catalog lease pushing the metadata tree for local-metadata tables (D26, open unknown in §7), `publish`. Partner intake (five questions) runs before it.
-- [ ] **Session 5, `lakelet mcp`** (after session 8, M6).
-- [ ] **Session 9, dbt + Simple/Technical**: the materialisation shipped 2026-09-09 as a step 6 amendment (`macros/lakelet.sql`); still inherited: `tests/dbt_plugin.py` (the `configure_connection` and `configure_cursor` hooks) is to be lifted into the package. Also git auto-commit on save and table-level lineage (D30, D32).
-- [ ] **Session 10, ship**: signed installers with the extensions bundled (D33; the "under 200 MB" installer claim to be measured), brew tap, the per-operator-class correction (M7), the `catalog serve` engines smoke test through the real verb (how a loopback-only verb is reached from a container is open), instrumentation export, partner onboarding.
-
-Known unknowns still open in the brief's §7: the 150 ms gauge budget on a never-read table (PRD allows 800 ms uncached); how much of DuckDB's filter rendering the predicate parser needs for real workloads; the sidecar memory split; partner prefixes with drift or path-only partitions (fixtures pass; intake decides); the lease carrying a metadata tree.
+None open. Decided: `decisions-for-review_091126.md`, all four (2026-09-11), shipped the same day; `app-v0-plan.md` A1 to A14 (2026-09-10); `decisions-for-review_090926.md`, all three (2026-09-09); the order of what follows step 5 (2026-09-11, above).
 
 ## Done
 
 - 2026-09-07 — Review of the original brief; `core-v0.1-plan.md` (revision 3) with D19 to D24; measurements on DuckDB 1.5.5 and pyiceberg 0.12.
-- 2026-09-08 — Remote-data decisions R1 to R6 accepted; `core-v0.2-plan.md`. MinIO replaced by Moto, measured. Site and deck compared; M1 to M12 accepted; `core-v0.3-plan.md`, `core-v0.4-plan.md`. §10 wording applied to `web/src` and the deck. Readiness review; gitignore decision; `CLAUDE.md`, `AGENTS.md`, README; `core-v0.5-plan.md` (revision 7).
-- 2026-09-08 — Steps 0 through 9 built and their gates passing on this Mac; Postgres, RustFS, Spark and Trino verified through `compose.yaml`. See `lakelet-build-sessions_090826.md` §7 to §19.
-- 2026-09-09 — Repo state review; the hygiene commit `7f0ff4a` pushed; first `core` CI run (failed at pytest on both runners, Postgres green); Pages deploy #3 green. Project status doc updated.
+- 2026-09-08 — Remote-data decisions R1 to R6 accepted; `core-v0.2-plan.md`. MinIO replaced by Moto, measured. Site and deck compared; M1 to M12 accepted; `core-v0.3-plan.md`, `core-v0.4-plan.md`. §10 wording applied to `web/src` and the deck. Readiness review; gitignore decision; `CLAUDE.md`, `AGENTS.md`, README; `core-v0.5-plan.md` (revision 7). Steps 0 through 9 built and their gates passing on the Mac; Postgres, RustFS, Spark and Trino verified through `compose.yaml`.
+- 2026-09-09 — Repo hygiene commit `7f0ff4a`; CI failed then green after the credential chain and descriptor-leak fixes; developer docs on the site; the dbt materialisation through the catalog; `/docs/transactions`; the desktop shell brief.
+- 2026-09-10 — `app-v0-plan.md` A1 to A14 accepted; steps 0 to 4 of the desktop shell built, each verified on the Mac; core additions along the way (`serve --memory-limit`, `LAKELET_DEV_ORIGIN`, `freshness`, folder preview, verdict headers over CORS, interrupt on disconnect, `config show|set`, `/api/settings`); `examples/sample-data/`. See `lakelet-build-sessions_091026.md`.
+- 2026-09-11 — Session 7 deprioritised; this file restructured (Now, Next in order, the map); the two core items decided (`decisions-for-review_091126.md`) and built: the probe with the cache bypassed and `lakelet gauge probe`, `lakelet tables expire` with `keep_snapshots_days`. See `lakelet-build-sessions_091126.md`.

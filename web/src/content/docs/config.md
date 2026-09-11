@@ -50,6 +50,7 @@ allow = []
 |---|---|---|
 | `mode` | `local` | `local` is the only mode implemented: an embedded Iceberg REST server on a loopback port over `.lakelet/catalog.db`. `team` and `external` are accepted by the schema and not yet acted on. |
 | `url` | none | Reserved for `team` and `external`. |
+| `keep_snapshots_days` | `7` | How many days of table history `lakelet tables expire` keeps. The current snapshot always stays. Settable with `lakelet config set catalog.keep_snapshots_days N`. |
 
 ### `[engine]`
 

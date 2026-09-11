@@ -11,6 +11,8 @@ export interface Health {
   root: string;
   machine: { ram?: number; threads?: number; memory_limit?: number; memory_limit_text?: string };
   throughput_local_mbps: number | null;
+  /** How the disk figure was measured: cache bypassed (`nocache`, `direct`), or `cached` and capped. */
+  throughput_probe?: 'nocache' | 'direct' | 'cached' | 'none';
   bandwidth_mbps: number | null;
 }
 
@@ -41,7 +43,7 @@ export interface Preview {
 
 export type ImportMode = 'create' | 'replace' | 'append';
 
-export type SettingKey = 'engine.memory_limit' | 'engine.threads' | 'gauge.share_calibration';
+export type SettingKey = 'engine.memory_limit' | 'engine.threads' | 'gauge.share_calibration' | 'catalog.keep_snapshots_days';
 
 export interface Settings {
   settings: Record<SettingKey, string | number | boolean>;

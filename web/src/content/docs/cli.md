@@ -139,6 +139,7 @@ Options:
 Commands:
   list      Tables in the catalog with rows, size, when they were last written, and...
   describe  Columns, types, partitioning, freshness and the last commit of a table.
+  expire    Drop snapshots older than the retention and delete the files only they...
   sample    The first rows of a table.
   attach    Register remote data as a read-only Iceberg table without copying it.
   refresh   Add the files new under a registered prefix since it was attached.
@@ -168,6 +169,26 @@ Arguments:
 
 Options:
   --help  Show this message and exit.
+```
+
+#### `lakelet tables expire`
+
+```text
+Usage: lakelet tables expire [OPTIONS] [name]
+
+  Drop snapshots older than the retention and delete the files only they referenced,
+  plus any file under the table that no snapshot references and that is over an hour old
+  (what a previous --replace left). The current snapshot always stays; a table
+  registered with `tables attach` is never touched. The one verb that deletes data
+  files.
+
+Arguments:
+  name  A table; or --all.
+
+Options:
+  --all              Every table Lakelet wrote.
+  --keep-days <int>  Days of snapshots to keep; lakelet.toml's by default.
+  --help             Show this message and exit.
 ```
 
 #### `lakelet tables sample`
@@ -329,7 +350,21 @@ Options:
   --help  Show this message and exit.
 
 Commands:
+  probe    Measure local disk throughput again and record it for the gauge (a...
   history  Recent runs: verdict, estimate, actual.
+```
+
+#### `lakelet gauge probe`
+
+```text
+Usage: lakelet gauge probe [OPTIONS]
+
+  Measure local disk throughput again and record it for the gauge (a project set up
+  before September 11, 2026 measured the page cache, not the disk).
+
+Options:
+  --mb <int>  Size of the probe file.  [default: 512]
+  --help      Show this message and exit.
 ```
 
 #### `lakelet gauge history`
