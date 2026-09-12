@@ -17,6 +17,7 @@ const FIELDS: Array<{ key: SettingKey; label: string; help: string; kind: 'text'
   { key: 'engine.threads', label: 'Threads', help: '"auto" or a count.', kind: 'text' },
   { key: 'gauge.share_calibration', label: 'Share calibration', help: 'Whether this project would contribute anonymous gauge calibration. Nothing is sent yet; the switch is here so the file is ready.', kind: 'bool' },
   { key: 'catalog.keep_snapshots_days', label: 'Keep snapshots for', help: 'Days of table history `lakelet tables expire` keeps; the current snapshot always stays. Expiry runs only when asked.', kind: 'text' },
+  { key: 'git.auto_commit', label: 'Record a version on every save and run', help: 'Off means a run records no version. Saving a question is always a version, whatever this says.', kind: 'bool' },
 ];
 
 export function SettingsPanel({ api, onClose }: { api: Api; onClose: () => void }) {

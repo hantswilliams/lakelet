@@ -288,6 +288,8 @@ def test_catalog_serve_writes_the_dbt_profile(project_dir) -> None:
         text = profile.read_text()
         assert url in text and "module: lakelet.dbt.plugin" in text
         assert "dbt run --profiles-dir" in text or "lakelet catalog serve" in text
+        # G11: the profile written for a `dbt` by hand turns dbt's usage statistics off.
+        assert "send_anonymous_usage_stats: false" in text
     finally:
         proc.terminate()
         proc.wait(timeout=10)
@@ -301,6 +303,9 @@ def test_audit_network_reports_nothing_left_the_machine(project_dir) -> None:
     assert "python outbound connection attempts: 0" in result.output
     assert "duckdb http requests beyond loopback: 0" in result.output
     assert "nothing left the machine" in result.output
+    # The quickstart builds a model too, because `lakelet run` is the one verb that hands
+    # the work to dbt (versions brief G11).
+    assert "lakelet run, which invokes dbt: 1 model(s) built" in result.output
 
 
 def test_startup_budget_gauge_line_within_a_second(project_dir, tmp_path) -> None:

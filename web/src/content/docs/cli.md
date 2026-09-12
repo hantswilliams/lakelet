@@ -32,6 +32,8 @@ Commands:
   sql       Run SQL: the gauge line first (stderr), then the rows (stdout).
   estimate  The gauge only: verdict, bytes, memory, time, the burst half.
   run       Build the project's dbt models through the catalog, each with its...
+  versions  The versions of one question or model: every commit that changed its...
+  restore   Put an earlier version of a question or model back.
   serve     Run the core as the app's sidecar: catalog and API on one loopback...
   tables    List, describe and sample tables.
   catalog   The Iceberg REST catalog.
@@ -127,6 +129,38 @@ Options:
   --run-anyway   Run the DAG here even if a model is Red.
   --plan         Print the DAG with its verdicts and stop.
   --help         Show this message and exit.
+```
+
+### `lakelet versions`
+
+```text
+Usage: lakelet versions [OPTIONS] {name}
+
+  The versions of one question or model: every commit that changed its SQL or its
+  checks, newest first.
+
+Arguments:
+  name  A saved question's slug, or a model's name.  [required]
+
+Options:
+  --limit <int>  How many versions to list; newest first.  [default: 20]
+  --help         Show this message and exit.
+```
+
+### `lakelet restore`
+
+```text
+Usage: lakelet restore [OPTIONS] {name} {version}
+
+  Put an earlier version of a question or model back. The restore is itself a version;
+  nothing in the history is rewritten.
+
+Arguments:
+  name     A saved question's slug, or a model's name.  [required]
+  version  A version id, or any unambiguous prefix.  [required]
+
+Options:
+  --help  Show this message and exit.
 ```
 
 ### `lakelet serve`

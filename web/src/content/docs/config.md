@@ -21,6 +21,10 @@ mode = "local"                    # local | team | external
 memory_limit = "auto"             # DuckDB default, 80% of RAM
 threads = "auto"
 
+[git]
+auto_commit = true                # record a version on every save and run; false stops the
+                                  # run-time commit, a save is a version either way
+
 [gauge]
 green_max_seconds = 60
 yellow_max_seconds = 600
@@ -70,6 +74,12 @@ allow = []
 
 The verdict rule that uses these is on [the gauge](/docs/gauge) page.
 
+### `[git]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `auto_commit` | `true` | Whether `lakelet run` commits the model files it is about to build. `false` stops that; saving a question is a version either way. Settable with `lakelet config set git.auto_commit false`, or the switch in the app's settings. See [dbt and views](/docs/dbt). |
+
 ### `[burst]` and `[agents]`
 
 Written so the file is already valid for the sessions that will read them; the core ignores them today. Keys you add anywhere in the file survive a round trip.
@@ -85,6 +95,7 @@ Written so the file is already valid for the sessions that will read them; the c
 | `macros/lakelet.sql` | `init` (only if absent) | Lakelet's `table` materialisation for the Iceberg catalog, overriding dbt's built-in one for the project. See [Transactions and the catalog](/docs/transactions). |
 | `tests/generic/returns_rows.sql` | first `question save` | The generic test every saved question carries. |
 | `.gitignore` | `init` (lines appended, never overwritten) | `warehouse/`, `.lakelet/` and `.DS_Store`. |
+| `.git/` | `init`, when the folder is not already in a repository | A git repository on branch `main`, whose first commit is what `init` wrote. Every save is a version in it; see [Questions](/docs/questions). A folder already inside a repository is used as it is. |
 | `warehouse/main/<table>/` | the catalog, on every write | The Iceberg tables: `data/*.parquet` and `metadata/*.metadata.json`, manifests and manifest lists. Format version 2. |
 | `.lakelet/catalog.db` | `init` | The catalog: namespaces, tables with their current metadata location, a `leased_until` column for later. SQLite in WAL mode. |
 | `.lakelet/history.db` | first run | Every `sql`, `estimate`, and question run, with estimates and actuals. |

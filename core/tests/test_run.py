@@ -7,10 +7,12 @@ view goes; the plugin gives a bare `dbt run` the catalog's views; `--burst auto`
 a Red model refuses the run until `--run-anyway`; every model is in history."""
 
 import json
+import os
 from pathlib import Path
 
 import httpx
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from lakelet import Project
@@ -257,6 +259,51 @@ def test_a_bare_dbt_run_reads_catalog_views_and_warns_about_its_own(project) -> 
     assert "built for this dbt session only" not in lakelet_log
 
 
+def test_dbt_is_told_not_to_send_usage_statistics(project) -> None:
+    """Versions brief G11. dbt sends anonymous usage statistics to its own collector by
+    default, and `lakelet run` is the one verb that invokes dbt, so Lakelet turns it off
+    through dbt's own switch. Asserted on the effect rather than the environment variable:
+    after a plan, dbt's flag is false and its tracker is inert."""
+    import dbt.tracking
+    from dbt.flags import get_flags
+
+    runner.plan(project)
+    assert get_flags().SEND_ANONYMOUS_USAGE_STATS is False
+    assert dbt.tracking.active_user is not None and dbt.tracking.active_user.do_not_track
+
+
+def test_the_profile_lakelet_writes_stops_a_dbt_run_by_hand_phoning_home(project) -> None:
+    """G11, the other path: `lakelet run` sets `DO_NOT_TRACK` for its own invocations, but a
+    user following /docs/dbt runs `dbt` themselves through the profile Lakelet wrote. Asserted
+    on the effect: dbt invoked with that profile, and without the environment variable, comes
+    out with its flag false."""
+    import dbt.tracking
+    from dbt.cli.main import dbtRunner
+    from dbt.flags import get_flags
+
+    profiles_dir = runner.write_profile(project).parent
+    (project.root / "models" / "m.sql").write_text("select 1 as id\n", encoding="utf-8")
+    before = os.environ.pop("DO_NOT_TRACK", None)
+    try:
+        dbtRunner().invoke(
+            [
+                "parse",
+                "--project-dir",
+                str(project.root),
+                "--profiles-dir",
+                str(profiles_dir),
+                "--target-path",
+                str(profiles_dir / "target"),
+                "--quiet",
+            ]
+        )
+        assert get_flags().SEND_ANONYMOUS_USAGE_STATS is False
+        assert dbt.tracking.active_user is not None and dbt.tracking.active_user.do_not_track
+    finally:
+        os.environ["DO_NOT_TRACK"] = before or "1"
+        dbt.tracking.do_not_track()
+
+
 def test_the_cli_and_the_routes(project) -> None:
     p = project
     root = str(p.root)
@@ -271,8 +318,10 @@ def test_the_cli_and_the_routes(project) -> None:
     burst = runner_cli.invoke(app, ["-C", root, "run", "--burst", "auto"])
     assert burst.exit_code == 1 and "session 8" in burst.output
     with Project.open(root, serve=True) as q:
+        # A dbt compile is seconds, not milliseconds, and httpx defaults to a five-second
+        # read timeout; the app's own fetch has no such cap and its button says `planning…`.
         client = httpx.Client(
-            base_url=q.catalog_url, headers={"Authorization": f"Bearer {q.token}"}
+            base_url=q.catalog_url, headers={"Authorization": f"Bearer {q.token}"}, timeout=60
         )
         planned = client.get("/api/run/plan").json()
         assert [m["name"] for m in planned] == ["stg_orders", "by_c", "top"]
@@ -284,6 +333,8 @@ def test_the_cli_and_the_routes(project) -> None:
     # the profile lakelet run writes is a real one
     profile = (Path(root) / ".lakelet" / "dbt" / "profiles.yml").read_text()
     assert "module: lakelet.dbt.plugin" in profile
+    # G11: a `dbt run` by hand through this profile does not phone home either.
+    assert yaml.safe_load(profile)["config"] == {"send_anonymous_usage_stats": False}
     assert (Path(root) / ".lakelet" / "dbt" / "target" / "manifest.json").exists()
     assert json.loads((Path(root) / ".lakelet" / "dbt" / "target" / "manifest.json").read_text())[
         "nodes"
@@ -332,7 +383,9 @@ def test_the_plan_carries_tests_description_and_the_last_run(project) -> None:
     # the run is the same row the Gauge screen lists
     assert p.history.model_last_run("model.proj.by_c").sql_text == planned["by_c"].compiled_sql
     # over the API, and reset forgets it
-    client = httpx.Client(base_url=p.catalog_url, headers={"Authorization": f"Bearer {p.token}"})
+    client = httpx.Client(
+        base_url=p.catalog_url, headers={"Authorization": f"Bearer {p.token}"}, timeout=60
+    )
     over = {m["name"]: m for m in client.get("/api/run/plan").json()}
     assert over["stg_orders"]["tests"][1] == {
         "name": "not_null_stg_orders_id",

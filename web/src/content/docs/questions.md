@@ -40,6 +40,38 @@ models:
 
 And, the first time, `tests/generic/returns_rows.sql`, the generic test the first check names. The SQL is checked with `DESCRIBE` before anything is written, so a question that does not bind is refused. Saving the same title again updates the model in place and keeps its `created` date.
 
+## Every save is a version
+
+`lakelet init` makes the folder a git repository on branch `main` and commits the files it wrote as `lakelet init`. Every save after that is a commit of the files that save wrote:
+
+```text
+saved revenue_by_customer: models/questions/revenue_by_customer.sql (+ schema.yml entry with 2 checks)
+version c1da45c
+```
+
+The message is `save question: <title>` the first time and `update question: <title>` after that; the author is git's own, read from the same configuration files git reads (`user.name` and `user.email` in the repository's config, yours, or the system's), and with none set it is the OS user at this host, which is what git itself falls back to. Saving a question that has not changed writes nothing and makes no commit: the line says `no change, so no new version`.
+
+A commit carries the model file, the `schema.yml` entry and, on the first save of a project, the generic test — and nothing else. Your own work in the same repository is untouched: a file you have staged stays staged and out of Lakelet's commit, and nothing is swept in with a `git add -A`. Anything `.gitignore` excludes can never be committed, so `warehouse/`, `.lakelet/` and the history database stay out by construction.
+
+Git is a library in the package (dulwich), not the `git` binary, so none of this needs `git` installed; a `git` of your own on the same folder sees ordinary commits and can do everything else with them. Nothing here reaches the network — there is no fetch and no push — and `lakelet audit network` still reports zero.
+
+Three things it does not do. It does not commit on a folder that is already inside a repository *at `init` time*: a dbt project you brought, or a subfolder of a monorepo, is used as it is and its first version is its first save. It does not sign: a `commit.gpgsign = true` in your configuration produces an unsigned commit rather than an error. And it never fails a save — if the repository cannot be written (a read-only folder, a broken `.git`), the files are still written and the response carries a `git:` line saying why there is no version.
+
+## The versions of one question
+
+```bash
+lakelet versions revenue_by_customer          # newest first; --limit 20 by default
+lakelet restore revenue_by_customer 6c89b4f   # put an earlier version back
+```
+
+`versions` lists every commit that changed the question's `.sql` or its `schema.yml` entry: the version, when, who, the message, and what changed. A commit that touched only the checks is in the list, marked `checks changed`, because a change to the checks is a version of the question too.
+
+`restore` writes that version's content over the current file, re-derives the `schema.yml` entry from it (the title is the file's first comment line, so the checks always match the SQL beside them), and commits the result as `restore question: <title> to <version>`. That is the whole of it: the restore is a new version, the history stays linear, and nothing is reset or rewritten. Any unambiguous prefix of a version works, which is why the list shows seven characters.
+
+The same two verbs work on a model you wrote by hand — `lakelet versions stg` — because a model and a saved question are the same thing here: a file under `models/` with commits behind it. Neither verb compiles the project, so a version list costs no dbt run. A file with no commits says so rather than showing an empty list.
+
+Over the [HTTP API](/docs/api) it is `GET /versions/{name}` (each version with the unified diff against the one before it), `GET /versions/{name}/{id}` for that version's SQL, and `POST /versions/{name}/restore`.
+
 ## Listing and running
 
 ```bash

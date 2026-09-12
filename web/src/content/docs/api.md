@@ -44,8 +44,11 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 | `POST /estimate` | `{sql}` | The estimate as JSON: `verdict`, `words`, `reason`, `line`, the numbers (`bytes_scanned`, `peak_memory`, `wall_local`, `wall_burst`, `cost_burst`, `cap`, `spill_bytes`, `memory_limit`), `pruning`, the tables and the worker. 400 `sql_error`. |
 | `POST /query` | `{sql, allow_red, batch_rows}` | An Arrow IPC stream (below). |
 | `GET /questions` | | Saved questions with slug, title, path and last run. |
-| `POST /questions` | `{title, sql}` | The saved question. 400 `sql_error`. |
+| `POST /questions` | `{title, sql}` | The saved question, with `commit` (the version this save recorded, null when nothing changed) and `git` (why there is no version, when the repository could not be written). 400 `sql_error`. |
 | `POST /questions/{slug}/run` | `{allow_red}` | An Arrow IPC stream, and the question's `last_run` is updated when it completes. 404 `no_such_question`. |
+| `GET /versions/{name}` | | The versions of one question or model, newest first: `id`, `when`, `author`, `message`, `sql_changed`, `checks_changed`, and `diff`, the unified diff of the file against the version before it. 404 `no_such_model`, or `no_history` with the sentence saying why there is none. |
+| `GET /versions/{name}/{id}` | | `{name, id, sql}`: that version's file content. Any unambiguous prefix of the version id works. |
+| `POST /versions/{name}/restore` | `{id}` | Writes that version back, re-derives a question's checks from it, and commits: `{name, commit, git}`. The restore is a new version; nothing is rewritten. |
 | `GET /history?last=50` | | Recent runs from `.lakelet/history.db`, newest first. |
 | `GET /run/plan?select=a,b` | | `lakelet run --plan`: the dbt models in dependency order with `materialized`, `depends_on`, `compiled_sql`, the verdict, `words`, `reason`, `est_wall_local`, `est_bytes`, or `error`; each with its `description`, `path`, `tests` from `schema.yml` (`name`, `kind` such as `not_null` or `singular`, `column`, `unique_id`) and `last_run` (`ts`, `ok`, `seconds`, `verdict`, `error`, from history; null before the first `lakelet run`). 400 `dbt` when dbt is missing or the compile failed. |
 | `POST /run` | `{select, burst, run_anyway}` | `lakelet run`: the plan, dbt's per-model `results` (status, seconds, message), `views_recorded`, `views_dropped`, `seconds`, `ok`. 400 `no_burst_yet`, 409 `red_refused` (a model is Red and `run_anyway` is false), 400 `dbt`. |
@@ -53,7 +56,7 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 | `POST /gauge/export` | `{}` | `lakelet gauge export`: writes `.lakelet/exports/gauge-<time>.jsonl` in the project and answers `{path, runs}`; nothing is sent. |
 | `POST /gauge/reset` | `{}` | `lakelet gauge reset --yes`: `{removed}`. |
 | `POST /gauge/probe` | `{mb?}` | `lakelet gauge probe`: measures the disk again; `{mbps, method, size_bytes}`, and health reads the new figure. |
-| `GET /settings` | | `settings` (`engine.memory_limit`, `engine.threads`, `gauge.share_calibration`, `catalog.keep_snapshots_days` with their values), the `path` of `lakelet.toml`, and a `note` that the engine reads them at start. |
+| `GET /settings` | | `settings` (`engine.memory_limit`, `engine.threads`, `gauge.share_calibration`, `catalog.keep_snapshots_days`, `git.auto_commit` with their values), the `path` of `lakelet.toml`, and a `note` that the engine reads them at start. |
 | `PUT /settings` | `{key, value}` with `value` a string as `lakelet config set` takes it | The same as `GET`, after the one line in `lakelet.toml` is rewritten in place (comments and other sections kept). 400 `not_settable` for any other key or a value of the wrong shape. |
 
 Errors are `{"error": "<code>", "message": "…"}` with the HTTP status in the table; a malformed body is a 422 from the framework.

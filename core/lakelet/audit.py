@@ -110,6 +110,21 @@ def _start_proxy(attempts: list[str]) -> str:
     return f"127.0.0.1:{server.server_address[1]}"
 
 
+def _build_models(project) -> str:
+    """`lakelet run` is the one verb that hands the work to someone else's code, and dbt
+    sends anonymous usage statistics unless it is told not to (versions brief G11), so the
+    audit has to run it or the reported zero is only about Lakelet's own code."""
+    from lakelet.dbt.runner import DbtMissing, run
+
+    try:
+        report = run(project)
+    except DbtMissing:
+        return "not run: dbt is not installed (`pip install 'lakelet[dbt]'`)"
+    except Exception as e:  # noqa: BLE001 - the numbers below are still worth reporting
+        return f"failed: {type(e).__name__}: {str(e).splitlines()[0]}"
+    return f"{len(report.results)} model(s) built"
+
+
 def main() -> int:
     import duckdb
 
@@ -162,8 +177,10 @@ def main() -> int:
         list(p.query("select count(*) from orders"))
         p.questions.save("Revenue by customer", "select customer, sum(amt) from orders group by 1")
         list(p.questions.run("revenue_by_customer"))
+        dbt = _build_models(p)
 
     print("quickstart ran: init, import, estimate, sql, question save, question run")
+    print(f"lakelet run, which invokes dbt: {dbt}")
     print(f"self-check, python socket guard: {'ok' if python_ok else 'FAILED'}")
     print(f"self-check, duckdb http proxy: {'ok' if duckdb_ok else 'FAILED'}")
     print(f"python outbound connection attempts: {len(python_attempts)}")

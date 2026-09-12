@@ -31,6 +31,7 @@ from lakelet.query import Interrupted, RedRefused
 from lakelet.questions import NoSuchQuestion
 from lakelet.register import MissingFiles, NotRegistrable
 from lakelet.tables import NoSuchTable, NotExpirable, TableExists, UnsupportedFile
+from lakelet.versions import NoHistory, NoSuchModel
 
 if TYPE_CHECKING:
     from lakelet.project import Project
@@ -78,6 +79,10 @@ class ExpireBody(BaseModel):
 class SettingBody(BaseModel):
     key: str
     value: str
+
+
+class RestoreBody(BaseModel):
+    id: str
 
 
 class QuestionBody(BaseModel):
@@ -489,6 +494,39 @@ def create_router(project: Project, token: str) -> APIRouter:
         return await _run(
             request, question.sql, body.allow_red if body else False, 1000, question_slug=slug
         )
+
+    # -- versions (versions brief G5) --------------------------------------------------
+
+    @router.get("/versions/{name}", dependencies=guarded)
+    def versions(name: str):
+        try:
+            return _plain(project.versions.list(name))
+        except NoSuchModel:
+            return error(404, "no_such_model", f"no model or question named {name}")
+        except NoHistory as e:
+            return error(404, "no_history", str(e))
+
+    @router.get("/versions/{name}/{version_id}", dependencies=guarded)
+    def version_sql(name: str, version_id: str):
+        try:
+            return {"name": name, "id": version_id, "sql": project.versions.sql(name, version_id)}
+        except NoSuchModel:
+            return error(404, "no_such_model", f"no model or question named {name}")
+        except NoHistory as e:
+            return error(404, "no_history", str(e))
+
+    @router.post("/versions/{name}/restore", dependencies=guarded)
+    def restore_version(name: str, body: RestoreBody):
+        with lock:
+            try:
+                result = project.versions.restore(name, body.id)
+            except NoSuchModel:
+                return error(404, "no_such_model", f"no model or question named {name}")
+            except NoHistory as e:
+                return error(404, "no_history", str(e))
+            except duckdb.Error as e:
+                return error(400, "sql_error", str(e).splitlines()[0])
+            return {"name": name, "commit": result.id, "git": result.reason}
 
     # -- history ----------------------------------------------------------------------
 

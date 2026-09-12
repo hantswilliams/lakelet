@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from lakelet.query import Result
     from lakelet.questions import Questions
     from lakelet.tables import Tables
+    from lakelet.versions import Versions
     from lakelet.views import Views
 
 NAMESPACE = "main"
@@ -200,6 +201,12 @@ class InitReport:
     extension_directory: str = ""
     throughput_local_mbps: float | None = None
     throughput_probe: str | None = None
+    #: ``created`` when ``init`` made the folder a git repository, ``existing`` when the
+    #: folder was already in one and was left as it is (versions brief G2).
+    repository: str | None = None
+    #: The first commit's id, when one was made, and why there is none when there is not.
+    commit: str | None = None
+    git: str | None = None
 
 
 def run_probe(root: Path, probe_mb: int = 512):
@@ -234,6 +241,7 @@ class Project:
         self._views: Views | None = None
         self._history: History | None = None
         self._questions: Questions | None = None
+        self._versions: Versions | None = None
         self.token: str | None = None
 
     # -- on disk --------------------------------------------------------------------
@@ -276,12 +284,33 @@ class Project:
             (root / directory).mkdir(parents=True, exist_ok=True)
         cls._ensure_namespace(Store(f"sqlite:///{root / '.lakelet' / 'catalog.db'}"))
         report.created.append(".lakelet/catalog.db")
+        cls._init_repository(root, report)
         report.extensions_installed, report.extension_directory = install_extensions()
         if probe_mb:
             probe = run_probe(root, probe_mb)
             report.throughput_local_mbps = probe.mbps
             report.throughput_probe = probe.method
         return report
+
+    @staticmethod
+    def _init_repository(root: Path, report: InitReport) -> None:
+        """The folder becomes a git repository and the files ``init`` wrote become its first
+        commit, so every save after it is a version (versions brief G2). A folder already in
+        a repository — a dbt project someone brought, a monorepo subfolder — is used as it
+        is and nothing is committed here; its first version is its first save."""
+        from lakelet import versions
+
+        if versions.open_repository(root) is not None:
+            report.repository = "existing"
+            return
+        try:
+            versions.init_repository(root).close()
+        except Exception as e:  # noqa: BLE001 - a project without git still works (G9)
+            report.git = f"{type(e).__name__}: {str(e).splitlines()[0]}"
+            return
+        report.repository = "created"
+        result = versions.commit(root, report.created, "lakelet init")
+        report.commit, report.git = result.id, result.reason
 
     @classmethod
     def open(
@@ -430,6 +459,14 @@ class Project:
 
             self._questions = Questions(self)
         return self._questions
+
+    @property
+    def versions(self) -> Versions:
+        if self._versions is None:
+            from lakelet.versions import Versions
+
+            self._versions = Versions(self)
+        return self._versions
 
     @property
     def views(self) -> Views:

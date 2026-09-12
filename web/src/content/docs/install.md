@@ -37,6 +37,7 @@ uv run --project ~/lakelet/core lakelet init
   macros/lakelet.sql
   .gitignore
   .lakelet/catalog.db
+  a git repository on branch main, first version e0ee70f "lakelet init"; every save is a version from here
   installed DuckDB extensions iceberg, httpfs, excel, aws into ~/.duckdb/extensions/… (the one download; nothing else fetches at query time)
   local disk reads at 2,140 MB/s
 lakehouse ready in /Users/you/acme
@@ -112,7 +113,7 @@ uv run --project ~/lakelet/core lakelet question save "Orders by country" --sql 
 uv run --project ~/lakelet/core lakelet question run orders_by_country
 ```
 
-A saved question is a dbt model under `models/questions/` with two checks; see [Questions](/docs/questions).
+A saved question is a dbt model under `models/questions/` with two checks, and the save is a commit in the project's repository; see [Questions](/docs/questions).
 
 ### 7. Look at the record
 
@@ -130,6 +131,8 @@ uv run --project ~/lakelet/core lakelet audit network
 
 Runs the quickstart in a subprocess with a socket guard in Python and a recording proxy in front of DuckDB, and reports every outbound attempt at either layer. On a project whose extensions are installed the number is zero, and the command refuses to run before they are, since the download would be the one attempt.
 
+The quickstart it runs builds a model as well, because `lakelet run` hands the work to dbt, and dbt-core sends anonymous usage statistics to its own collector unless it is told not to. Lakelet tells it not to on both paths it controls — the invocation `lakelet run` makes, and the profile it writes for a `dbt` you run by hand — and the audit covers the first so the zero is measured rather than assumed. [dbt and views](/docs/dbt) has the detail.
+
 ## What is in the folder afterwards
 
 ```text
@@ -143,6 +146,7 @@ acme/
   .lakelet/catalog.db     the catalog, SQLite
   .lakelet/history.db     every run
   .lakelet/cache/         manifest and machine caches; safe to delete
+  .git/                   a git repository; init's files are its first commit, every save a version
 ```
 
 Delete the folder and Lakelet is gone. Copy `warehouse/` anywhere and any Iceberg reader can open the tables by their `metadata.json`.

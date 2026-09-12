@@ -106,6 +106,7 @@ def test_settings_over_http_write_lakelet_toml(served) -> None:
         "engine.threads": "auto",
         "gauge.share_calibration": False,
         "catalog.keep_snapshots_days": 7,
+        "git.auto_commit": True,  # versions brief G4
     }
     assert got["path"].endswith("lakelet.toml")
     put = client.put("/api/settings", json={"key": "gauge.share_calibration", "value": "true"})

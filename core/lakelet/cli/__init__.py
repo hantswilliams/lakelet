@@ -131,6 +131,21 @@ def init(
         _fail(f"{Path(directory).resolve()} is already a Lakelet project")
     for relative in report.created:
         out.print(f"  {relative}", highlight=False)
+    if report.repository == "existing":
+        out.print(
+            "  this folder is already in a git repository; saves will commit there",
+            highlight=False,
+        )
+    elif report.commit:
+        from lakelet.versions import short
+
+        out.print(
+            f"  a git repository on branch main, first version {short(report.commit)} "
+            '"lakelet init"; every save is a version from here',
+            highlight=False,
+        )
+    if report.git:
+        out.print(f"  git: {report.git}", highlight=False)
     if report.extensions_installed:
         out.print(
             f"  installed DuckDB extensions {', '.join(report.extensions_installed)} into "
@@ -656,6 +671,14 @@ def question_save(
         f"saved {q.slug}: {q.path.relative_to(p.root)} (+ schema.yml entry with 2 checks)",
         highlight=False,
     )
+    if q.commit:
+        from lakelet.versions import short
+
+        out.print(f"version {short(q.commit)}", highlight=False)
+    elif q.git:
+        out.print(f"git: {q.git}; the files are saved, this save is not a version", highlight=False)
+    else:
+        out.print("no change, so no new version", highlight=False)
 
 
 @question_app.command("list")
@@ -738,6 +761,12 @@ def run_models(
         if r.message and r.status != "success":
             line += f" ({r.message})"
         out.print(line, highlight=False)
+    if report.commit:
+        from lakelet.versions import short
+
+        out.print(f"version {short(report.commit)} recorded before the run", highlight=False)
+    elif report.git:
+        out.print(f"git: {report.git}", highlight=False)
     if report.views_recorded:
         out.print(f"views in the catalog: {', '.join(report.views_recorded)}", highlight=False)
     if report.views_dropped:
@@ -749,6 +778,61 @@ def run_models(
     )
     if not report.ok:
         raise typer.Exit(1)
+
+
+# -- versions and restore (versions brief G5) ----------------------------------------
+
+
+@app.command()
+def versions(
+    name: Annotated[str, typer.Argument(help="A saved question's slug, or a model's name.")],
+    limit: Annotated[int, typer.Option(help="How many versions to list; newest first.")] = 20,
+) -> None:
+    """The versions of one question or model: every commit that changed its SQL or its
+    checks, newest first."""
+    from lakelet.versions import NoHistory, NoSuchModel
+
+    with _open() as p:
+        try:
+            entries = p.versions.list(name)[:limit]
+        except (NoHistory, NoSuchModel) as e:
+            _fail(str(e))
+    t = Table()
+    for column in ("version", "when", "who", "what", "changed"):
+        t.add_column(column)
+    for v in entries:
+        changed = ", ".join(
+            ([] if v.sql_changed else ["checks only"])
+            + (["checks changed"] if v.checks_changed else [])
+        )
+        t.add_row(v.short, v.when[:19].replace("T", " "), v.author, v.message, changed or "the SQL")
+    out.print(t)
+
+
+@app.command()
+def restore(
+    name: Annotated[str, typer.Argument(help="A saved question's slug, or a model's name.")],
+    version: Annotated[str, typer.Argument(help="A version id, or any unambiguous prefix.")],
+) -> None:
+    """Put an earlier version of a question or model back. The restore is itself a version;
+    nothing in the history is rewritten."""
+    from lakelet.versions import NoHistory, NoSuchModel, short
+
+    with _open() as p:
+        try:
+            result = p.versions.restore(name, version)
+            path = p.versions.path(name).relative_to(p.root)
+        except (NoHistory, NoSuchModel) as e:
+            _fail(str(e))
+    out.print(f"restored {name} from version {short(version)}: {path}", highlight=False)
+    if result.id:
+        out.print(f"version {short(result.id)}", highlight=False)
+    elif result.reason:
+        out.print(
+            f"git: {result.reason}; the file is restored, this is not a version", highlight=False
+        )
+    else:
+        out.print("that version is what the file already held; no new version", highlight=False)
 
 
 # -- gauge history and audit -----------------------------------------------------

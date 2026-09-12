@@ -171,7 +171,7 @@ export interface Preview {
 
 export type ImportMode = 'create' | 'replace' | 'append';
 
-export type SettingKey = 'engine.memory_limit' | 'engine.threads' | 'gauge.share_calibration' | 'catalog.keep_snapshots_days';
+export type SettingKey = 'engine.memory_limit' | 'engine.threads' | 'gauge.share_calibration' | 'catalog.keep_snapshots_days' | 'git.auto_commit';
 
 export interface Settings {
   settings: Record<SettingKey, string | number | boolean>;

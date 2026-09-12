@@ -59,3 +59,27 @@ The app's core (`lakelet serve`) writes the same profile when it starts, so with
 ## What dbt sees
 
 The plugin runs on every connection: `LOAD iceberg; LOAD httpfs`, `ATTACH 'lakelet' … TYPE ICEBERG`, `SET search_path = 'lakelet.main,memory.main'`, then the catalog's views as DuckDB views in `memory.main`; on every cursor, the search path again, because dbt-duckdb runs models on cursors that do not inherit it. The profile is `.lakelet/dbt/profiles.yml`, written by whichever Lakelet process is serving the catalog (`lakelet run` for its own run, `lakelet serve`, `lakelet catalog serve`), naming the plugin module `lakelet.dbt.plugin` and that catalog's URL.
+
+## A run records a version
+
+Before dbt builds anything, `lakelet run` commits the model files the manifest names that have changed since the last version, plus `dbt_project.yml` and the macros, as `run: stg, by_customer changed`. Nothing changed means no commit and no noise. That is what gives a model you edit in your own editor a history in the app: each run's version holds the SQL that run built, so `lakelet versions stg` has entries and not only saved questions do.
+
+```toml
+[git]
+auto_commit = true    # false stops the commit a run makes
+```
+
+`lakelet config set git.auto_commit false` (or the switch in the app's settings, "Record a version on every save and run") turns the run-time commit off, for people who keep their own git and would rather commit by hand. Saving a question still commits, whatever this says: a save with no version is the one thing Lakelet promises not to do. A `dbt run` you invoke yourself is never committed for — Lakelet only records versions for its own verbs.
+
+Nothing of yours is swept in either way: the commit carries the files named above and no others, so work you have staged or left uncommitted stays exactly as it was.
+
+## Nothing leaves the machine, dbt included
+
+dbt-core sends anonymous usage statistics to its own collector unless it is told not to. Lakelet turns them off on both of the paths it controls, because "nothing leaves the machine" has to hold for the code Lakelet calls as well as the code it wrote:
+
+- `lakelet run` sets dbt's own `DO_NOT_TRACK` switch before every invocation, so `send_anonymous_usage_stats` is false and the tracker is inert for anything Lakelet builds.
+- the profile Lakelet writes, `.lakelet/dbt/profiles.yml`, carries `config: send_anonymous_usage_stats: false`, so a `dbt run` or `dbt test` you run by hand against it — the section above — does not send anything either.
+
+A profile of your own is your own business and Lakelet does not touch it; these are the two it is responsible for.
+
+`lakelet audit network` builds a model as part of its quickstart for this reason, so the zero it reports covers `lakelet run` rather than stopping at the verbs that never call dbt. Where dbt is not installed the audit says so on that line instead of failing.

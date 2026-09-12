@@ -103,6 +103,11 @@ class RunReport:
     views_recorded: list[str] = field(default_factory=list)
     views_dropped: list[str] = field(default_factory=list)
     seconds: float = 0.0
+    #: The version this run recorded before building (versions brief G4), or None when
+    #: nothing had changed or `git.auto_commit` is false; `git` says why there is none when
+    #: the repository could not be written.
+    commit: str | None = None
+    git: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -124,6 +129,15 @@ def profiles_yml(catalog_url: str) -> str:
 # the address of the catalog that process serves; it is good while that process runs.
 # For a `dbt run` or `dbt test` by hand: `lakelet catalog serve` in one terminal, then
 # `dbt run --profiles-dir .lakelet/dbt` in another. Build with `lakelet run` to record views.
+
+# dbt sends anonymous usage statistics to its own collector unless it is told not to.
+# `lakelet run` sets dbt's `DO_NOT_TRACK` for its own invocations; this turns it off for a
+# `dbt` you run by hand through this profile, so nothing leaves the machine on either path
+# (versions brief G11). Your own profiles are your own business; this is the one Lakelet
+# writes, and Lakelet rewrites it whenever a process starts.
+config:
+  send_anonymous_usage_stats: false
+
 lakelet:
   target: local
   outputs:
@@ -171,6 +185,12 @@ def _invoke(project: Project, verb: str, args: list[str]) -> Any:
     # The view materialisation warns under a bare `dbt run` (its views are that session's
     # only); under `lakelet run` they are recorded afterwards, so it stays quiet.
     os.environ["LAKELET_RUN"] = "1"
+    # dbt sends anonymous usage statistics to its own collector unless told not to, and
+    # `lakelet run` is the one verb that invokes it. Nothing Lakelet does leaves the machine
+    # (D33), so dbt does not either; `DO_NOT_TRACK` is dbt's own switch for it and sets
+    # `SEND_ANONYMOUS_USAGE_STATS` to false. A user who wants to send dbt statistics runs
+    # `dbt` themselves. Versions brief G11.
+    os.environ["DO_NOT_TRACK"] = "1"
     result = runner.invoke(
         [
             verb,
@@ -335,6 +355,7 @@ def run(
     started = time.perf_counter()
     planned = plan(project, select)
     report = RunReport(models=planned)
+    report.commit, report.git = _record_version(project, planned)
     red = [m.name for m in planned if m.verdict == "red"]
     if red and not run_anyway:
         raise RedRefusedRun(
@@ -359,6 +380,35 @@ def run(
     _record_views(project, planned, report, prune=not select)
     report.seconds = time.perf_counter() - started
     return report
+
+
+def _record_version(project: Project, planned: list[PlannedModel]) -> tuple[str | None, str | None]:
+    """Before dbt builds anything, a version of what it is about to build (versions brief
+    G4), so a model edited in an editor has history in the app and not only questions. The
+    files are the ones the manifest names, plus the project's own dbt files; the message
+    names the models whose file changed. Nothing changed means no commit.
+
+    ``git.auto_commit = false`` turns this off for a developer who keeps their own git.
+    Saves still commit: a save with no version is the one thing the product promises not
+    to do."""
+    from lakelet import versions
+
+    if not project.config.git.auto_commit:
+        return None, None
+    by_path = {m.path: m.name for m in planned if m.path}
+    candidates = [*by_path, "dbt_project.yml", *_macro_files(project)]
+    changed = versions.changed(project.root, candidates)
+    if not changed:
+        return None, None
+    names = sorted({by_path[p] for p in changed if p in by_path})
+    what = f"{', '.join(names)} changed" if names else "project files changed"
+    result = versions.commit(project.root, changed, f"run: {what}")
+    return result.id, result.reason
+
+
+def _macro_files(project: Project) -> list[str]:
+    macros = project.root / "macros"
+    return [str(p.relative_to(project.root)) for p in sorted(macros.glob("*.sql"))]
 
 
 def _record(project: Project, m: PlannedModel, status: str, seconds: float) -> None:

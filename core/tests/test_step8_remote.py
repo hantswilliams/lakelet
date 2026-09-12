@@ -250,8 +250,24 @@ def test_a_public_bucket_is_read_without_credentials(events, env, monkeypatch, t
     env.client.put_bucket_acl(Bucket=env.bucket, ACL="public-read")
     for key in env.keys(events.key):
         env.client.put_object_acl(Bucket=env.bucket, Key=key, ACL="public-read")
-    for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_PROFILE"):
+    # "No credentials anywhere" has to mean the whole default chain, not three variables:
+    # a machine with ~/.aws, an SSO cache, a role or the instance metadata service would
+    # otherwise still resolve credentials and the test would not be testing anything.
+    for key in (
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_PROFILE",
+        "AWS_DEFAULT_PROFILE",
+        "AWS_ROLE_ARN",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+    ):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(tmp_path / "no-credentials"))
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "no-config"))
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
     root = tmp_path / "public"
     Project.init(root, probe_mb=8)
     p = Project.open(root, serve=True)

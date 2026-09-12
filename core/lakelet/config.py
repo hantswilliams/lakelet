@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-READ_SECTIONS = ("project", "catalog", "engine", "gauge")
+READ_SECTIONS = ("project", "catalog", "engine", "gauge", "git")
 
 
 class _Section(BaseModel):
@@ -37,6 +37,13 @@ class EngineSection(_Section):
     threads: int | str = "auto"
 
 
+class GitSection(_Section):
+    #: Versions brief G4: `lakelet run` records a version of the models it builds. True by
+    #: default; false stops the run-time commit. A save commits either way, because a save
+    #: with no version is the one thing the product promises not to do.
+    auto_commit: bool = True
+
+
 class GaugeSection(_Section):
     green_max_seconds: float = 60
     yellow_max_seconds: float = 600
@@ -51,6 +58,7 @@ SETTABLE: dict[str, type] = {
     "engine.threads": str,
     "gauge.share_calibration": bool,
     "catalog.keep_snapshots_days": int,
+    "git.auto_commit": bool,
 }
 
 
@@ -63,7 +71,7 @@ def parse_setting(key: str, value: str) -> str | int | bool:
     or an integer for threads; true/false for the toggle."""
     if key not in SETTABLE:
         raise NotSettable(f"{key} is not a setting; one of {', '.join(SETTABLE)}")
-    if key == "gauge.share_calibration":
+    if key in ("gauge.share_calibration", "git.auto_commit"):
         if value.lower() in ("true", "yes", "on", "1"):
             return True
         if value.lower() in ("false", "no", "off", "0"):
@@ -141,6 +149,7 @@ def current_settings(config: Config) -> dict[str, str | int | bool]:
         "engine.threads": config.engine.threads,
         "gauge.share_calibration": config.gauge.share_calibration,
         "catalog.keep_snapshots_days": config.catalog.keep_snapshots_days,
+        "git.auto_commit": config.git.auto_commit,
     }
 
 
@@ -149,6 +158,7 @@ class Config(BaseModel):
     catalog: CatalogSection = Field(default_factory=CatalogSection)
     engine: EngineSection = Field(default_factory=EngineSection)
     gauge: GaugeSection = Field(default_factory=GaugeSection)
+    git: GitSection = Field(default_factory=GitSection)
     extra: dict[str, Any] = Field(default_factory=dict)
     """Sections the core does not read (``burst``, ``agents``, anything newer), verbatim."""
 
@@ -173,6 +183,10 @@ keep_snapshots_days = 7           # lakelet tables expire keeps this many days o
 [engine]
 memory_limit = "auto"             # DuckDB default, 80% of RAM
 threads = "auto"
+
+[git]
+auto_commit = true                # record a version on every save and run; false stops the
+                                  # run-time commit, a save is a version either way
 
 [gauge]
 green_max_seconds = 60

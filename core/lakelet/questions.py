@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from lakelet import versions
 from lakelet.project import identifier
 
 if TYPE_CHECKING:
@@ -39,6 +40,12 @@ class Question:
     path: Path
     created: datetime | None
     last_run: datetime | None
+    #: The version this save recorded (versions brief G3): the commit's id, or None when the
+    #: save changed nothing. ``git`` says why there is no commit when the repository could not
+    #: be written (G9); the save itself still wrote the files. A question read back off disk
+    #: carries neither: they belong to the save that made it.
+    commit: str | None = None
+    git: str | None = None
 
 
 class Questions:
@@ -61,34 +68,36 @@ class Questions:
     def _write_schema(self, data: dict[str, Any]) -> None:
         self.schema_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 
-    def _ensure_generic_test(self) -> None:
+    def _ensure_generic_test(self) -> Path | None:
+        """Written once per project; the path when this call wrote it, so the save that did
+        commits it too."""
         path = self.project.root / "tests" / "generic" / "returns_rows.sql"
-        if not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(RETURNS_ROWS_TEST, encoding="utf-8")
+        if path.exists():
+            return None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(RETURNS_ROWS_TEST, encoding="utf-8")
+        return path
 
     def _sql_path(self, slug: str) -> Path:
         return self.dir / f"{slug}.sql"
 
     @staticmethod
-    def _strip_header(text: str) -> str:
+    def strip_header(text: str) -> str:
         lines = text.splitlines()
         while lines and lines[0].startswith("-- "):
             lines.pop(0)
         return "\n".join(lines).strip()
 
-    # -- operations ----------------------------------------------------------------
-
-    def save(self, title: str, sql: str) -> Question:
-        slug = identifier(title)
+    def write_entry(self, slug: str, title: str, sql: str) -> None:
+        """The question's ``schema.yml`` entry: the title as the description, the two default
+        checks, and the ``created`` date kept when there was one. Written by ``save`` and
+        again by a restore, so the checks always match the file beside them (G5)."""
         first_column = self.project.engine.execute(f"DESCRIBE {sql}").fetchone()[0]
-        self.dir.mkdir(parents=True, exist_ok=True)
-        self._ensure_generic_test()
-        now = datetime.now(UTC)
-
         data = self._schema()
         entry = next((m for m in data["models"] if m.get("name") == slug), None)
-        created = (entry or {}).get("meta", {}).get("lakelet", {}).get("created") or now.isoformat()
+        created = (entry or {}).get("meta", {}).get("lakelet", {}).get("created") or datetime.now(
+            UTC
+        ).isoformat()
         new_entry = {
             "name": slug,
             "description": title,
@@ -103,10 +112,33 @@ class Questions:
             entry.clear()
             entry.update(new_entry)
         self._write_schema(data)
+
+    # -- operations ----------------------------------------------------------------
+
+    def save(self, title: str, sql: str) -> Question:
+        slug = identifier(title)
+        # Before anything is written: a question that does not bind is refused.
+        self.project.engine.execute(f"DESCRIBE {sql}")
+        self.dir.mkdir(parents=True, exist_ok=True)
+        is_new = not self._sql_path(slug).exists()
+        written_test = self._ensure_generic_test()
+        now = datetime.now(UTC)
+
+        self.write_entry(slug, title, sql)
         self._sql_path(slug).write_text(
             f"-- {title}\n-- saved by lakelet on {now:%Y-%m-%d}\n{sql.strip()}\n", encoding="utf-8"
         )
-        return self.get(slug)
+        question = self.get(slug)
+        # The save is a version: the model, its checks, and the generic test the first save
+        # of a project writes. Nothing else of the user's is staged (versions brief G3).
+        written = [self._sql_path(slug), self.schema_path]
+        if written_test is not None:
+            written.append(written_test)
+        result = versions.commit(
+            self.project.root, written, f"{'save' if is_new else 'update'} question: {title}"
+        )
+        question.commit, question.git = result.id, result.reason
+        return question
 
     def get(self, slug: str) -> Question:
         path = self._sql_path(slug)
@@ -117,7 +149,7 @@ class Questions:
         return Question(
             slug=slug,
             title=entry.get("description", slug),
-            sql=self._strip_header(path.read_text(encoding="utf-8")),
+            sql=self.strip_header(path.read_text(encoding="utf-8")),
             path=path,
             created=datetime.fromisoformat(created) if created else None,
             last_run=self.project.history.question_last_run(slug),

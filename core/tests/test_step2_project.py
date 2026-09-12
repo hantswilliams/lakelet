@@ -29,7 +29,8 @@ def test_init_lays_out_the_project(root) -> None:
 
     config = tomllib.loads((root / "lakelet.toml").read_text())
     assert config["project"]["name"] == "acme analytics"
-    assert set(config) == {"project", "catalog", "engine", "gauge", "burst", "agents"}
+    assert set(config) == {"project", "catalog", "engine", "gauge", "git", "burst", "agents"}
+    assert config["git"]["auto_commit"] is True  # versions brief G4
     assert (root / ".gitignore").read_text().splitlines() == [
         "warehouse/",
         ".lakelet/",
