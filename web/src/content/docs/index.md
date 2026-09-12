@@ -17,11 +17,12 @@ Lakelet is a local-first lakehouse: Apache Iceberg tables on Parquet in a folder
 | `tables attach`, `refresh`, `discover` for Parquet already in S3 | Built, tested against an in-process S3 mock and RustFS; the same suite runs against a real bucket by hand | [Tables](/docs/tables), [A real bucket](/docs/remote) |
 | The Iceberg REST catalog, `catalog serve`; DuckDB, pyiceberg, Spark 3.5 and Trino as clients | Built; Spark and Trino verified through Docker Compose | [Catalog](/docs/catalog) |
 | Saved questions as dbt models with two checks; `dbt run` builds them through the catalog | Built; `dbt run` and `dbt test` pass on the generated project | [Questions](/docs/questions) |
+| Every save is a version: `init` makes the project a git repository, a save is a commit, `lakelet versions` and `restore` | Built; git is a library in the package, so no `git` binary is needed and nothing reaches the network | [Questions](/docs/questions) |
 | `lakelet run`: the dbt DAG with a verdict per model; `view` models as Iceberg views in the catalog (build with `lakelet run`, not `dbt run`; the page says why) | Built | [dbt and views](/docs/dbt) |
 | `lakelet serve`: the local HTTP API with a bearer token and Arrow results | Built; the app runs one per window | [HTTP API](/docs/api) |
-| The desktop app: projects, drop-to-import with a preview, attaching a bucket, the SQL screen with the verdict before the rows, the streaming grid, the auto-chart, the table and view detail, the Models screen over `lakelet run`, Simple and Technical mode, the Gauge screen, crash recovery, settings | Built, from source; tested with Playwright against seven real sidecars on macOS and Ubuntu; no installer yet | [The desktop app](/docs/app) |
+| The desktop app: projects, drop-to-import with a preview, attaching a bucket, the SQL screen with the verdict before the rows, the streaming grid, the auto-chart, the table and view detail, the Models screen over `lakelet run`, Simple and Technical mode, Save as question, light and dark, the Gauge screen, crash recovery, settings | Built, from source; tested with Playwright against eight real sidecars on macOS and Ubuntu; no installer yet | [The desktop app](/docs/app) |
 | `lakelet tables expire`, `lakelet gauge probe`, `lakelet config` | Built | [Tables](/docs/tables), [The gauge](/docs/gauge), [Config](/docs/config) |
-| `lakelet audit network` | Built; measures zero outbound attempts on the quickstart | [Quickstart](/docs/install) |
+| `lakelet audit network` | Built; measures zero outbound attempts on the quickstart, which builds a dbt model so `lakelet run` is covered too | [Quickstart](/docs/install) |
 | Installers, brew tap, a PyPI release | Not yet | |
 | Burst, `ask`, `mcp`, correction factors, `catalog attach` | Not yet | |
 
@@ -33,4 +34,4 @@ The package is `0.1.0.dev0` and is not on PyPI. It needs Python 3.12 or newer (3
 
 Start with the [quickstart](/docs/install), which is the same sequence the test suite runs end to end. The [CLI reference](/docs/cli) is generated from the CLI's own help text and cannot drift from the code. Everything else describes what a test asserts; where a page names a number (a budget, a timing), the number was measured on one machine and says so.
 
-The source of truth for the design is `build-sessions/core-v0.5-plan.md` in the repo, and for the running state, `build-sessions/TASKS.md`. Where a doc page and the brief disagree, the brief wins and the page is wrong; [edit it](https://github.com/hantswilliams/lakelet/tree/main/web/src/content/docs).
+The source of truth for the design is the current brief in `build-sessions/` — `TASKS.md` names which one that is — and for the running state, `build-sessions/TASKS.md`. Where a doc page and the brief disagree, the brief wins and the page is wrong; [edit it](https://github.com/hantswilliams/lakelet/tree/main/web/src/content/docs).

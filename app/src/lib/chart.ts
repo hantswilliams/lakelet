@@ -50,18 +50,34 @@ export function planChart(columns: Column[], rows: Row[]): ChartPlan | null {
 
 // The site's tokens (tokens.css): the lake for the one series, muted ink for text, the
 // line colour for hairlines. Text never wears the series colour.
-const LAKE = '#2E6E9E';
-const MUTED = '#5C6B7A';
-const LINE = '#D5DBE2';
-const GRID = '#EEF1F4';
+//
+// Read from the document rather than written down, so a chart is drawn in the theme the
+// window is actually in (decision D1). Vega is handed colours, not CSS, so this is the one
+// place a dark window would otherwise keep light-grey axes on a dark panel. The fallbacks
+// are the light values, for a render with no document to ask (a test, a server).
+const FALLBACK = { lake: '#2E6E9E', muted: '#5C6B7A', line: '#D5DBE2', grid: '#EEF1F4' };
+
+export function chartColours(root: HTMLElement | null = globalThis.document?.documentElement ?? null) {
+  if (!root) return { ...FALLBACK };
+  const style = getComputedStyle(root);
+  const token = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+  return {
+    lake: token('--lake', FALLBACK.lake),
+    muted: token('--muted', FALLBACK.muted),
+    line: token('--line', FALLBACK.line),
+    grid: token('--bg', FALLBACK.grid), // the grid is the window's own background, a shade under the panel
+  };
+}
+
 const FONT = 'Manrope, system-ui, -apple-system, "Segoe UI", sans-serif';
 
 /** A Vega-Lite spec for the plan: thin marks, rounded data-ends, 2px line with markers,
  *  a hairline grid, a tooltip on every mark, and no legend (one series; the title names it). */
 export function vegaLiteSpec(plan: ChartPlan): Record<string, unknown> {
+  const { lake, muted, line, grid } = chartColours();
   const mark = plan.kind === 'bar'
-    ? { type: 'bar', cornerRadiusEnd: 4, color: LAKE, tooltip: true, width: { band: 0.6 } } // thin: the band's leftover is air
-    : { type: 'line', strokeWidth: 2, color: LAKE, point: { size: 64, filled: true, color: LAKE, stroke: '#FFFFFF', strokeWidth: 2 }, tooltip: true, interpolate: 'monotone' };
+    ? { type: 'bar', cornerRadiusEnd: 4, color: lake, tooltip: true, width: { band: 0.6 } } // thin: the band's leftover is air
+    : { type: 'line', strokeWidth: 2, color: lake, point: { size: 64, filled: true, color: lake, stroke: 'var(--panel)', strokeWidth: 2 }, tooltip: true, interpolate: 'monotone' };
   const x = plan.kind === 'bar'
     ? { field: plan.x, type: 'nominal', sort: null, axis: { labelAngle: 0, labelLimit: 120, title: null } }
     : { field: plan.x, type: 'temporal', axis: { title: null, grid: false } };
@@ -79,7 +95,7 @@ export function vegaLiteSpec(plan: ChartPlan): Record<string, unknown> {
     config: {
       font: FONT,
       view: { stroke: null },
-      axis: { labelColor: MUTED, titleColor: MUTED, domainColor: LINE, tickColor: LINE, gridColor: GRID, gridWidth: 1, labelFontSize: 12, titleFontSize: 12, titleFontWeight: 500 },
+      axis: { labelColor: muted, titleColor: muted, domainColor: line, tickColor: line, gridColor: grid, gridWidth: 1, labelFontSize: 12, titleFontSize: 12, titleFontWeight: 500 },
       scale: { bandPaddingInner: 0.25 },
     },
   };
@@ -95,6 +111,7 @@ const VERDICT_COLOURS = { green: '#1F8A5B', yellow: '#C98A12', red: '#D24B3A' } 
 /** Estimate versus actual on log axes with the diagonal of a perfect estimate; the verdict
  *  colours a point and the legend names it, so colour is never the only carrier. */
 export function scatterSpec(points: GaugePoint[]): Record<string, unknown> {
+  const { muted, line, grid } = chartColours();
   const all = points.flatMap((p) => [p.est, p.actual]).filter((v) => v > 0);
   const lo = Math.max(Math.min(...all, 1) / 2, 0.001);
   const hi = Math.max(...all, 1) * 2;
@@ -106,7 +123,7 @@ export function scatterSpec(points: GaugePoint[]): Record<string, unknown> {
     layer: [
       {
         data: { values: [{ v: lo }, { v: hi }] },
-        mark: { type: 'line', strokeDash: [4, 4], color: LINE, strokeWidth: 1.5 },
+        mark: { type: 'line', strokeDash: [4, 4], color: line, strokeWidth: 1.5 },
         encoding: { x: { field: 'v', type: 'quantitative' }, y: { field: 'v', type: 'quantitative' } },
       },
       {
@@ -133,8 +150,8 @@ export function scatterSpec(points: GaugePoint[]): Record<string, unknown> {
     config: {
       font: FONT,
       view: { stroke: null },
-      axis: { labelColor: MUTED, titleColor: MUTED, domainColor: LINE, tickColor: LINE, gridColor: GRID, gridWidth: 1, labelFontSize: 12, titleFontSize: 12, titleFontWeight: 500 },
-      legend: { labelColor: MUTED, labelFontSize: 12, symbolType: 'circle' },
+      axis: { labelColor: muted, titleColor: muted, domainColor: line, tickColor: line, gridColor: grid, gridWidth: 1, labelFontSize: 12, titleFontSize: 12, titleFontWeight: 500 },
+      legend: { labelColor: muted, labelFontSize: 12, symbolType: 'circle' },
     },
   };
 }

@@ -1,0 +1,35 @@
+/* Copyright 2026 Lakelet contributors
+   SPDX-License-Identifier: Apache-2.0
+   Dark mode for the app's window (decision D1, September 12). `tokens.css` is a copy of the
+   site's and is not edited here, so the dark palette overrides its variables from this file
+   instead; the site keeps the one light system it has always had.
+
+   Three states. With nothing chosen the window follows the machine, which is the media query
+   below. Choosing Light or Dark puts `data-theme` on the document element, and those rules
+   win because an attribute selector outranks the media query's `:root`. */
+
+:root {
+  /* The two colours app.css had hard-coded, so a theme can move them (D1). */
+  --head: #F6F8FA;    /* table headers and the grid's own head row */
+  --refused: #FBEDEB; /* the Red refusal's panel */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #11161B; --panel: #181F26; --ink: #E7EDF3; --muted: #9AA8B6; --line: #2A343E;
+    --head: #1E262E; --refused: #2E1B18;
+    --cloud: #1B2733;
+    /* The verdicts keep their hues — they are the gauge's words and the site's — and
+       lighten just enough to hold contrast on a dark panel. */
+    --local: #3FBE85; --slow: #E0AC3C; --burst: #F0705E;
+    --lake: #6FA8D0;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #11161B; --panel: #181F26; --ink: #E7EDF3; --muted: #9AA8B6; --line: #2A343E;
+  --head: #1E262E; --refused: #2E1B18;
+  --cloud: #1B2733;
+  --local: #3FBE85; --slow: #E0AC3C; --burst: #F0705E;
+  --lake: #6FA8D0;
+}

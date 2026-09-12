@@ -4,7 +4,7 @@
 
 ## Start here
 
-1. Read the current build brief. For the core, the highest-numbered `build-sessions/core-v0.N-plan.md` (today: `core-v0.5-plan.md`); for the desktop shell, `build-sessions/app-v0-plan.md`. The brief is the authority. Where it conflicts with anything in `docs/`, the brief wins; its §8 lists the edits `docs/` still needs.
+1. Read `build-sessions/TASKS.md` first: its "Now" names the brief the build is on and which of that brief's steps are built. There are several briefs and the newest is not always the one in play — today it is `versions-plan.md`; `core-v0.5-plan.md` is the core's and `app-v0-plan.md` the desktop shell's, both still authoritative for what they cover. Then read that brief. The brief is the authority. Where it conflicts with anything in `docs/`, the brief wins; its §8 lists the edits `docs/` still needs. A decision that belongs to no brief is in `build-sessions/decisions-for-review_<MMDDYY>.md`.
 2. Find the step you are on in §4 of the brief. The step's gate is the definition of done for the session. Do not build ahead of it.
 3. Read the most recent `build-sessions/lakelet-build-sessions_<MMDDYY>.md` for what happened last time and what is open.
 

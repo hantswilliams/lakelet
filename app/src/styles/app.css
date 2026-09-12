@@ -16,7 +16,7 @@ main>*{min-width:0} /* a wide table scrolls inside its panel, never the page */
 .tables h2{font-size:15px;margin-bottom:10px}
 .tables table{width:100%;border-collapse:collapse;font-size:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .tables th,.tables td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left}
-.tables th{font-size:12px;color:var(--muted);font-weight:600;background:#F6F8FA}
+.tables th{font-size:12px;color:var(--muted);font-weight:600;background:var(--head)}
 .tables tr:last-child td{border-bottom:0}
 .mono{font-family:var(--mono);font-size:13px}
 .muted{color:var(--muted);font-size:14px}
@@ -61,7 +61,7 @@ button.quiet{font:500 12px var(--mono);color:var(--muted);background:var(--bg);b
 .preview .columns td:first-child,.preview .columns th:first-child{width:28%}
 .preview .columns .note{width:36%}
 .preview th,.preview td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-.preview th{font-size:12px;color:var(--muted);font-weight:600;background:#F6F8FA}
+.preview th{font-size:12px;color:var(--muted);font-weight:600;background:var(--head)}
 .preview .note{color:var(--slow);font-size:12.5px}
 .preview .sample{margin-top:8px;display:block;overflow-x:auto;max-width:100%}
 .preview .sample td,.preview .sample th{white-space:nowrap}
@@ -87,12 +87,12 @@ button.quiet{font:500 12px var(--mono);color:var(--muted);background:var(--bg);b
 .gauge .words{font-weight:700}
 .gauge.green .words{color:var(--local)} .gauge.yellow .words{color:var(--slow)} .gauge.red .words{color:var(--burst)}
 .gauge .reason,.gauge .tail{color:var(--muted)}
-.gauge.refused{border-color:var(--burst);background:#FBEDEB}
+.gauge.refused{border-color:var(--burst);background:var(--refused)}
 .gauge.error{border-color:var(--burst)}
 .gauge.error .reason{color:var(--burst);font-family:var(--mono);font-size:13px}
 .gauge .tail code{font:500 12px var(--mono);background:var(--bg);border-radius:4px;padding:1px 5px}
 .grid{height:min(60vh,520px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;font:13px var(--mono);position:relative}
-.grid-head{display:grid;position:sticky;top:0;z-index:1;background:#F6F8FA;border-bottom:1px solid var(--line);font:600 12px var(--sans);color:var(--muted)}
+.grid-head{display:grid;position:sticky;top:0;z-index:1;background:var(--head);border-bottom:1px solid var(--line);font:600 12px var(--sans);color:var(--muted)}
 .grid-head div,.grid-row div{padding:0 12px;line-height:30px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid var(--line)}
 .grid-head div:last-child,.grid-row div:last-child{border-right:0}
 .grid-body{position:relative;width:100%}
@@ -143,14 +143,18 @@ nav.screens button.on{background:var(--cloud);color:var(--lake)}
 .gauge-screen .tiles span{color:var(--muted);font-size:13px}
 .gauge-screen table.runs{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .gauge-screen table.runs th,.gauge-screen table.runs td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left}
-.gauge-screen table.runs th{font-size:12px;color:var(--muted);font-weight:600;background:#F6F8FA}
+.gauge-screen table.runs th{font-size:12px;color:var(--muted);font-weight:600;background:var(--head)}
 .gauge-screen table.runs tr:last-child td{border-bottom:0}
 .gauge-screen td.verdict.green{color:var(--local)} .gauge-screen td.verdict.yellow{color:var(--slow)} .gauge-screen td.verdict.red{color:var(--burst)}
 .gauge-screen footer.actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .gauge-screen .confirm{display:inline-flex;align-items:center;gap:8px;font-size:13px}
 /* real-data round, step 6: the Models screen (screens 7 and 8) and the view detail */
 nav.screens.mode{margin-left:auto}
-nav.screens.mode+button{margin-left:8px}
+/* the theme switch follows the mode switch, and takes the free space on its own when there
+   is no project yet and the mode switch is not there (D1) */
+nav.screens.theme{margin-left:auto}
+nav.screens.mode+nav.screens.theme{margin-left:8px}
+nav.screens.theme+button{margin-left:8px}
 .models-screen{display:grid;gap:14px;min-width:0}
 .models-screen header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .models-screen h2{font-size:16px}
@@ -159,7 +163,7 @@ nav.screens.mode+button{margin-left:8px}
 @media (max-width:900px){.models-screen .split{grid-template-columns:1fr}}
 .models-screen table.dag{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .models-screen table.dag th,.models-screen table.dag td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left}
-.models-screen table.dag th{font-size:12px;color:var(--muted);font-weight:600;background:#F6F8FA}
+.models-screen table.dag th{font-size:12px;color:var(--muted);font-weight:600;background:var(--head)}
 .models-screen table.dag tbody tr{cursor:pointer}
 .models-screen table.dag tbody tr:hover td{background:var(--bg)}
 .models-screen table.dag tbody tr.on td{background:var(--cloud)}

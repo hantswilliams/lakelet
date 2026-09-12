@@ -25,13 +25,15 @@ export interface Started {
   s3?: { endpoint: string; pid: number; flag: string; prefix: string };
 }
 
-export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean; s3?: boolean; detail?: boolean; dbt?: boolean }
+export interface SidecarSpec { memoryLimit: string; big?: boolean; red?: boolean; s3?: boolean; detail?: boolean; dbt?: boolean; questions?: boolean }
 
 // Each spec file owns what it imports into a sidecar; the files run in parallel outside CI.
 // step 0 → the first; step 2 → the second (and counts its tables); steps 3 and 4 → the
 // third (big) and the fourth (Red); step 4's settings → the second's lakelet.toml only;
 // the real-data round's attach test → the fifth (s3); its table-detail test → the sixth;
-// its models test → the seventh (dbt).
+// its models test → the seventh (dbt); the versions round's save-as-question and Versions
+// section → the eighth (dbt with a question already saved twice). A spec that writes a model
+// gets its own sidecar: the seventh's models test counts the models in it.
 export const SIDECARS: SidecarSpec[] = [
   { memoryLimit: '2GB' },
   { memoryLimit: '1GB' },
@@ -40,7 +42,17 @@ export const SIDECARS: SidecarSpec[] = [
   { memoryLimit: '1GB', s3: true },
   { memoryLimit: '1GB', detail: true },
   { memoryLimit: '1GB', dbt: true },
+  { memoryLimit: '1GB', dbt: true, questions: true },
 ];
+
+/** The eighth sidecar's seeded question (versions brief G10): saved twice by the CLI before
+ *  the page opens, so its history has two versions and a diff between them to draw. */
+export const SEEDED_QUESTION = {
+  title: 'Revenue by customer',
+  slug: 'revenue_by_customer',
+  first: 'select customer, sum(amt) as revenue from orders group by 1',
+  second: 'select customer, sum(amt) as revenue from orders group by 1 order by 2 desc',
+};
 
 /** The seventh sidecar's dbt project: `stg` (a view over orders), `by_customer` (a table
  *  over `stg`), and two tests on `stg` in schema.yml. */
@@ -97,7 +109,7 @@ async function startMoto(project: string): Promise<{ endpoint: string; child: Ch
   return { endpoint, child, flag };
 }
 
-export async function startSidecar({ memoryLimit, big, red, s3, detail, dbt }: SidecarSpec): Promise<{ started: Started; child: ChildProcess; extra?: ChildProcess }> {
+export async function startSidecar({ memoryLimit, big, red, s3, detail, dbt, questions }: SidecarSpec): Promise<{ started: Started; child: ChildProcess; extra?: ChildProcess }> {
   const exe = sidecarExecutable();
   const project = mkdtempSync(join(tmpdir(), 'lakelet-e2e-'));
   const init = spawnSync(exe, ['init', project, '--probe-mb', '0'], { encoding: 'utf8' });
@@ -125,6 +137,14 @@ export async function startSidecar({ memoryLimit, big, red, s3, detail, dbt }: S
     const imported = spawnSync(exe, ['-C', project, 'import', join(project, 'orders.csv')], { encoding: 'utf8' });
     if (imported.status !== 0) throw new Error(`import failed:\n${imported.stdout}\n${imported.stderr}`);
     for (const [name, text] of Object.entries(DBT_MODELS)) writeFileSync(join(project, 'models', name), text);
+  }
+  if (questions) {
+    // Saved twice through the CLI, so the question has two versions (and a diff between them)
+    // before any page opens. Each save is a commit; `lakelet versions` would list them.
+    for (const sql of [SEEDED_QUESTION.first, SEEDED_QUESTION.second]) {
+      const saved = spawnSync(exe, ['-C', project, 'question', 'save', SEEDED_QUESTION.title, '--sql', sql], { encoding: 'utf8' });
+      if (saved.status !== 0) throw new Error(`question save failed:\n${saved.stdout}\n${saved.stderr}`);
+    }
   }
   if (big) {
     // 20 M rows through DuckDB into Parquet, then imported as an Iceberg table

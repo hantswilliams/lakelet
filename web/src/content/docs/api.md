@@ -44,7 +44,7 @@ All under `/api`, all needing the token. Bodies are JSON; responses are JSON exc
 | `POST /estimate` | `{sql}` | The estimate as JSON: `verdict`, `words`, `reason`, `line`, the numbers (`bytes_scanned`, `peak_memory`, `wall_local`, `wall_burst`, `cost_burst`, `cap`, `spill_bytes`, `memory_limit`), `pruning`, the tables and the worker. 400 `sql_error`. |
 | `POST /query` | `{sql, allow_red, batch_rows}` | An Arrow IPC stream (below). |
 | `GET /questions` | | Saved questions with slug, title, path and last run. |
-| `POST /questions` | `{title, sql}` | The saved question, with `commit` (the version this save recorded, null when nothing changed) and `git` (why there is no version, when the repository could not be written). 400 `sql_error`. |
+| `POST /questions` | `{title, sql, replace}` | The saved question, with `commit` (the version this save recorded, null when nothing changed) and `git` (why there is no version, when the repository could not be written). 409 `question_exists` with the `slug` when that title is already saved and `replace` is not set, so a client can offer to replace it. 400 `sql_error`. |
 | `POST /questions/{slug}/run` | `{allow_red}` | An Arrow IPC stream, and the question's `last_run` is updated when it completes. 404 `no_such_question`. |
 | `GET /versions/{name}` | | The versions of one question or model, newest first: `id`, `when`, `author`, `message`, `sql_changed`, `checks_changed`, and `diff`, the unified diff of the file against the version before it. 404 `no_such_model`, or `no_history` with the sentence saying why there is none. |
 | `GET /versions/{name}/{id}` | | `{name, id, sql}`: that version's file content. Any unambiguous prefix of the version id works. |

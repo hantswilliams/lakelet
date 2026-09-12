@@ -88,6 +88,20 @@ export function sqlCommand(sql: string, runAnyway = false): string {
   return `lakelet sql ${shellArg(one)}${runAnyway ? ' --run-anyway' : ''}`;
 }
 
+/** `lakelet question save '<title>' --sql '<sql>'`: the query screen's Save line (versions
+ *  brief G7). The SQL is folded onto one line the way `sqlCommand` folds it. */
+export function questionSaveCommand(title: string, sql: string): string {
+  const one = stripComments(sql).replace(/\s+/g, ' ').trim();
+  return `lakelet question save ${shellArg(title)} --sql ${shellArg(one)}`;
+}
+
+/** The slug the core gives a title (`identifier`), so the app can name the question it is
+ *  about to write before the core answers. */
+export const questionSlug = (title: string): string => {
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'project';
+  return /^[0-9]/.test(slug) ? `t_${slug}` : slug;
+};
+
 /** The Gauge screen's lines (real-data brief R8). */
 export const gaugeHistoryCommand = (last = 20): string => `lakelet gauge history${last === 20 ? '' : ` --last ${last}`}`;
 export const gaugeExportCommand = (): string => 'lakelet gauge export';

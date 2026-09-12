@@ -14,6 +14,8 @@ import { GaugeLine, type RunState } from '../components/GaugeLine';
 import { Chart } from '../components/Chart';
 import { Grid } from '../components/Grid';
 import { SqlEditor } from '../components/SqlEditor';
+import { SaveQuestion } from '../components/SaveQuestion';
+import type { Mode } from '../lib/vocabulary';
 
 export const ROW_CAP = 100_000;
 
@@ -22,11 +24,14 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export interface QueryProps {
   session: Session;
   tables: TableInfo[];
+  mode: Mode;
   /** After a run completes: a statement may have written a table (the panel and an open detail re-read). */
   onDone?: () => void;
+  /** After a question is saved: the Models screen lists it on its next plan (G7). */
+  onSaved?: () => void;
 }
 
-export function Query({ session, tables, onDone }: QueryProps) {
+export function Query({ session, tables, mode, onDone, onSaved }: QueryProps) {
   const [sql, setSql] = useState('');
   const [state, setState] = useState<RunState>({ kind: 'idle' });
   const [columns, setColumns] = useState<Column[]>([]);
@@ -123,6 +128,10 @@ export function Query({ session, tables, onDone }: QueryProps) {
   }, []);
 
   const running = state.kind === 'running' || state.kind === 'estimating';
+  // G7: Save is offered once the gauge has spoken — a run that finished, one stopped part
+  // way, or a Red refusal. A Red statement saves too; the box says so.
+  const verdict = 'verdict' in state ? state.verdict : undefined;
+  const api = new Api(session);
 
   return (
     <section className="query" data-testid="query" data-verdict-ms={timing.verdict?.toFixed(0)} data-first-rows-ms={timing.firstRows?.toFixed(0)} data-first-rows={timing.firstCount} data-done-ms={timing.done?.toFixed(0)}>
@@ -132,6 +141,9 @@ export function Query({ session, tables, onDone }: QueryProps) {
           <button type="button" className="quiet" onClick={cancel} data-testid="cancel">Stop (Esc)</button>
         ) : (
           <button type="button" className="primary" onClick={() => void run(sql, allowRed)} disabled={!sql.trim()} data-testid="run">Run</button>
+        )}
+        {verdict && !running && (
+          <SaveQuestion api={api} sql={sql.trim()} mode={mode} firstColumn={columns[0]?.name} red={verdict.verdict === 'red'} onSaved={onSaved} />
         )}
         <Command line={sql.trim() ? sqlCommand(sql.trim(), allowRed) : 'lakelet sql <sql>'} />
       </div>

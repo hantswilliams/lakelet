@@ -98,6 +98,32 @@ def test_tables_over_http(served) -> None:
     assert client.post("/api/tables/nope/refresh").status_code == 404
 
 
+def test_saving_a_question_whose_title_is_taken_is_409_until_replace(served) -> None:
+    """Versions brief G7: the app offers "Replace it" the way an import onto an existing
+    table does, so the core refuses the second save rather than overwriting silently."""
+    p, client, tmp_path = served
+    assert (
+        client.post("/api/import", json={"path": str(tmp_path / "orders.csv")}).status_code == 200
+    )
+    sql = "select customer, sum(amt) as revenue from orders group by 1"
+    first = client.post("/api/questions", json={"title": "Revenue by customer", "sql": sql})
+    assert first.status_code == 200 and first.json()["slug"] == "revenue_by_customer"
+    assert first.json()["commit"] and first.json()["git"] is None
+
+    again = client.post("/api/questions", json={"title": "Revenue by customer", "sql": sql})
+    assert again.status_code == 409
+    assert (
+        again.json()["error"] == "question_exists" and again.json()["slug"] == "revenue_by_customer"
+    )
+
+    replaced = client.post(
+        "/api/questions",
+        json={"title": "Revenue by customer", "sql": sql + " order by 2 desc", "replace": True},
+    )
+    assert replaced.status_code == 200 and replaced.json()["sql"].endswith("order by 2 desc")
+    assert len(client.get("/api/questions").json()) == 1
+
+
 def test_settings_over_http_write_lakelet_toml(served) -> None:
     p, client, tmp_path = served
     got = client.get("/api/settings").json()

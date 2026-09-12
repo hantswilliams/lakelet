@@ -1,6 +1,9 @@
 # Lakelet — build session log, September 12, 2026
 
-*Hants and Claude (Opus 5) · Session 9, the rest (`versions-plan.md`): G1 to G10 accepted with no amendments, step 0 built*
+*Hants and Claude (Opus 5) · Session 9, the rest (`versions-plan.md`): G1 to G10 accepted with no
+amendments, G11 added and decided, steps 0, 1 and 2 built and verified on the Mac. Plus dark mode
+for the app (`decisions-for-review_091226.md` D1), which belongs to no brief. Steps 3 to 5 of the
+versions round — the Versions section on the model detail, lineage, and the close — are next.*
 
 ## 1. Step 0: dulwich, `lakelet/versions.py`, and a commit for every save
 
@@ -70,9 +73,88 @@ A `Versions` class on the project turns a name into a path: `models/questions/<n
 
 Container: **core 201 passed, 10 skipped**, Vitest 47, Playwright 22 against seven sidecars, `tsc` clean. The CLI reference was regenerated and has the two new verbs. Docs: `/docs/questions` has the version list and restore, `/docs/dbt` has the run-time commit and the setting, `/docs/config` has the `[git]` section and its key, `/docs/api` has the three routes and the new setting.
 
-## 5. Still open
+## 5. Two bugs Hants found in step 1 before step 2
 
-1. ~~Step 0 and G11 verified on the Mac~~ **done 2026-09-12**: 190 passed, 5 skipped, nothing failed, `audit network` zero with the dbt line. `test_versions.py` is fully green there including the read-only-`.git` test, which is skipped as root and so has never run in the container.
+Both real, both now fixed with the tests he asked for.
+
+**The checks-only mark compared the file, not the entry.** Every question in a project shares `models/questions/schema.yml`, so `checks_changed` computed from the file's bytes meant that saving question B put "update question: B" into question A's version list — a commit that has nothing to do with A, marked as a change to A's checks. `_schema_entry` now parses the YAML at both commits and compares *this model's* entry; an unparseable file falls back to its bytes so a change to it still shows. Two tests: saving two questions leaves the first with one version, and a comment appended to `schema.yml` is not a version of anything, while a check added to the entry is.
+
+Finding it cost one wrong turn worth recording. The first fix looked right and the test still failed, because the walker's loop variable was also called `entry` and shadowed the new parameter, so the model name was a `WalkEntry` by the time it reached the comparison and never matched. Nothing in the types caught it; the test did. The parameter is now `model`.
+
+**The run-time commit came before the Red refusal.** The order was plan → commit → Red check → dbt, so a run the gauge refused still recorded a version of a build that never happened. It is now plan → Red check → commit → dbt, with a test that a refused run leaves no `run:` commit and that `--run-anyway` records one.
+
+## 6. Step 2: Save as question on the query screen
+
+**The button and the box (G7).** `SaveQuestion.tsx` is the button beside Run and the one-line box it opens. It appears once the gauge has spoken — a run that finished, one stopped part way, or a Red refusal — because that is when there is a statement worth keeping. The title is the only thing asked; the box shows the file it will write (`models/questions/<slug>.sql`, the slug derived in the app the way the core derives it) and the two checks in words, "returns at least one row; `customer` is never empty", with the `lakelet question save` line under it. What comes back names the checks, the file, and the version: "Version 6c89b4f." A save that wrote the files but could not record a version shows the `git:` reason instead. A Red statement says, before you save it, that saving is fine because a question can be bigger than this laptop. Simple mode says "Save this question" and "checks".
+
+**Replace, and the one decision this needed.** G7 says a title that exists "offers Replace it, the way import does", without saying where the check lives. Import's mechanism is a 409 from the core, so that is what this does: `POST /api/questions` takes `replace` (false by default) and answers 409 `question_exists` with the slug when the title is taken. The app turns that into **Replace it** and posts again with `replace: true`. The alternative was to check the questions list in the app before posting, which is fewer moving parts but puts the decision in the app and leaves the CLI and the API disagreeing about what a save means. `question save` on the CLI still updates in place without asking, which is what a command line should do. Recorded here because the brief left it open.
+
+**Gates.** `SaveQuestion.test.tsx`, 6 tests: the checks sentence with and without a first column; the box asks only for a title and posts `{title, sql, replace: false}`, showing the slug, the checks and the line; the 409 becomes Replace it and posts `replace: true`; the Red sentence; Simple mode's words; the `git:` reason with no version. One pytest for the route: the first save is 200 with a commit, the second 409 with the slug, the third with `replace` goes through and there is still one question. `tests/save-question.spec.ts` against the seventh sidecar runs a statement, saves it, reads the checks and the version out of the notice, meets the 409, takes Replace it, and finds the question on the Models screen with its title as its description.
+
+**The eighth sidecar, earlier than planned, because the first version of this spec was wrong.** It saved its question into the seventh sidecar — the dbt project the Models screen's own spec asserts has exactly two models. Saving adds a third, so `models.spec.ts` read "3 models built in" and failed. It passed in the container and failed on Hants' Mac purely on worker ordering: whichever spec ran first won. A spec that writes a model needs a project of its own. The eighth sidecar is now in `SIDECARS` as G10 describes it — a dbt project with a question saved twice by the CLI in setup, so its history has two versions and a diff between them before any page opens — and the save spec uses it. Step 3 was going to need it anyway. The two specs now pass together under parallel workers, which is what the failure was really about.
+
+The fix also depends on §5's first bug being fixed: the seeded question's version list has to be unaffected by another question's save, or step 3's assertions would drift every time step 2 ran beside it.
+
+Container: **core 205 passed, 10 skipped**, Vitest 53, Playwright 23 against eight sidecars, `tsc` clean. (At `--workers=4` on this two-core container three unrelated specs fail on timing; they pass at the suite's own worker count and on the Mac. Nothing in them was touched.)
+
+## 7. Dark mode (decision D1)
+
+Hants asked for light and dark in the app, outside any brief, so it went into
+`decisions-for-review_091226.md` first: the app follows the operating system, and a **System |
+Light | Dark** switch in the bar overrides it. Not chosen: the media query alone (nothing to
+remember, about twenty-five lines, but no way to ask for dark on a light desktop), or a
+two-way switch (ignores the machine on first run).
+
+**Why it was cheap.** `app.css` already read ten colour tokens and had only seven hard-coded
+colours, five of them the same table-header grey; those became `--head` and `--refused`.
+CodeMirror themes off `var(--bg)` and `var(--muted)` already, so the SQL editor followed with
+no change at all. `src/styles/tokens.css` is the site's file copied in with "do not edit this
+copy" at its head (app brief A2), so the dark palette lives in an app-only
+`src/styles/theme.css` that overrides those variables: the site keeps the one light system it
+has. The palette is a dozen variables twice over — once under `@media (prefers-color-scheme:
+dark)` guarded by `:root:not([data-theme='light'])`, once under `:root[data-theme='dark']` so
+an explicit choice wins in both directions.
+
+**The part that was not CSS.** Vega is handed colours, not stylesheets, so `lib/chart.ts` had
+four hard-coded hex constants that would have left a dark window with light-grey axes.
+`chartColours()` reads `--lake`, `--muted`, `--line` and `--bg` off the document at render
+time, with the light values as the fallback for a render with no document. Both specs — the
+query screen's bar and line, and the Gauge screen's scatter — go through it. The verdict
+colours keep their hues in both themes and lighten slightly in dark: they are the gauge's
+vocabulary and the site's, and a Red has to stay recognisably that Red.
+
+`lib/theme.ts` is the same shape as `lib/vocabulary.ts`'s mode: `loadTheme`, `saveTheme`,
+`applyTheme`, and `resolvedTheme` for anything that must draw rather than read a token.
+System removes `data-theme` and lets the media query decide; Light and Dark set it. The switch
+sits beside Simple | Technical, and shows on the welcome screen too, so a dark desktop can be
+matched before a project is open.
+
+**Gates.** `theme.test.tsx`, 8 tests: the default is System; a choice is remembered and an
+unknown stored value falls back; System removes the attribute and a choice sets it; the
+machine is resolved in both directions; a window with no storage still opens; the chart reads
+its colours from the document and never emits the light palette's lake when the document is
+dark; the fallback with no document; the switch itself. `tests/theme.spec.ts` in a real
+window, asserting the computed background rather than a class name, because what can go wrong
+is the CSS not reaching the page: the switch repaints the window and the panels, the choice
+survives a reload, and with nothing stored an emulated dark machine paints dark and a light
+one light, with a choice still overriding both.
+
+One portability lesson from the Mac run. The theme tests cleared storage with
+`localStorage.clear()`, which passed here and failed on Hants' machine on all eight: Node 22
+and newer expose a `localStorage` global of their own when `--localstorage-file` is passed,
+and it shadows jsdom's without carrying the whole `Storage` surface. Both machines run Node
+22.22.2 — his environment passes the flag and the container does not — so the container could
+not have caught it. The tests now install a small in-memory storage of their own in
+`beforeEach` and depend on nothing the runtime provides. The production code was already
+fine: `loadTheme` and `saveTheme` have always been wrapped, which is what the
+"window with no storage" test asserts.
+
+Container: Vitest 61, Playwright 25 against eight sidecars, `tsc` clean. The core is
+untouched, so its 205 stand.
+
+## 8. Still open
+
+1. ~~Everything built today verified on the Mac~~ **done 2026-09-12**: step 0 and G11 (190 passed, 5 skipped, nothing failed, `audit network` zero with the dbt line), then steps 1 and 2 and dark mode, each with `uv run pytest -q`, `npm test` and `npm run e2e` green. `test_versions.py` is fully green there including the read-only-`.git` test, which is skipped as root and so has never run in the container. Two failures were found on the Mac that the container could not have caught, both fixed: the save spec's shared sidecar (§6) and the theme tests' `localStorage.clear` (§7).
 2. **`audit network` counts connections, not name resolutions.** The guard patches `socket.socket.connect` but not `socket.getaddrinfo`, so on a machine without DNS an outbound attempt by name is never counted and the self-check (a bare IP) still passes. The reported zero is a measured zero on a machine with DNS and an unmeasured one without. Closing it means counting a non-loopback resolution as an attempt, which changes what the command reports; a decision, not a fix. §2 has the measurement.
 3. Whether `AWS_EC2_METADATA_DISABLED` and the two file variables are what his machine was resolving credentials through: the hermetic fixture should make the test pass either way, but the cause is unconfirmed.
 4. Three transfer archives are tracked in the repo from earlier sessions: `ci-startup-budget-201520.tgz`, `tasks-next-155443.tgz`, `versions-plan-160625.tgz` at the root. They are build-session plumbing, not source, and should come out in a commit of their own; Hants' call.

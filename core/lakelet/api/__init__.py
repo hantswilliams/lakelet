@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from lakelet import __version__
 from lakelet.engine import CatalogConflict
 from lakelet.gauge import inputs
+from lakelet.project import identifier
 from lakelet.query import Interrupted, RedRefused
 from lakelet.questions import NoSuchQuestion
 from lakelet.register import MissingFiles, NotRegistrable
@@ -88,6 +89,10 @@ class RestoreBody(BaseModel):
 class QuestionBody(BaseModel):
     title: str
     sql: str
+    #: A title whose slug is already saved is refused with 409 unless this is set, so the app
+    #: can offer "Replace it" the way an import that meets an existing table does (G7). The
+    #: CLI's `question save` updates in place and does not ask.
+    replace: bool = False
 
 
 class ProbeBody(BaseModel):
@@ -480,6 +485,14 @@ def create_router(project: Project, token: str) -> APIRouter:
     @router.post("/questions", dependencies=guarded)
     def save_question(body: QuestionBody):
         with lock:
+            slug = identifier(body.title)
+            if not body.replace and any(q.slug == slug for q in project.questions.list()):
+                return error(
+                    409,
+                    "question_exists",
+                    f"a question called {slug} is already saved; replace it to overwrite",
+                    slug=slug,
+                )
             try:
                 return _plain(project.questions.save(body.title, body.sql))
             except duckdb.Error as e:

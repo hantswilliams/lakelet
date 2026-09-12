@@ -31,6 +31,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
+
 if TYPE_CHECKING:
     from dulwich.repo import Repo
 
@@ -229,11 +231,31 @@ def _text(data: bytes | None) -> list[str]:
     return data.decode("utf-8", "replace").splitlines(keepends=True) if data else []
 
 
-def log_path(root: Path, path: Path | str, also: Path | str | None = None) -> list[Version]:
+def _schema_entry(data: bytes | None, name: str):
+    """One model's entry in a ``schema.yml``. Every question in a project shares that file, so
+    a commit is only a version of *this* question when *its* entry changed: comparing the file
+    would put every other question's save in this one's history. An unparseable file falls
+    back to its bytes, so a change to it still shows rather than being swallowed."""
+    if data is None:
+        return None
+    try:
+        loaded = yaml.safe_load(data.decode("utf-8", "replace")) or {}
+        for model in loaded.get("models") or []:
+            if isinstance(model, dict) and model.get("name") == name:
+                return model
+        return None
+    except Exception:  # noqa: BLE001 - a broken schema.yml is not a reason to fail a list
+        return data
+
+
+def log_path(
+    root: Path, path: Path | str, also: Path | str | None = None, model: str | None = None
+) -> list[Version]:
     """The commits that touched ``path``, newest first, each with the unified diff of that
-    file against the version before it. ``also`` is the model's ``schema.yml``: a commit that
-    touched only it is in the list, marked, because a change to the checks is a version of the
-    question too (G5)."""
+    file against the version before it. ``also`` is the model's ``schema.yml`` and ``model``
+    its name in it: a commit that touched only this model's entry is in the list, marked,
+    because a change to the checks is a version of the question too (G5). A commit that
+    touched the file for some other model's sake is not."""
     import difflib
 
     repo = open_repository(root)
@@ -251,8 +273,13 @@ def log_path(root: Path, path: Path | str, also: Path | str | None = None) -> li
             commit = entry.commit
             parent = store[commit.parents[0]] if commit.parents else None
             now, before = _blob(store, commit, sql), (_blob(store, parent, sql) if parent else None)
-            checks_changed = schema is not None and (
-                _blob(store, commit, schema) != (_blob(store, parent, schema) if parent else None)
+            checks_changed = (
+                schema is not None
+                and model is not None
+                and (
+                    _schema_entry(_blob(store, commit, schema), model)
+                    != _schema_entry(_blob(store, parent, schema) if parent else None, model)
+                )
             )
             if now == before and not checks_changed:
                 continue  # the walker matched a path this commit did not actually change
@@ -366,7 +393,7 @@ class Versions:
     def list(self, name: str) -> list[Version]:
         path = self.path(name)
         schema = path.parent / "schema.yml" if self.is_question(path) else None
-        return log_path(self.project.root, path, schema)
+        return log_path(self.project.root, path, schema, model=name if schema else None)
 
     def sql(self, name: str, commit_id: str) -> str:
         return show(self.project.root, self.path(name), commit_id)

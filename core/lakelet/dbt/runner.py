@@ -355,13 +355,14 @@ def run(
     started = time.perf_counter()
     planned = plan(project, select)
     report = RunReport(models=planned)
-    report.commit, report.git = _record_version(project, planned)
     red = [m.name for m in planned if m.verdict == "red"]
     if red and not run_anyway:
         raise RedRefusedRun(
             f"{len(red)} model(s) need more machine: {', '.join(red)}. `--run-anyway` runs "
             "the DAG here regardless."
         )
+    # After the refusal and before dbt: a run that never happened records no version (G4).
+    report.commit, report.git = _record_version(project, planned)
     result = _invoke(project, "run", _selection(select or []))
     by_name = {m.name: m for m in planned}
     for r in result.result.results if result.result else []:

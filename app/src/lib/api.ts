@@ -171,6 +171,20 @@ export interface Preview {
 
 export type ImportMode = 'create' | 'replace' | 'append';
 
+/** A saved question as `POST /questions` answers it (versions brief G3, G7): the model it
+ *  wrote, and the version the save recorded — `commit` null when nothing changed, `git` the
+ *  reason when the repository could not be written. */
+export interface Question {
+  slug: string;
+  title: string;
+  sql: string;
+  path: string;
+  created: string | null;
+  last_run: string | null;
+  commit: string | null;
+  git: string | null;
+}
+
 export type SettingKey = 'engine.memory_limit' | 'engine.threads' | 'gauge.share_calibration' | 'catalog.keep_snapshots_days' | 'git.auto_commit';
 
 export interface Settings {
@@ -318,6 +332,13 @@ export class Api {
 
   import(path: string, mode: ImportMode, name?: string): Promise<TableInfo[]> {
     return this.post<TableInfo[]>('/import', name ? { path, name, mode } : { path, mode });
+  }
+
+  /** `lakelet question save '<title>' --sql '<sql>'`: the question becomes a dbt model with
+   *  two checks, and the save is a version. A title already saved is 409 `question_exists`
+   *  until `replace`, the way an import onto an existing table is (versions brief G7). */
+  saveQuestion(title: string, sql: string, replace = false): Promise<Question> {
+    return this.post<Question>('/questions', { title, sql, replace });
   }
 }
 

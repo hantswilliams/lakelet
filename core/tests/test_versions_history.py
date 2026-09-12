@@ -84,14 +84,46 @@ def test_the_first_version_says_the_checks_changed_and_a_sql_only_change_does_no
 
 def test_a_commit_that_touched_only_the_checks_is_in_the_list_and_marked(saved_twice) -> None:
     """G5: a change to the checks is a version of the question too, marked as such."""
+    import yaml
+
     schema = saved_twice.root / "models" / "questions" / "schema.yml"
-    schema.write_text(schema.read_text() + "\n# reviewed\n", encoding="utf-8")
+    data = yaml.safe_load(schema.read_text())
+    data["models"][0]["columns"][0]["data_tests"].append("unique")
+    schema.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     versions.commit(saved_twice.root, [schema], "update question: checks by hand")
 
     newest = saved_twice.versions.list("revenue_by_customer")[0]
     assert newest.message == "update question: checks by hand"
     assert newest.checks_changed and not newest.sql_changed
     assert newest.diff == "", "the model's own file did not change"
+
+
+def test_a_comment_added_to_schema_yml_is_not_a_version_of_the_question(saved_twice) -> None:
+    """The entry is what is compared, so reformatting the file or adding a comment beside it
+    is not a version of any question in it."""
+    schema = saved_twice.root / "models" / "questions" / "schema.yml"
+    schema.write_text(schema.read_text() + "\n# reviewed by hand\n", encoding="utf-8")
+    versions.commit(saved_twice.root, [schema], "a comment, nothing more")
+
+    assert [v.message for v in saved_twice.versions.list("revenue_by_customer")] == [
+        "update question: Revenue by customer",
+        "save question: Revenue by customer",
+    ]
+
+
+def test_another_questions_save_is_not_a_version_of_this_one(project) -> None:
+    """G5's mark is this model's `schema.yml` entry, not the file. Every question in a project
+    shares `models/questions/schema.yml`, so comparing the file would put every other
+    question's save into this one's history."""
+    project.questions.save("Revenue by customer", SQL)
+    project.questions.save("Orders by day", "select id, count(*) as n from orders group by 1")
+    project.questions.save(
+        "Orders by day", "select id, count(*) as n from orders group by 1 limit 5"
+    )
+
+    [only] = project.versions.list("revenue_by_customer")
+    assert only.message == "save question: Revenue by customer"
+    assert len(project.versions.list("orders_by_day")) == 2
 
 
 def test_a_model_that_is_not_a_question_has_versions_too(project) -> None:
@@ -177,6 +209,25 @@ def test_a_second_run_with_nothing_changed_records_no_version(project) -> None:
     again = runner.run(project)
     assert again.commit is None and again.git is None
     assert [m for m, _ in log(project.root)].count("run: stg changed") == 1
+
+
+def test_a_run_refused_as_red_records_no_version(project) -> None:
+    """G4's commit is of what dbt is about to build, so a run that dbt never gets to must
+    leave no version behind: plan, then the refusal, then the commit."""
+    from lakelet.config import Config, set_value
+
+    toml = project.root / "lakelet.toml"
+    for key, value in (("gauge.green_max_seconds", "0"), ("gauge.yellow_max_seconds", "0")):
+        toml.write_text(set_value(toml.read_text(), key, value), encoding="utf-8")
+    project.config = Config.load(toml)
+    _model(project, "select id, customer, amt from {{ source('lakelet','orders') }}\n")
+
+    with pytest.raises(runner.RedRefusedRun):
+        runner.run(project)
+    assert "run: stg changed" not in [m for m, _ in log(project.root)]
+
+    ran = runner.run(project, run_anyway=True)
+    assert ran.commit, "run anyway builds, so it records the version it built"
 
 
 def test_auto_commit_false_stops_the_run_time_commit_and_a_save_still_commits(project) -> None:

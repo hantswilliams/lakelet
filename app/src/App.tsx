@@ -16,6 +16,7 @@ import { OpenMenu } from './components/OpenMenu';
 import { SettingsPanel } from './components/SettingsPanel';
 import { StatusDot, type Status } from './components/StatusDot';
 import { loadMode, saveMode, words, type Mode } from './lib/vocabulary';
+import { applyTheme, loadTheme, saveTheme, THEMES, themeLabel, type Theme } from './lib/theme';
 // Screen 2 carries Arrow and CodeMirror; loaded once there is a table to ask, so the first
 // paint (the launch budget, §3.2) does not wait for them.
 const Query = lazy(() => import('./screens/Query').then((m) => ({ default: m.Query })));
@@ -41,6 +42,10 @@ export default function App() {
   // Screen 8: Simple or Technical, one switch for the window, remembered.
   const [mode, setModeState] = useState<Mode>(loadMode);
   const setMode = (m: Mode) => { saveMode(m); setModeState(m); };
+  // Light and dark (D1): the palette is CSS; this only says which of the three is in force.
+  const [theme, setThemeState] = useState<Theme>(loadTheme);
+  const setTheme = (t: Theme) => { saveTheme(t); applyTheme(t); setThemeState(t); };
+  useEffect(() => { applyTheme(theme); }, [theme]);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [error, setError] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -175,6 +180,11 @@ export default function App() {
             <button type="button" className={mode === 'technical' ? 'on' : ''} onClick={() => setMode('technical')} aria-pressed={mode === 'technical'} data-testid="mode-technical">Technical</button>
           </nav>
         )}
+        <nav className="screens theme" aria-label="Theme" data-testid="theme" title="System follows this machine; Light and Dark override it for this window.">
+          {THEMES.map((t) => (
+            <button key={t} type="button" className={theme === t ? 'on' : ''} onClick={() => setTheme(t)} aria-pressed={theme === t} data-testid={`theme-${t}`}>{themeLabel[t]}</button>
+          ))}
+        </nav>
         {api && (
           <button type="button" className="quiet" onClick={() => setSettingsOpen((o) => !o)} aria-pressed={settingsOpen} title="Settings (⌘/Ctrl+,)" data-testid="settings-button">Settings</button>
         )}
@@ -229,7 +239,7 @@ export default function App() {
               </section>
             )}
             {session && status !== 'down' && screen === 'tables' && tables.length > 0 && (
-              <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} onDone={() => void refreshTables()} /></Suspense>
+              <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} mode={mode} onDone={() => void refreshTables()} /></Suspense>
             )}
             {session && status !== 'down' && screen === 'tables' && <Tables session={session} tables={tables} aws={health?.aws} mode={mode} onChanged={refreshTables} />}
           </>

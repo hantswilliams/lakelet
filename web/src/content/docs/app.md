@@ -42,6 +42,14 @@ A result of exactly two columns, one categorical and one numeric, draws a bar ch
 
 Dates, timestamps, times and decimals show as dates, timestamps, times and numbers; null is ∅.
 
+**Save as question** (Simple mode: **Save this question**) sits beside Run once the gauge has spoken. It asks for a title and nothing else, shows the file and the two checks it is about to write, and what comes back names them and the version the save recorded. A title already saved offers **Replace it**, the way an import onto an existing table does; a Red statement saves too, because a question may be bigger than the machine it was written on. The saved question is a dbt model, so it turns up on the Models screen with its title as its description. [Saved questions](/docs/questions) has the file it writes and the versions it accumulates.
+
+## Light and dark
+
+**System | Light | Dark** at the right of the bar. System is the default and follows the machine, changing with it; Light and Dark override it for that window and are remembered. The switch is there before a project is open, so a dark desktop can be matched at the welcome screen.
+
+The palette is the site's tokens with a dark set over them, so every screen, the SQL editor and the charts move together; the verdict colours keep their hues in both, because Green, Yellow and Red are the gauge's vocabulary and have to stay recognisable.
+
 ## The Models screen
 
 **Models** in the bar is the project's dbt DAG through the gauge, screen 7 of the mockups: `lakelet run --plan` as a panel. The list has every model in dependency order with its kind (`view` or `table`), the verdict coloured, the estimate and what it scans, and its last run; the line beside the summary is `lakelet run`. Clicking a model shows its compiled SQL, the models it `ref()`s, its tests from `schema.yml` (`not_null(id)`, `unique(id)`, a singular test by its name), the verdict's sentence, its description and file, and its last `lakelet run` from history (when, how long, or that it failed). **Run all** is `lakelet run`; **Run this** is `lakelet run <model>`. A Red model makes the run refuse the whole DAG, as the CLI does, until **Run anyway** (`--run-anyway`). After a run the notice says how many models built in how long and which views landed in the catalog; the tables panel and the Gauge screen's run list have the result at once. A `view` model is an Iceberg view in the catalog only when built this way; the reason is on [the dbt page](/docs/dbt).

@@ -57,6 +57,14 @@ Git is a library in the package (dulwich), not the `git` binary, so none of this
 
 Three things it does not do. It does not commit on a folder that is already inside a repository *at `init` time*: a dbt project you brought, or a subfolder of a monorepo, is used as it is and its first version is its first save. It does not sign: a `commit.gpgsign = true` in your configuration produces an unsigned commit rather than an error. And it never fails a save — if the repository cannot be written (a read-only folder, a broken `.git`), the files are still written and the response carries a `git:` line saying why there is no version.
 
+## Saving one from the app
+
+On the query screen, **Save as question** appears beside Run once the gauge has spoken — a statement that finished, one you stopped, or one it refused as Red. The title is the only thing it asks for; the slug comes from it by the same [naming rule](/docs/config) the CLI uses, and the box shows the file it will write and the two checks before you commit to it. What comes back names the checks and the version the save recorded, with the `lakelet question save` line beside it.
+
+A title whose slug is already saved is refused rather than overwritten, and the box offers **Replace it** — the same shape as an import onto a table that exists. A Red statement can be saved: a question is allowed to be bigger than the machine you wrote it on.
+
+The question is a model like any other, so it appears on the Models screen with its title as its description the next time that screen plans.
+
 ## The versions of one question
 
 ```bash

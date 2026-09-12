@@ -4,6 +4,8 @@
 
 *Amended September 11, 2026, later the same day: session 9 is widened into the real-data round (`real-data-plan.md`: real S3, dbt views, the Gauge, table-detail and Models screens) and comes before session 10, whose brief (`ship-v0-plan.md`) is accepted and waits.*
 
+*Amended September 12, 2026: what the real-data round left of session 9 — git commits on save, a question's history with restore, save-as-question from the query screen, and table-level lineage — is `versions-plan.md`, G1 to G11 decided; it is the current brief and `TASKS.md` says which of its steps are built. Dark mode for the app belongs to no brief and is `decisions-for-review_091226.md` D1.*
+
 *Amended September 11, 2026 (Hants, in conversation): session 7, the ask box, is deprioritised; it stays in the map but is not next. Session 6 is at step 5 of `app-v0-plan.md`. The order after step 5 is decided and kept in `TASKS.md` ("Next, in order"): the two core items, then session 10, 9, 8, 5; `TASKS.md` is the only place status lives.*
 
 ## Before session 1 (decisions, not code)
@@ -25,7 +27,7 @@
 7. **Ask box.** Provider config, streaming SQL, one repair, 30-question test set; `lakelet ask` as a CLI verb (brief M11). Exit: ≥24/30; screen 6 live. *Deprioritised September 11, 2026; ⌘/Ctrl+K stays reserved for it.*
 8. **Burst end to end.** Control plane, job token, cap → budget, catalog lease (pushing the metadata tree for local-metadata tables, brief D26), results back, `publish`. Exit: ten runs under cap, one over-cap kill; screens 3–4 live.
 5. **`lakelet mcp`.** Runs after session 8 so the demo path is not behind it (brief M6). F0.9 tools, permissions, cap, audit log; screen 10. Exit: Claude Code and Cursor complete "drop this CSV, write three checks, save a question."
-9. **dbt + Simple/Technical.** DAG by verdict, git auto-commit on save, table-level lineage (brief D32), vocabulary mapping. Exit: screens 7–9 live.
+9. **dbt + Simple/Technical.** DAG by verdict, git auto-commit on save, table-level lineage (brief D32), vocabulary mapping. Exit: screens 7–9 live. *Split in two: the DAG, the vocabulary and the screens are `real-data-plan.md` (built September 11); git, versions, save-as-question and lineage are `versions-plan.md` (September 12 on).*
 10. **Ship.** Signed installers with the DuckDB extensions bundled (brief D33), brew tap, calibration toggle, the simple per-operator-class correction (brief M7), instrumentation export, partner onboarding. Exit: Day 0 done.
 
-Starting prompt per session: "Read `CLAUDE.md`, then the current step in `build-sessions/core-v0.N-plan.md`, then the PRD section it cites; the exit criteria are the step's gate and the PRD's AC."
+Starting prompt per session: "Read `CLAUDE.md`, then `build-sessions/TASKS.md` for which brief is current and which step is next, then that step in its brief and the PRD section it cites; the exit criteria are the step's gate and the PRD's AC."
