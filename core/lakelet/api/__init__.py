@@ -510,6 +510,11 @@ def create_router(project: Project, token: str) -> APIRouter:
 
     # -- versions (versions brief G5) --------------------------------------------------
 
+    @router.get("/git", dependencies=guarded)
+    def git_status():
+        """The one line the model panel says about git (G6): `git · main · origin not set`."""
+        return project.versions.status()
+
     @router.get("/versions/{name}", dependencies=guarded)
     def versions(name: str):
         try:

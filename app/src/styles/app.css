@@ -188,4 +188,25 @@ pre.sql{margin:0;font:12.5px/1.5 var(--mono);white-space:pre-wrap;background:var
 .models-screen .card .kind{color:var(--muted);font-size:12.5px}
 .models-screen .card .checks{color:var(--muted);font-size:12.5px}
 .models-screen .card footer{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
+
+/* the model's history (versions brief G6, step 3): the log, the diff, Restore */
+.models-screen .versions{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:4px;min-width:0}
+.models-screen .versions h4{margin:0}
+.models-screen .versions .git-line{font-size:12px}
+.models-screen table.version-list{width:100%;border-collapse:collapse;font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.models-screen table.version-list th,.models-screen table.version-list td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.models-screen table.version-list th{font-size:12px;color:var(--muted);font-weight:600;background:var(--head)}
+.models-screen table.version-list tbody tr{cursor:pointer}
+.models-screen table.version-list tbody tr:hover td{background:var(--panel)}
+.models-screen table.version-list tbody tr.on td{background:var(--cloud)}
+.models-screen table.version-list tr:last-child td{border-bottom:0}
+.models-screen ul.version-list{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.models-screen ul.version-list li{padding:6px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:13.5px;background:var(--bg)}
+.models-screen ul.version-list li.on{background:var(--cloud)}
+pre.diff{margin:0;font:12.5px/1.5 var(--mono);white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:320px;overflow:auto}
+pre.diff span{display:block}
+pre.diff .add{background:color-mix(in srgb,var(--local) 18%,transparent)}
+pre.diff .del{background:color-mix(in srgb,var(--burst) 18%,transparent);text-decoration:line-through;text-decoration-color:var(--burst)}
+pre.diff .hunk,pre.diff .meta{color:var(--muted)}
+.models-screen .versions p.notice{margin:0}
 .detail.view pre.sql{max-height:200px}

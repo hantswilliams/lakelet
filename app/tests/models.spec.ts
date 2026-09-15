@@ -45,7 +45,7 @@ test('the plan, a model, Run all, the view detail, the runs, and Simple mode', a
   await expect(detail.getByTestId('tests')).toContainText('not_null(id)');
   await expect(detail.getByTestId('tests')).toContainText('unique(id)');
   await expect(detail).toContainText('run: never');
-  await expect(detail.getByTestId('command')).toContainText('lakelet run stg');
+  await expect(detail.getByTestId('command').first()).toContainText('lakelet run stg'); // the Versions section has its own line
   await rows.nth(1).click();
   await expect(detail.getByTestId('refs')).toHaveText('stg');
   await expect(detail.getByTestId('compiled-sql')).toContainText('sum(amt)');

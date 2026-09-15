@@ -4,7 +4,7 @@
 
 ## Now
 
-**Session 9, the rest** (`versions-plan.md`). G1 to G10 accepted 2026-09-12 with no amendments; G11 added and decided the same day; G3's and G4's sentences corrected in the brief where they were wrong. Steps 0 to 2 are built and verified on the Mac; steps 3 to 5 are next. The detail of each is in `lakelet-build-sessions_091226.md`.
+**Session 9, the rest** (`versions-plan.md`). G1 to G10 accepted 2026-09-12 with no amendments; G11 added and decided the same day; G3's and G4's sentences corrected in the brief where they were wrong. Steps 0 to 2 are built and verified on the Mac; step 3 is built in the container (2026-09-15) and awaits the Mac; steps 4 and 5 are next. The detail is in `lakelet-build-sessions_091226.md` (steps 0 to 2) and `lakelet-build-sessions_091526.md` (step 3).
 
 | Step | What | Status |
 |---|---|---|
@@ -12,11 +12,11 @@
 | — | **G11**: dbt's usage statistics off for `lakelet run` and for the profile Lakelet writes; `audit network`'s quickstart builds a model so the zero covers it | **built** 2026-09-12; the Mac suite went 267 s → 96 s |
 | 1 | `lakelet versions` and `restore`, the three routes with the diff, `[git] auto_commit` and the run-time commit, the settings row | **built** 2026-09-12 |
 | 2 | **Save as question** on the query screen: the title box, 409 `question_exists` → Replace it, the notice with the checks and the version | **built** 2026-09-12; the eighth sidecar came with it |
-| 3 | The Versions section on the model detail, both modes, Restore (G6) | **next** |
-| 4 | `lakelet lineage`, `GET /api/lineage/{name}`, the lines on the table and model details (G8) | to go |
+| 3 | The Versions section on the model detail, both modes, Restore (G6); `GET /api/git` for the panel's line | **built** 2026-09-15 in the container; **Mac run pending** |
+| 4 | `lakelet lineage`, `GET /api/lineage/{name}`, the lines on the table and model details (G8) | **next** (and V3 of `decisions-for-review_091526.md`, model staleness, if decided) |
 | 5 | Docs, the log, `TASKS.md`, the CLI reference (the close) | to go |
 
-Gates as of 2026-09-12: core **205 passed, 10 skipped** in the container, Vitest **61**, Playwright **25** against eight sidecars, `tsc` clean, `cargo test` 8 (unchanged; it cannot build in the container). `audit network` zero, now with a dbt model built inside the guards.
+Gates as of 2026-09-15: core **207 passed, 10 skipped** in the container, Vitest **70**, Playwright **26** against eight sidecars, `tsc` clean, `cargo test` 8 (unchanged; it cannot build in the container). `audit network` zero, with a dbt model built inside the guards.
 
 **Dark mode**, built 2026-09-12 and belonging to no brief (`decisions-for-review_091226.md` D1): the app follows the operating system and a **System | Light | Dark** switch in the bar overrides it, remembered per window. `src/styles/theme.css` holds the dark palette, app-only, because `tokens.css` is the site's copy and is not edited here; `lib/chart.ts` reads its colours off the document so Vega is drawn in the theme the window is in. 8 Vitest tests and `tests/theme.spec.ts` in a real window. The core is untouched.
 
@@ -122,10 +122,14 @@ Closed:
 
 ## Decisions waiting on Hants
 
-None. Decided: `decisions-for-review_091226.md` D1 (dark mode, 2026-09-12, built the same day); `versions-plan.md` G1 to G10 (2026-09-12, no amendments; one correction of fact recorded under G3 when step 0 was built); `real-data-plan.md` R1 to R10 (2026-09-11, R3 amended the same day); `ship-v0-plan.md` S1 to S14 (2026-09-11), build held until the real-data round; `decisions-for-review_091126.md`, all four (2026-09-11), shipped the same day; `app-v0-plan.md` A1 to A14 (2026-09-10); `decisions-for-review_090926.md`, all three (2026-09-09); the order of what follows step 5 (2026-09-11, above).
+**`decisions-for-review_091526.md` V1 to V4** (2026-09-15, from the four articles in `research/`; `research/README.md` has the links): V1 format-version 3 for new tables after a spike; V2 `lakelet tables compact`; V3 a per-model state (fresh, edited, upstream changed, never built) and `lakelet run --stale` inside step 4; V4 the durability sentence, Renart and Duckle as comparables, the unsourced figures kept out, `research/` gitignored. V1 first: V2 depends on its result.
+
+Decided: `decisions-for-review_091226.md` D1 (dark mode, 2026-09-12, built the same day); `versions-plan.md` G1 to G10 (2026-09-12, no amendments; one correction of fact recorded under G3 when step 0 was built); `real-data-plan.md` R1 to R10 (2026-09-11, R3 amended the same day); `ship-v0-plan.md` S1 to S14 (2026-09-11), build held until the real-data round; `decisions-for-review_091126.md`, all four (2026-09-11), shipped the same day; `app-v0-plan.md` A1 to A14 (2026-09-10); `decisions-for-review_090926.md`, all three (2026-09-09); the order of what follows step 5 (2026-09-11, above).
 
 ## Done
 
+- 2026-09-15 — History's timestamps read back naive from SQLite and reached the app an hour out in London: one `_utc` on every read path, with a test (the Mac found it in `models.spec.ts`; the UTC container could not).
+- 2026-09-15 — The research read and recorded (`decisions-for-review_091526.md`, `research/README.md`, `research/` gitignored). Versions step 3 built: the Versions section on the model detail (Technical: the log, the diff, Gauge then/now, Restore with its line, the git line; Simple: History on the card, sentences, one button), `versions.status` and `GET /api/git` in the core. See `lakelet-build-sessions_091526.md`.
 - 2026-09-07 — Review of the original brief; `core-v0.1-plan.md` (revision 3) with D19 to D24; measurements on DuckDB 1.5.5 and pyiceberg 0.12.
 - 2026-09-08 — Remote-data decisions R1 to R6 accepted; `core-v0.2-plan.md`. MinIO replaced by Moto, measured. Site and deck compared; M1 to M12 accepted; `core-v0.3-plan.md`, `core-v0.4-plan.md`. §10 wording applied to `web/src` and the deck. Readiness review; gitignore decision; `CLAUDE.md`, `AGENTS.md`, README; `core-v0.5-plan.md` (revision 7). Steps 0 through 9 built and their gates passing on the Mac; Postgres, RustFS, Spark and Trino verified through `compose.yaml`.
 - 2026-09-09 — Repo hygiene commit `7f0ff4a`; CI failed then green after the credential chain and descriptor-leak fixes; developer docs on the site; the dbt materialisation through the catalog; `/docs/transactions`; the desktop shell brief.

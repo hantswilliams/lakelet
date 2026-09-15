@@ -161,3 +161,22 @@ def test_question_last_run_bookkeeping(project) -> None:
     assert project.history.question_last_run("revenue") is None
     project.history.record_question_run("revenue", result.run_id)
     assert project.history.question_last_run("revenue") is not None
+
+
+def test_timestamps_read_back_from_history_carry_utc(project) -> None:
+    """SQLite drops the offset; a naive timestamp reaches a browser as local time, an hour
+    out on a machine in London. Every read path puts UTC back (found 2026-09-15 on the Mac)."""
+    from datetime import UTC
+
+    result = project.query("select 1")
+    list(result)
+    project.history.record_question_run("revenue", result.run_id)
+    project.history.record_model_run("model.demo.revenue", result.run_id)
+    for ts in (
+        project.history.recent()[0].ts,
+        next(project.history.all_runs()).ts,
+        project.history.model_last_run("model.demo.revenue").ts,
+        project.history.question_last_run("revenue"),
+    ):
+        assert ts is not None and ts.tzinfo is UTC
+        assert ts.isoformat().endswith("+00:00")

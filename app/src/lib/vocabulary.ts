@@ -27,6 +27,8 @@ export interface Words {
   lastRun: string;
   planning: string;
   running: string;
+  /** The model panel's history section (versions brief G6): "Versions", or "History". */
+  versions: string;
 }
 
 const TECHNICAL: Words = {
@@ -43,6 +45,7 @@ const TECHNICAL: Words = {
   lastRun: 'Last run',
   planning: 'planning…',
   running: 'running…',
+  versions: 'Versions',
 };
 
 const SIMPLE: Words = {
@@ -59,6 +62,7 @@ const SIMPLE: Words = {
   lastRun: 'Last refreshed',
   planning: 'looking…',
   running: 'refreshing…',
+  versions: 'History',
 };
 
 export const words = (mode: Mode): Words => (mode === 'simple' ? SIMPLE : TECHNICAL);

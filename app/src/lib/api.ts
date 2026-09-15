@@ -185,7 +185,37 @@ export interface Question {
   git: string | null;
 }
 
-export type SettingKey = 'engine.memory_limit' | 'engine.threads' | 'gauge.share_calibration' | 'catalog.keep_snapshots_days' | 'git.auto_commit';
+/** One entry of a model's history (`GET /versions/{name}`, versions brief G5): a commit
+ *  that changed the model's SQL or, marked, only its checks; `diff` is the unified diff of
+ *  the file against the version before it, which the Versions section draws. */
+export interface Version {
+  id: string;
+  when: string;
+  /** Git's own identity: `Name <email>`. */
+  author: string;
+  message: string;
+  sql_changed: boolean;
+  checks_changed: boolean;
+  diff: string;
+}
+
+/** `GET /git` (G6): the one line the model panel says about git. */
+export interface GitStatus {
+  repository: boolean;
+  branch: string | null;
+  origin: string | null;
+}
+
+/** `POST /estimate` (`lakelet estimate`), the fields the Versions section reads for "Gauge then". */
+export interface Estimate {
+  verdict: string;
+  words: string;
+  reason: string;
+  wall_local: number;
+  bytes_scanned: number;
+}
+
+export type SettingKey ='engine.memory_limit' | 'engine.threads' | 'gauge.share_calibration' | 'catalog.keep_snapshots_days' | 'git.auto_commit';
 
 export interface Settings {
   settings: Record<SettingKey, string | number | boolean>;
@@ -339,6 +369,31 @@ export class Api {
    *  until `replace`, the way an import onto an existing table is (versions brief G7). */
   saveQuestion(title: string, sql: string, replace = false): Promise<Question> {
     return this.post<Question>('/questions', { title, sql, replace });
+  }
+
+  /** `lakelet versions <name>`: the model's history, newest first, with the diffs (G5). */
+  versions(name: string): Promise<Version[]> {
+    return this.get<Version[]>(`/versions/${encodeURIComponent(name)}`);
+  }
+
+  /** That version's SQL, as the file was. */
+  versionSql(name: string, id: string): Promise<{ name: string; id: string; sql: string }> {
+    return this.get(`/versions/${encodeURIComponent(name)}/${encodeURIComponent(id)}`);
+  }
+
+  /** `lakelet restore <name> <id>`: that version written back and committed as a new one;
+   *  `commit` null when the file already held it. */
+  restore(name: string, id: string): Promise<{ name: string; commit: string | null; git: string | null }> {
+    return this.post(`/versions/${encodeURIComponent(name)}/restore`, { id });
+  }
+
+  git(): Promise<GitStatus> {
+    return this.get<GitStatus>('/git');
+  }
+
+  /** `lakelet estimate '<sql>'`: the gauge's verdict for a statement, nothing run. */
+  estimate(sql: string): Promise<Estimate> {
+    return this.post<Estimate>('/estimate', { sql });
   }
 }
 

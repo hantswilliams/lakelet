@@ -3,6 +3,9 @@ brand/
 deck/
 old/
 docs/lakelet-financial-plan.docx
+# saved copies of articles read for the build; the README with the links is tracked
+research/*
+!research/README.md
 
 ## the Claude desktop app drops files it sends into the connected folder
 Claude outputs/

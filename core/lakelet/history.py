@@ -130,6 +130,21 @@ class Run:
     ts: datetime | None = None
 
 
+def _utc(ts: datetime | None) -> datetime | None:
+    """SQLite keeps no offset, so a timestamp read back is naive; it was written as UTC and
+    is UTC again here, so ``isoformat()`` carries the offset and a browser in any zone reads
+    the instant rather than a local time an hour out."""
+    return ts.replace(tzinfo=UTC) if ts is not None and ts.tzinfo is None else ts
+
+
+def _run(row) -> Run:
+    data = dict(row)
+    for column in JSON_COLUMNS:
+        data[column] = json.loads(data[column])
+    data["ts"] = _utc(data.get("ts"))
+    return Run(**data)
+
+
 class History:
     def __init__(self, path: Path) -> None:
         self.engine = sa.create_engine(
@@ -165,22 +180,13 @@ class History:
     def recent(self, n: int = 50) -> list[Run]:
         with self.engine.connect() as c:
             rows = c.execute(runs.select().order_by(runs.c.id.desc()).limit(n)).mappings().all()
-        out = []
-        for row in rows:
-            data = dict(row)
-            for column in JSON_COLUMNS:
-                data[column] = json.loads(data[column])
-            out.append(Run(**data))
-        return out
+        return [_run(row) for row in rows]
 
     def all_runs(self) -> Iterator[Run]:
         """Every run, oldest first, one at a time (the export, the summary)."""
         with self.engine.connect() as c:
             for row in c.execute(runs.select().order_by(runs.c.id)).mappings():
-                data = dict(row)
-                for column in JSON_COLUMNS:
-                    data[column] = json.loads(data[column])
-                yield Run(**data)
+                yield _run(row)
 
     def summary(self) -> dict[str, Any]:
         """What the Gauge screen's tiles say (real-data brief R8): runs recorded, the share
@@ -233,12 +239,7 @@ class History:
                 .mappings()
                 .first()
             )
-        if row is None:
-            return None
-        data = dict(row)
-        for column in JSON_COLUMNS:
-            data[column] = json.loads(data[column])
-        return Run(**data)
+        return None if row is None else _run(row)
 
     def record_question_run(self, slug: str, run_id: int) -> None:
         now = datetime.now(UTC)
@@ -248,6 +249,7 @@ class History:
 
     def question_last_run(self, slug: str) -> datetime | None:
         with self.engine.connect() as c:
-            return c.execute(
+            ts = c.execute(
                 sa.select(question_runs.c.ts).where(question_runs.c.slug == slug)
             ).scalar()
+        return _utc(ts)

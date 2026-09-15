@@ -29,7 +29,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -95,6 +95,29 @@ def init_repository(root: Path) -> Repo:
     from dulwich.repo import Repo
 
     return Repo.init(str(root), default_branch=DEFAULT_BRANCH)
+
+
+def status(root: Path) -> dict[str, Any]:
+    """The one line the app's panel says about git (G6): whether the folder is in a
+    repository, the branch HEAD is on, and the ``origin`` remote's URL when one is set.
+    Read from the repository and its config, nothing else; never raises."""
+    repo = open_repository(root)
+    if repo is None:
+        return {"repository": False, "branch": None, "origin": None}
+    with repo:
+        branch = origin = None
+        try:
+            head = repo.refs.read_ref(b"HEAD") or b""
+            if head.startswith(b"ref: refs/heads/"):
+                branch = head.removeprefix(b"ref: refs/heads/").decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001 - a line, never a failure (G9)
+            pass
+        try:
+            url = repo.get_config_stack().get((b"remote", b"origin"), b"url")
+            origin = url.decode("utf-8", "replace")
+        except KeyError:
+            pass
+    return {"repository": True, "branch": branch, "origin": origin}
 
 
 def author(repo: Repo) -> str:
@@ -389,6 +412,10 @@ class Versions:
 
     def is_question(self, path: Path) -> bool:
         return path.parent == self.project.root / "models" / "questions"
+
+    def status(self) -> dict[str, Any]:
+        """The panel's git line (G6): repository, branch, origin."""
+        return status(self.project.root)
 
     def list(self, name: str) -> list[Version]:
         path = self.path(name)

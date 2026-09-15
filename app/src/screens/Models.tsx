@@ -5,7 +5,9 @@
 // verdict per model, and a model's compiled SQL, refs, tests, and last run; `Run all` is
 // `lakelet run`, `Run this` is `lakelet run <model>`, a Red model refuses until
 // `Run anyway`. Simple mode is the same DAG as cards: questions, checks, freshness, and
-// one `Refresh all`. Nothing here does what the terminal cannot.
+// one `Refresh all`. The model's panel carries its history (versions brief G6, step 3):
+// the versions with the diff and Restore in Technical, the same as sentences behind
+// History on the card in Simple. Nothing here does what the terminal cannot.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Api, ApiError, ago, humanBytes, type ModelResult, type PlannedModel, type RunReport, type TableInfo } from '../lib/api';
@@ -13,6 +15,7 @@ import { runCommand } from '../lib/command';
 import type { Session } from '../lib/session';
 import { humanSeconds, planSummary, testLabel, verdictSentence, words, type Mode } from '../lib/vocabulary';
 import { Command } from '../components/Command';
+import { Versions } from '../components/Versions';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const verdictWord: Record<string, string> = { green: 'Green', yellow: 'Yellow', red: 'Red' };
@@ -59,6 +62,7 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
   const [error, setError] = useState<string>();
   const [refusal, setRefusal] = useState<{ text: string; select: string[] }>();
   const [report, setReport] = useState<RunReport>();
+  const [historyOf, setHistoryOf] = useState<string>();
 
   const load = useCallback(async () => {
     setBusy(w.planning);
@@ -167,7 +171,9 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
                 <footer>
                   <button type="button" className="quiet" disabled={!!busy} data-testid={`refresh-${m.name}`} onClick={() => void run([m.name])}>{w.runOne}</button>
                   <Command line={runCommand([m.name])} />
+                  <button type="button" className="quiet" aria-pressed={historyOf === m.name} data-testid={`history-${m.name}`} onClick={() => setHistoryOf((h) => (h === m.name ? undefined : m.name))}>{w.versions}</button>
                 </footer>
+                {historyOf === m.name && <Versions session={session} mode={mode} model={m} onRestored={load} />}
               </article>
             );
           })}
@@ -241,6 +247,7 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
                 <Command line={runCommand([current.name])} />
                 {current.verdict === 'red' && <span className="muted">Red: the run refuses this one until {w.runAnyway.toLowerCase()}.</span>}
               </footer>
+              <Versions session={session} mode={mode} model={current} onRestored={load} />
             </article>
           )}
         </div>

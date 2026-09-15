@@ -117,3 +117,7 @@ export function runCommand(select: string[] = [], opts: { plan?: boolean; runAny
   if (opts.runAnyway) parts.push('--run-anyway');
   return parts.join(' ');
 }
+
+/** The Versions section's line (versions brief G6): a restore is `lakelet restore <name>
+ *  <id>`, a new version rather than a rewrite. */
+export const restoreCommand = (name: string, id: string): string => `lakelet restore ${shellArg(name)} ${id.slice(0, 7)}`;

@@ -312,3 +312,28 @@ def test_the_three_routes(saved_twice) -> None:
     gone = client.get("/api/versions/nothing_of_the_sort")
     assert gone.status_code == 404 and gone.json()["error"] == "no_such_model"
     client.close()
+
+
+# -- the panel's git line (G6, step 3) -----------------------------------------------------
+
+
+def test_the_git_line_names_the_branch_and_when_origin_is_not_set(saved_twice, tmp_path) -> None:
+    p = saved_twice
+    assert p.versions.status() == {"repository": True, "branch": "main", "origin": None}
+
+    from dulwich.repo import Repo
+
+    with Repo(str(p.root)) as repo:
+        config = repo.get_config()
+        config.set((b"remote", b"origin"), b"url", b"git@example.com:ada/proj.git")
+        config.write_to_path()
+    assert p.versions.status()["origin"] == "git@example.com:ada/proj.git"
+
+    nowhere = versions.status(tmp_path / "nowhere")
+    assert nowhere == {"repository": False, "branch": None, "origin": None}
+
+    client = httpx.Client(
+        base_url=p.catalog_url, headers={"Authorization": f"Bearer {p.token}"}, timeout=60
+    )
+    assert client.get("/api/git").json()["branch"] == "main"
+    client.close()
