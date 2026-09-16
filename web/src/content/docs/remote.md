@@ -42,6 +42,10 @@ lakelet sql "select count(*) from places where bbox.xmin between -73.2 and -73.0
 
 `discover` on the release lists six themes from 5.6 GB to 277 GB. `addresses` registered as 472,797,160 rows in 32 files (21.9 GB) and `places` as 73,631,092 rows in 16 files (10.5 GB), with nothing copied and the metadata under the project's own `warehouse/`. The gauge then reads the manifests it wrote: `count(*)` scans nothing, a `group by country` over the addresses scans 218.9 MB (one column of 21.9 GB) and says about 16 s at that laptop's 111 Mbps, a bounding-box count over the places scans 104.8 MB and ran in 4.1 s against an estimate of 8 s; `select *` over either table is Red at any home link. Pick a release from `discover` rather than copying the one above; Overture retires old releases.
 
+## When a file changes under the same path
+
+Attach registers files as they are; the table's statistics — row counts, column bounds the gauge prunes on — describe those files. A file later rewritten under the same key is caught by `refresh` and by `describe`: its size is compared with the manifest's, and its modification time with the last verification (attach, or the last refresh that found nothing changed). `refresh` names the file and refuses; `lakelet tables attach --replace <name> <prefix>` registers the prefix again. Two seconds of grace absorb S3's second-resolution `LastModified` and a store clock a little ahead of yours. The [Tables page](/docs/tables) has the sentence.
+
 ## The test suite against a real bucket
 
 The S3 tests (`tests/test_step1_s3.py`, the catalog with its files in a bucket; `tests/test_step8_remote.py`, attach, refresh, discover, the bandwidth probe) run against an in-process Moto server by default and in CI. To run the same tests against a real bucket, make a bucket that is the suite's own (it writes and deletes in it) and an IAM user with this policy on that bucket only:

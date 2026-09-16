@@ -7,7 +7,8 @@
 import { DataType, RecordBatchReader, type RecordBatch } from 'apache-arrow';
 import { ApiError, type Api } from './api';
 
-export type Verdict = 'green' | 'yellow' | 'red';
+/** The three colours, and 'none' for a scan the gauge could not attribute (trust round T3). */
+export type Verdict = 'green' | 'yellow' | 'red' | 'none';
 
 export interface VerdictLine {
   verdict: Verdict;

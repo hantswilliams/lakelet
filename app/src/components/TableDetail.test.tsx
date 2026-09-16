@@ -63,6 +63,23 @@ describe('TableDetail', () => {
     expect(screen.getAllByTestId('command').some((c) => c.textContent?.includes('lakelet tables refresh place'))).toBe(true);
   });
 
+  it('says when the attached files were verified, and a changed file turns Refresh into Register again (T2)', () => {
+    const onReattach = vi.fn();
+    const verified = { ...local, name: 'place', source: 's3://b/release/type=place/', public: true, verified_at: new Date(Date.now() - 240_000).toISOString(), changed_files: [] as [string, string][] };
+    const { unmount } = render(<TableDetail table={verified} onSample={noop} onExpire={noop} onRefresh={noop} onReattach={onReattach} onClose={noop} />);
+    expect(screen.getByTestId('files-verified').textContent).toBe('Files verified against the prefix 4 min ago.');
+    expect(screen.getByTestId('refresh')).toBeTruthy();
+    expect(screen.queryByTestId('reattach')).toBeNull();
+    unmount();
+    const changed = { ...verified, changed_files: [['s3://b/release/type=place/part-1.parquet', 'size 1.2 MB → 3.4 MB']] as [string, string][] };
+    render(<TableDetail table={changed} onSample={noop} onExpire={noop} onRefresh={noop} onReattach={onReattach} onClose={noop} />);
+    expect(screen.getByTestId('files-verified').textContent).toContain('1 file changed under the same path since the attach: part-1.parquet (size 1.2 MB → 3.4 MB)');
+    expect(screen.queryByTestId('refresh')).toBeNull();
+    fireEvent.click(screen.getByTestId('reattach'));
+    expect(onReattach).toHaveBeenCalled();
+    expect(screen.getAllByTestId('command').some((c) => c.textContent?.includes('lakelet tables attach place --anonymous --replace s3://b/release/type=place/'))).toBe(true);
+  });
+
   it('renders the sample when it has been read, with its line', () => {
     render(<TableDetail table={local} sample={[{ id: 1, customer: 'c1', amt: null }]} onSample={noop} onExpire={noop} onRefresh={noop} onClose={noop} />);
     expect(screen.getByTestId('sample').textContent).toContain('c1');

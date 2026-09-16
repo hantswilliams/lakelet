@@ -32,6 +32,18 @@ describe('GaugeLine', () => {
     expect(screen.queryByTestId('run-anyway')).toBeNull();
   });
 
+  it('Not estimated is the fourth state: grey, the scan named, and the rows still come (T3)', () => {
+    const none = { verdict: 'none' as const, words: 'Not estimated', reason: '1 scan outside the catalog: read_parquet' };
+    render(<GaugeLine state={{ kind: 'done', verdict: none, rows: 50, seconds: 0.2, complete: true, capped: false }} onRunAnyway={() => {}} />);
+    const line = screen.getByTestId('gauge');
+    expect(line.className).toContain('none');
+    expect(line.getAttribute('data-verdict')).toBe('none');
+    expect(line.textContent).toContain('Not estimated');
+    expect(line.textContent).toContain('read_parquet');
+    expect(line.textContent).toContain('50 rows in');
+    expect(screen.queryByTestId('run-anyway')).toBeNull();
+  });
+
   it('says how many rows in how long, and names the CLI when the stream was capped', () => {
     render(<GaugeLine state={{ kind: 'done', verdict: green, rows: 100_000, seconds: 3.21, complete: false, capped: true }} onRunAnyway={() => {}} />);
     const text = screen.getByTestId('gauge').textContent ?? '';

@@ -43,7 +43,7 @@ err = Console(stderr=True)
 PROJECT_ENV = "LAKELET_PROJECT"
 EXIT_RED = 2
 EXIT_CONFLICT = 4
-VERDICT_STYLE = {"green": "green", "yellow": "yellow", "red": "red"}
+VERDICT_STYLE = {"green": "green", "yellow": "yellow", "red": "red", "none": "dim"}
 
 
 def _print_version(value: bool) -> None:
@@ -77,6 +77,7 @@ def _root() -> Path:
 def _open():
     from lakelet import Project
     from lakelet.project import NotAProject
+    from lakelet.schema import SchemaTooNew
 
     try:
         return Project.open(_root())
@@ -84,6 +85,9 @@ def _open():
         err.print(
             f"[red]not a Lakelet project:[/red] no lakelet.toml in {_root()}; run `lakelet init`"
         )
+        raise typer.Exit(1) from None
+    except SchemaTooNew as e:
+        err.print(f"[red]cannot open:[/red] {e}")
         raise typer.Exit(1) from None
 
 
@@ -97,8 +101,11 @@ def _sql_text(sql: str | None, file: Path | None) -> str:
 
 
 def _gauge_line(estimate) -> None:
+    from lakelet.gauge.verdict import DOTS
+
     style = VERDICT_STYLE[estimate.verdict]
-    err.print(f"[{style}]●[/{style}] {estimate.words} · {estimate.reason}", highlight=False)
+    dot = DOTS.get(estimate.verdict, "●")
+    err.print(f"[{style}]{dot}[/{style}] {estimate.words} · {estimate.reason}", highlight=False)
 
 
 def _fail(message: str, code: int = 1) -> None:
@@ -208,7 +215,7 @@ def import_(
     ] = False,
 ) -> None:
     """Import a file or a folder of files into Iceberg tables."""
-    from lakelet.tables import TableExists, UnsupportedFile
+    from lakelet.tables import ReservedName, TableExists, UnsupportedFile
 
     if replace and append:
         _fail("--replace and --append are exclusive")
@@ -231,7 +238,7 @@ def import_(
             )
         except TableExists as e:
             _fail(f"table {e} exists; --replace drops and recreates it, --append adds to it")
-        except (UnsupportedFile, FileNotFoundError) as e:
+        except (UnsupportedFile, FileNotFoundError, ReservedName) as e:
             _fail(str(e))
     for info in infos:
         out.print(
@@ -259,6 +266,41 @@ def tables_list() -> None:
             _where(i),
         )
     out.print(t)
+    moved = [i.name for i in infos if i.needs_relocate]
+    if moved:
+        from lakelet import relocate as relocation
+
+        with _open() as p:
+            old = relocation.moved_from(p)
+        out.print(
+            f"this project was moved from {old}; {len(moved)} table(s) point at it "
+            f"({', '.join(moved)}): `lakelet relocate` updates them",
+            highlight=False,
+            soft_wrap=True,  # a path is copied, so it is never broken across lines
+        )
+    for i in infos:
+        if i.interrupted_replace_of:
+            out.print(
+                f"{i.name}: a replace of {i.interrupted_replace_of} was interrupted; "
+                f"`lakelet tables rename {i.name} {i.interrupted_replace_of}` finishes it",
+                highlight=False,
+            )
+
+
+@tables_app.command("rename")
+def tables_rename(old: str, new: str) -> None:
+    """Rename a table: one catalog commit, the data does not move. Finishes a replace that
+    was interrupted between its drop and its rename."""
+    from lakelet.tables import NoSuchTable, TableExists
+
+    with _open() as p:
+        try:
+            info = p.tables.rename(old, new)
+        except NoSuchTable:
+            _fail(f"no table named {old}")
+        except TableExists:
+            _fail(f"table {new} exists")
+    out.print(f"{old} is now {info.name}: {info.rows:,} rows", highlight=False)
 
 
 def _where(i) -> str:
@@ -298,6 +340,18 @@ def tables_describe(name: str) -> None:
             f"last commit: {d.last_commit.get('operation')} {d.last_commit.get('snapshot_id')}",
             highlight=False,
         )
+    if d.source:
+        if d.verify_error:
+            out.print(f"files: not verified ({d.verify_error})", highlight=False)
+        elif d.changed_files:
+            names = ", ".join(f"{uri} ({why})" for uri, why in d.changed_files[:5])
+            out.print(
+                f"files: {len(d.changed_files)} changed under the same path since the attach: "
+                f"{names}; lakelet tables attach --replace {d.name} {d.source}",
+                highlight=False,
+            )
+        else:
+            out.print(f"files: verified against {d.source} at {d.verified_at}", highlight=False)
     t = Table()
     t.add_column("column")
     t.add_column("type")
@@ -377,19 +431,30 @@ def tables_attach(
             help="A public bucket: read it without credentials (metadata stays local).",
         ),
     ] = False,
+    replace: Annotated[
+        bool,
+        typer.Option(
+            "--replace",
+            help="Register the prefix again over an existing table (after files changed).",
+        ),
+    ] = False,
 ) -> None:
     """Register remote data as a read-only Iceberg table without copying it."""
     from lakelet.register import NotRegistrable
-    from lakelet.tables import TableExists
+    from lakelet.tables import ReservedName, TableExists
 
     with _open() as p:
         try:
             info = p.tables.attach(
-                name, source, metadata_in_bucket=metadata_in_bucket, anonymous=anonymous
+                name,
+                source,
+                metadata_in_bucket=metadata_in_bucket,
+                anonymous=anonymous,
+                replace=replace,
             )
         except TableExists:
-            _fail(f"table {name} exists")
-        except NotRegistrable as e:
+            _fail(f"table {name} exists; --replace registers the prefix again over it")
+        except (NotRegistrable, ReservedName) as e:
             _fail(str(e))
     placement = "in the bucket" if metadata_in_bucket else "local"
     public = ", read without credentials" if anonymous else ""
@@ -402,8 +467,9 @@ def tables_attach(
 
 @tables_app.command("refresh")
 def tables_refresh(name: str) -> None:
-    """Add the files new under a registered prefix since it was attached."""
-    from lakelet.register import MissingFiles, NotRegistrable
+    """Add the files new under a registered prefix since it was attached. Refuses if a
+    registered file is gone or was rewritten under the same path since the attach."""
+    from lakelet.register import ChangedFiles, MissingFiles, NotRegistrable
     from lakelet.tables import NoSuchTable
 
     with _open() as p:
@@ -411,7 +477,7 @@ def tables_refresh(name: str) -> None:
             report = p.tables.refresh(name)
         except NoSuchTable:
             _fail(f"no table named {name}")
-        except (NotRegistrable, MissingFiles) as e:
+        except (NotRegistrable, MissingFiles, ChangedFiles) as e:
             _fail(str(e))
     out.print(
         f"{report.name}: {report.added} file(s) added; {report.files} files, {report.rows:,} rows",
@@ -597,8 +663,13 @@ def estimate(
             )
         )
     else:
+        from lakelet.gauge.verdict import DOTS
+
         style = VERDICT_STYLE[e.verdict]
-        out.print(f"[{style}]●[/{style}] {e.words} · {e.reason}", highlight=False)
+        out.print(
+            f"[{style}]{DOTS.get(e.verdict, '●')}[/{style}] {e.words} · {e.reason}",
+            highlight=False,
+        )
 
 
 # -- catalog ----------------------------------------------------------------------
@@ -833,6 +904,29 @@ def restore(
         )
     else:
         out.print("that version is what the file already held; no new version", highlight=False)
+
+
+@app.command()
+def relocate() -> None:
+    """After the project folder was moved or copied: rewrite every local table's locations
+    under this folder so the tables resolve again. Every snapshot is kept; the old metadata
+    files become orphans for `tables expire`. Tables attached from a bucket are skipped."""
+    from lakelet import relocate as relocation
+
+    with _open() as p:
+        old = relocation.moved_from(p)
+        if old is None:
+            out.print("nothing to relocate: every table resolves from this folder", highlight=False)
+            return
+        report = relocation.relocate(p)
+        p.tables.refresh_agents_md()
+    out.print(
+        f"relocated {len(report.relocated)} table(s) from {report.old_root} to {report.new_root}: "
+        f"{', '.join(report.relocated)}; {report.metadata_files} metadata file(s) and "
+        f"{report.data_files} delete file(s) rewritten"
+        + (f"; skipped {', '.join(report.skipped)}" if report.skipped else ""),
+        highlight=False,
+    )
 
 
 # -- gauge history and audit -----------------------------------------------------

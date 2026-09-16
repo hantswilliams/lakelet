@@ -241,7 +241,7 @@ export default function App() {
             {session && status !== 'down' && screen === 'tables' && tables.length > 0 && (
               <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} mode={mode} onDone={() => void refreshTables()} /></Suspense>
             )}
-            {session && status !== 'down' && screen === 'tables' && <Tables session={session} tables={tables} aws={health?.aws} mode={mode} onChanged={refreshTables} />}
+            {session && status !== 'down' && screen === 'tables' && <Tables session={session} tables={tables} aws={health?.aws} movedFrom={health?.moved_from} onRelocated={refreshHealth} mode={mode} onChanged={refreshTables} />}
           </>
         )}
       </main>

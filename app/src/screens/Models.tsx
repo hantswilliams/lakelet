@@ -18,7 +18,7 @@ import { Command } from '../components/Command';
 import { Versions } from '../components/Versions';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const verdictWord: Record<string, string> = { green: 'Green', yellow: 'Yellow', red: 'Red' };
+const verdictWord: Record<string, string> = { green: 'Green', yellow: 'Yellow', red: 'Red', none: 'Not estimated' };
 
 export interface ModelsProps {
   session: Session;

@@ -354,24 +354,28 @@ class Project:
         self.lakelet_dir.mkdir(exist_ok=True)
         self.cache_dir.mkdir(exist_ok=True)
         self._ensure_namespace(self.store)
+        from lakelet.api import TAURI_ORIGINS
+
+        # LAKELET_DEV_ORIGIN lets the app's frontend be driven from a browser against a
+        # real sidecar in development and tests (app brief A12); the shell never sets it.
+        dev_origin = os.environ.get("LAKELET_DEV_ORIGIN") if self.token else None
+        api_origins = TAURI_ORIGINS + ([dev_origin] if dev_origin else [])
         app = create_app(
             self.store,
             warehouse=self.warehouse_url,
             io_properties=self.io_properties,
             cache_dir=self.cache_dir / "objects",
+            api_origins=api_origins,
         )
         if self.token:
             from fastapi.middleware.cors import CORSMiddleware
 
-            from lakelet.api import TAURI_ORIGINS, VERDICT_HEADERS, create_router
+            from lakelet.api import VERDICT_HEADERS, create_router
 
             app.include_router(create_router(self, self.token))
-            # LAKELET_DEV_ORIGIN lets the app's frontend be driven from a browser against a
-            # real sidecar in development and tests (app brief A12); the shell never sets it.
-            dev_origin = os.environ.get("LAKELET_DEV_ORIGIN")
             app.add_middleware(
                 CORSMiddleware,
-                allow_origins=TAURI_ORIGINS + ([dev_origin] if dev_origin else []),
+                allow_origins=api_origins,
                 allow_methods=["*"],
                 allow_headers=["*"],
                 expose_headers=VERDICT_HEADERS,

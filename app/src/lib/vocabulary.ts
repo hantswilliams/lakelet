@@ -119,6 +119,7 @@ export function verdictSentence(m: Pick<PlannedModel, 'verdict' | 'words' | 'rea
     case 'green': return wait ? `Ready in about ${wait}.` : 'Ready right away.';
     case 'yellow': return wait ? `Takes a while: about ${wait}. Fine to start and come back.` : 'Takes a while. Fine to start and come back.';
     case 'red': return 'Too big for this machine right now.';
+    case 'none': return 'Not sized: it reads something outside the project, so there is no estimate. It will run.';
     default: return '—';
   }
 }
@@ -132,10 +133,11 @@ export function planSummary(models: PlannedModel[], mode: Mode): string {
   const count = (v: string) => models.filter((m) => m.verdict === v).length;
   const red = count('red');
   const yellow = count('yellow');
-  const unknown = models.filter((m) => m.error).length;
+  const unknown = models.filter((m) => m.error || m.verdict === 'none').length;
   if (mode === 'simple') {
     if (red) return `${head} · ${red} too big for this machine`;
     if (yellow) return `${head} · ${yellow} ${yellow === 1 ? 'takes' : 'take'} a while`;
+    if (unknown) return `${head} · ${unknown} not sized`;
     return `${head} · all quick`;
   }
   const parts = [red && `${red} Red`, yellow && `${yellow} Yellow`, unknown && `${unknown} not estimated`].filter(Boolean);

@@ -14,6 +14,7 @@ table's ``data/`` directory to exist on a local warehouse.
 
 from __future__ import annotations
 
+import errno
 import os
 import time
 import uuid
@@ -43,7 +44,7 @@ from pyiceberg.typedef import IcebergBaseModel
 
 from lakelet.catalog import commit as ic
 from lakelet.catalog import viewmeta
-from lakelet.catalog.store import AlreadyExists, Conflict, NotFound, Store
+from lakelet.catalog.store import REPLACE_SUFFIX, AlreadyExists, Conflict, NotFound, Store
 
 PREFIX = "lakelet"
 NAMESPACE_SEPARATOR = "\x1f"
@@ -127,15 +128,76 @@ def _ensure_local_layout(location: str) -> None:
         os.makedirs(os.path.join(path, sub), exist_ok=True)
 
 
+#: The hosts a request may name (trust round T6). The server binds loopback only (D22);
+#: this is the second half: a page on a domain re-pointed at 127.0.0.1 after it loaded (DNS
+#: rebinding) reaches the socket with its own domain in ``Host``, and is refused here.
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
+
+
+def _host_name(host: str) -> str:
+    """The name in a ``Host`` header, without the port: ``[::1]:8181`` → ``[::1]``."""
+    if host.startswith("["):
+        return host.split("]", 1)[0] + "]"
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+
+
+def refused(
+    method: str, path: str, headers: dict[str, str], api_origins: frozenset[str]
+) -> str | None:
+    """Why a request is not one an engine or the app would send (T6), or None.
+
+    Three refusals close what a browser page can do to a loopback server that carries no
+    token on ``/v1``: a ``Host`` that is not loopback (DNS rebinding); an ``Origin`` header
+    at all on ``/v1`` (no engine sends one, every browser does) or one the app's CORS does
+    not allow on ``/api``; and a body that is not JSON (the ``text/plain`` and form posts a
+    page can send without a preflight). None of the four engines is affected: their
+    requests name loopback, carry no ``Origin``, and post JSON."""
+    host = _host_name(headers.get("host", ""))
+    if host not in LOOPBACK_HOSTS:
+        return f"Host {host or '(none)'} is not loopback; this server answers 127.0.0.1 only"
+    origin = headers.get("origin")
+    if origin is not None and (not path.startswith("/api") or origin not in api_origins):
+        return f"requests with Origin {origin} are not accepted on {path}"
+    if method in ("POST", "PUT", "PATCH") and headers.get("content-length", "0") not in ("", "0"):
+        content_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            return f"a body must be application/json, not {content_type or '(none)'}"
+    return None
+
+
+class LoopbackOnly:
+    """The refusals as a plain ASGI middleware. Not Starlette's ``BaseHTTPMiddleware``: that
+    wraps every response in a streaming shim that breaks the query route's handling of a
+    client that goes away mid-stream (the app's Esc), which the interrupt test caught."""
+
+    def __init__(self, app, api_origins: frozenset[str]) -> None:
+        self.app = app
+        self.api_origins = api_origins
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
+        why = refused(scope["method"], scope["path"], headers, self.api_origins)
+        if why is None:
+            await self.app(scope, receive, send)
+            return
+        response = _error(403, "Forbidden", why)
+        await response(scope, receive, send)
+
+
 def create_app(
     store: Store,
     warehouse: str,
     io_properties: dict[str, str] | None = None,
     cache_dir: Path | None = None,
+    api_origins: list[str] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Lakelet Iceberg REST catalog", docs_url=None, redoc_url=None)
     mio = ic.MetadataIO(io_properties or {}, cache_dir=cache_dir)
     warehouse = warehouse.rstrip("/")
+    app.add_middleware(LoopbackOnly, api_origins=frozenset(api_origins or ()))
 
     @app.exception_handler(NotFound)
     async def _not_found(_: Request, e: NotFound) -> JSONResponse:
@@ -148,6 +210,14 @@ def create_app(
     @app.exception_handler(Conflict)
     async def _conflict(_: Request, e: Conflict) -> JSONResponse:
         return _error(409, "CommitFailedException", str(e))
+
+    @app.exception_handler(OSError)
+    async def _os_error(_: Request, e: OSError) -> JSONResponse:
+        # A disk that is full or a folder that cannot be written (trust round T4): the
+        # commit fails before the catalog changes, and the sentence names the cause rather
+        # than a bare 500. 507 is "insufficient storage"; the engines report the status.
+        status = 507 if e.errno == errno.ENOSPC else 500
+        return _error(status, type(e).__name__, f"{e.strerror or e}: the catalog was not changed")
 
     @app.exception_handler(CommitFailedException)
     async def _commit_failed(_: Request, e: CommitFailedException) -> JSONResponse:
@@ -206,7 +276,10 @@ def create_app(
     def create_table(prefix: str, ns: str, body: CreateTableBody) -> Response:
         name = _namespace(ns)
         store.get_namespace(name)
-        location = (body.location or f"{warehouse}/{name}/{body.name}").rstrip("/")
+        # A replace's temporary table shares the final name's folder (T1): the swap renames
+        # the catalog entry and moves no data; the old files become orphans `expire` sweeps.
+        folder = body.name.removesuffix(REPLACE_SUFFIX)
+        location = (body.location or f"{warehouse}/{name}/{folder}").rstrip("/")
         table_metadata = ic.create_metadata(
             body.table_schema, location, body.partition_spec, body.write_order, body.properties
         )

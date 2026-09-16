@@ -6,7 +6,7 @@ Use ONLY these facts. Do not invent numbers. Anything marked ESTIMATE must be la
 
 ## Positioning
 - Name: Lakelet (working name). Tagline options: "Supabase for the warehouse." / "Your laptop is the warehouse — until it can't be."
-- One-liner: Open-source, one binary, local by default. Your laptop is the warehouse until it can't be — then one job bursts to the cloud and comes back.
+- One-liner: Open-source, one binary, local by default. Your laptop is the warehouse until it can't be — then one job bursts to the cloud and comes back. *(The burst half is planned, not built: since September 15, 2026 the site's lede says only what exists — "an open-source, local-first lakehouse in one binary: Iceberg tables on your laptop, DuckDB as the engine, dbt built in, and a gauge that says whether a query fits before it runs" — with burst, MCP and English on a quieter "next" line. "Nothing leaves your machine" is scoped exactly as `PRIVACY.md` scopes it: the one extension download at `init`, and the buckets and bursts you ask for.)*
 - Wedge feature: the "Can I run this here?" gauge. Every query/dbt run gets a pre-flight estimate (bytes scanned, memory, time) vs. your actual machine. Green = runs local. Yellow = runs local but slow. Red = one click sends just that job to an ephemeral cloud worker, with a HARD COST CAP shown before you click. "The bill for a burst can never exceed the number you clicked."
 - Differentiation vs MotherDuck: bring-your-own S3/GCS/R2, open Iceberg format, open (Iceberg REST) catalog, visible & user-controlled local/cloud boundary, no lock-in. (Supabase-vs-Firebase argument.)
 - Own the UX + catalog + burst orchestration, not the engine.

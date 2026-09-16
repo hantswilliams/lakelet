@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { Api, ApiError, humanBytes, type Health, type ImportMode, type Preview, type TableDescription, type TableInfo } from '../lib/api';
-import { attachCommand, expireCommand, importCommand, defaultName, isRemote, refreshCommand } from '../lib/command';
+import { attachCommand, expireCommand, importCommand, defaultName, isRemote, refreshCommand, relocateCommand } from '../lib/command';
 import { inTauri, onDrop, pickFiles, type Session } from '../lib/session';
 import type { Mode } from '../lib/vocabulary';
 import { Command } from '../components/Command';
@@ -42,12 +42,16 @@ export interface TablesProps {
   tables: TableInfo[];
   /** The core's credentials, from health, for the drop zone's line. */
   aws?: Health['aws'];
+  /** The folder this project's tables were written in, when it is not this one (T5). */
+  movedFrom?: string | null;
+  /** After a relocate: health and tables are read again. */
+  onRelocated?: () => Promise<void>;
   /** Screen 8: the view detail's words (`lakelet run` or Refresh). */
   mode?: Mode;
   onChanged: () => Promise<void>;
 }
 
-export function Tables({ session, tables, aws, mode = 'technical', onChanged }: TablesProps) {
+export function Tables({ session, tables, aws, movedFrom, onRelocated, mode = 'technical', onChanged }: TablesProps) {
   const api = new Api(session);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState<string>();
@@ -146,6 +150,45 @@ export function Tables({ session, tables, aws, mode = 'technical', onChanged }: 
     }
   }
 
+  /** `lakelet relocate` (T5): the folder moved; the tables' locations are rewritten under it. */
+  async function relocate() {
+    setDropError(undefined);
+    setBusy('relocating…');
+    try {
+      const r = await api.relocate();
+      setDone({
+        line: relocateCommand(),
+        text: `Relocated ${r.relocated.length} ${r.relocated.length === 1 ? 'table' : 'tables'} from ${r.old_root ?? 'where they were'}: ${r.relocated.join(', ') || 'none'}${r.skipped.length ? `; skipped ${r.skipped.join(', ')}` : ''}.`,
+      });
+      await onChanged();
+      if (onRelocated) await onRelocated();
+    } catch (e: unknown) {
+      setDropError(message(e));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  /** `lakelet tables attach --replace <name> <prefix>` (T2): after the prefix's files changed. */
+  async function reattach(name: string, source: string, anonymous: boolean) {
+    setDropError(undefined);
+    setBusy(`registering ${name} again…`);
+    try {
+      const info = await api.attach(name, source, anonymous, true);
+      setDone({
+        line: attachCommand(name, source, anonymous, true),
+        text: `Registered ${info.name} again: ${info.rows.toLocaleString()} rows in place at ${source}.`,
+      });
+      await onChanged();
+      if (detail?.table.name === name) setDetail({ table: await api.describe(name) });
+    } catch (e: unknown) {
+      if (detail?.table.name === name) setDetail({ ...detail, error: message(e) });
+      else setDropError(message(e));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
   // An open detail follows the table: a statement on screen 2 that wrote it (a delete, an
   // insert) changes the list, and the detail re-reads `describe` when its row changes.
   const detailName = detail?.table.name;
@@ -221,6 +264,19 @@ export function Tables({ session, tables, aws, mode = 'technical', onChanged }: 
 
   return (
     <>
+      {movedFrom && (
+        <section className="error" data-testid="moved">
+          <b>{mode === 'simple' ? 'This project was moved.' : `This project was moved from ${movedFrom}.`}</b>
+          <p>
+            {tables.filter((t) => t.needs_relocate).length} {tables.filter((t) => t.needs_relocate).length === 1 ? 'table points' : 'tables point'} at the old folder.
+            {mode === 'simple' ? ' Relocate updates them; nothing is copied.' : ' Every snapshot is kept; the old metadata files are orphans for expire.'}
+          </p>
+          <div className="actions">
+            <button type="button" className="primary" disabled={!!busy} data-testid="relocate" onClick={() => void relocate()}>{busy ?? 'Relocate'}</button>
+            <Command line={relocateCommand()} />
+          </div>
+        </section>
+      )}
       <TablesPanel tables={tables} busy={busy} onRefresh={(name) => void refresh(name)} onOpen={(name) => void open(name)} />
       {done && (
         <section className="notice" data-testid="imported">
@@ -238,6 +294,7 @@ export function Tables({ session, tables, aws, mode = 'technical', onChanged }: 
           onSample={() => void sample()}
           onExpire={() => void expire()}
           onRefresh={() => void refresh(detail.table.name)}
+          onReattach={() => detail.table.source && void reattach(detail.table.name, detail.table.source, !!detail.table.public)}
           onClose={() => setDetail(undefined)}
         />
       ) : pending ? (

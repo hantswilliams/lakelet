@@ -4,7 +4,19 @@
 
 ## Now
 
-**Session 9, the rest** (`versions-plan.md`). G1 to G10 accepted 2026-09-12 with no amendments; G11 added and decided the same day; G3's and G4's sentences corrected in the brief where they were wrong. Steps 0 to 2 are built and verified on the Mac; step 3 is built in the container (2026-09-15) and awaits the Mac; steps 4 and 5 are next. The detail is in `lakelet-build-sessions_091226.md` (steps 0 to 2) and `lakelet-build-sessions_091526.md` (step 3).
+**The trust round** (`trust-round-plan.md`, T1 to T8 agreed 2026-09-15), built the same day in the container, **Mac run pending**; then **session 9, the rest** resumes at step 4. The detail is in `lakelet-build-sessions_091526b.md`.
+
+| Step | What | Status |
+|---|---|---|
+| 0 | T1: build-then-swap replace, `<name>__lakelet_replace`, the interrupted state, `lakelet tables rename`, `expire`'s guard | **built** 2026-09-15; 6 tests |
+| 1 | T2: `lakelet.verified-at`, size and time against the listing in `refresh` and `describe`, `ChangedFiles`, `tables attach --replace`, the detail's line and **Register again**; `/docs/tables`, `/docs/remote` | **built** 2026-09-15; 5 tests, 1 Vitest |
+| 2 | T3: the `none` verdict through the core, CLI, API, history, export; the app's gauge line, DAG, cards and Gauge screen; `core-nightly.yml` | **built** 2026-09-15; 7 tests, 3 Vitest, 1 Playwright; `/docs/gauge` |
+| 3 | T4: `schema.py` (refuse newer, migrate older, `written_by`), `test_recovery.py` one test per sentence, `/docs/recovery`; the catalog names a full disk (507) | **built** 2026-09-15; 9 tests |
+| 4 | T6: `LoopbackOnly` (Host, Origin, Content-Type refusals) on `/v1` and `/api`; `PRIVACY.md`, `SECURITY.md` | **built** 2026-09-15; 4 tests |
+| 5 | T5: `moved_from` detection, `lakelet relocate` (manifests, manifest lists, position-delete files, metadata), `POST /api/relocate`, `moved_from` in health, the Tables screen's sentence and **Relocate**, the ninth sidecar | **built** 2026-09-15; 4 tests, 1 Playwright |
+| 6 | T7/T8: the lede and the "next" line, the README rewritten with the generated status block (`gen-readme-status.py`, the `readme` CI job), `AGENTS.md`'s pointer, `status.ts` reconciled, `/docs/install` on the sample script, the issue template, the archives removed, the CLI reference | **built** 2026-09-15; the screenshot, the outsider and the waitlist check are Hants' |
+
+**Session 9, the rest** (`versions-plan.md`). G1 to G10 accepted 2026-09-12 with no amendments; G11 added and decided the same day; G3's and G4's sentences corrected in the brief where they were wrong. Steps 0 to 2 are built and verified on the Mac; step 3 built in the container 2026-09-15 and verified on the Mac the same day (commit `97ee6aa`); steps 4 and 5 are next, after the trust round. The detail is in `lakelet-build-sessions_091226.md` (steps 0 to 2) and `lakelet-build-sessions_091526.md` (step 3).
 
 | Step | What | Status |
 |---|---|---|
@@ -12,11 +24,11 @@
 | — | **G11**: dbt's usage statistics off for `lakelet run` and for the profile Lakelet writes; `audit network`'s quickstart builds a model so the zero covers it | **built** 2026-09-12; the Mac suite went 267 s → 96 s |
 | 1 | `lakelet versions` and `restore`, the three routes with the diff, `[git] auto_commit` and the run-time commit, the settings row | **built** 2026-09-12 |
 | 2 | **Save as question** on the query screen: the title box, 409 `question_exists` → Replace it, the notice with the checks and the version | **built** 2026-09-12; the eighth sidecar came with it |
-| 3 | The Versions section on the model detail, both modes, Restore (G6); `GET /api/git` for the panel's line | **built** 2026-09-15 in the container; **Mac run pending** |
+| 3 | The Versions section on the model detail, both modes, Restore (G6); `GET /api/git` for the panel's line | **built** 2026-09-15; Mac green, committed `97ee6aa` |
 | 4 | `lakelet lineage`, `GET /api/lineage/{name}`, the lines on the table and model details (G8) | **next** (and V3 of `decisions-for-review_091526.md`, model staleness, if decided) |
 | 5 | Docs, the log, `TASKS.md`, the CLI reference (the close) | to go |
 
-Gates as of 2026-09-15: core **207 passed, 10 skipped** in the container, Vitest **70**, Playwright **26** against eight sidecars, `tsc` clean, `cargo test` 8 (unchanged; it cannot build in the container). `audit network` zero, with a dbt model built inside the guards.
+Gates as of 2026-09-15 (after the trust round): core **242 passed, 10 skipped** in the container, Vitest **72**, Playwright **28** against nine sidecars, `tsc` clean, `astro build` 21 pages, `gen-readme-status.py --check` current, `cargo test` 8 (unchanged; it cannot build in the container). `audit network` zero, with a dbt model built inside the guards.
 
 **Dark mode**, built 2026-09-12 and belonging to no brief (`decisions-for-review_091226.md` D1): the app follows the operating system and a **System | Light | Dark** switch in the bar overrides it, remembered per window. `src/styles/theme.css` holds the dark palette, app-only, because `tokens.css` is the site's copy and is not edited here; `lib/chart.ts` reads its colours off the document so Vega is drawn in the theme the window is in. 8 Vitest tests and `tests/theme.spec.ts` in a real window. The core is untouched.
 
@@ -47,6 +59,7 @@ Decided 2026-09-11 (Hants, in conversation). Each item names the document that s
 - [x] The Open Data dataset (`real-data-plan.md` R3 as amended): Overture Maps `addresses` (21.9 GB, 32 files, 472.8 M rows) and `places`, attached from the Mac with no credentials 2026-09-11; `/docs/remote` has the commands and numbers. pyiceberg read it anonymously from another process (126,285 rows of a bounding-box scan).
 - [x] AWS for the real-data round (`real-data-plan.md` R2): the private bucket and its IAM user exist and the S3 tests ran against them 2026-09-11 (`/docs/remote` has the policy and the command). Keys stay in the shell's environment, never in the repo or `lakelet.toml`; the bucket's name carries the account id and stays out of the logs. No demo bucket: R3 amended to an AWS Open Data dataset.
 - [ ] The founder uses the app daily on a real dataset for a week (app brief §6). `examples/sample-data/make_sample.py` and any CSV are enough to start.
+- [ ] **Trust round, Hants' items** (`lakelet-build-sessions_091526b.md` §9): the Mac run; confirm `PUBLIC_WAITLIST_URL` is a repository variable, or submit the live form once and record the date; the README's screenshot (`docs/screenshots/query-verdict.png`); one outsider from clone to a saved question; the address in `SECURITY.md`.
 
 ## The map
 
@@ -88,11 +101,11 @@ Open:
 
 - [x] The first Arrow batch reaching the app carries several thousand rows: it did not; the screen's stopwatch read the count late (2026-09-11, real-data step 3). The first batch is one 1,000-row batch, asserted.
 - [ ] Re-export `deck/lakelet-executive-summary.pdf` from the edited docx (no LibreOffice on the Mac).
-- [ ] `old/deck-before-090826/` is in the public repo's history since `6290775`; purging is `git filter-repo` plus a force push; Hants' call.
+- [x] `old/deck-before-090826/` stays in history: decided 2026-09-15 (T8, agreed) — a force push on a public repository with CI and Pages on `main` is a risk with no reader waiting on it.
 - [ ] `docs/lakelet-financial-plan.docx` is gitignored but still says Burrow inside; `docs/lakelet-product-spec.md` mentions Burrow once.
 - [ ] Plan filename versus internal revision number; cosmetic.
 - [ ] **`lakelet audit network` counts connections, not name resolutions.** The guard patches `socket.socket.connect` but not `socket.getaddrinfo`, so on a machine without DNS an attempt to reach a host *by name* is never counted, and the self-check (a bare IP) still passes. The zero is measured on a machine with DNS and unmeasured without one. Counting a non-loopback resolution as an attempt would close it and would change what the command reports, so it is a decision; the log of 2026-09-12 §2 has the measurement.
-- [ ] Three transfer archives are tracked at the repo root from earlier sessions (`ci-startup-budget-201520.tgz`, `tasks-next-155443.tgz`, `versions-plan-160625.tgz`); build-session plumbing, not source. Remove in a commit of their own; Hants' call.
+- [x] Three transfer archives at the repo root removed (2026-09-15, T8).
 - [ ] `deploy-pages.yml` still has the older action majors; bump when next touched.
 - [ ] Known unknowns still open in the core brief's §7: the 150 ms gauge budget on a never-read table (PRD allows 800 ms uncached); how much of DuckDB's filter rendering the predicate parser needs for real workloads; partner prefixes with drift or path-only partitions (fixtures pass; intake decides); the lease carrying a metadata tree. The sidecar memory split closed with A8.
 
@@ -122,12 +135,15 @@ Closed:
 
 ## Decisions waiting on Hants
 
+**`trust-round-plan.md` T1 to T8**: decided 2026-09-15, all agreed, built the same day (above).
+
 **`decisions-for-review_091526.md` V1 to V4** (2026-09-15, from the four articles in `research/`; `research/README.md` has the links): V1 format-version 3 for new tables after a spike; V2 `lakelet tables compact`; V3 a per-model state (fresh, edited, upstream changed, never built) and `lakelet run --stale` inside step 4; V4 the durability sentence, Renart and Duckle as comparables, the unsourced figures kept out, `research/` gitignored. V1 first: V2 depends on its result.
 
 Decided: `decisions-for-review_091226.md` D1 (dark mode, 2026-09-12, built the same day); `versions-plan.md` G1 to G10 (2026-09-12, no amendments; one correction of fact recorded under G3 when step 0 was built); `real-data-plan.md` R1 to R10 (2026-09-11, R3 amended the same day); `ship-v0-plan.md` S1 to S14 (2026-09-11), build held until the real-data round; `decisions-for-review_091126.md`, all four (2026-09-11), shipped the same day; `app-v0-plan.md` A1 to A14 (2026-09-10); `decisions-for-review_090926.md`, all three (2026-09-09); the order of what follows step 5 (2026-09-11, above).
 
 ## Done
 
+- 2026-09-15 (later) — **The trust round**, T1 to T8, decided and built: safe replace, changed-file detection, the fourth verdict, schema versions and `/docs/recovery`, the catalog's refusals with `PRIVACY.md` and `SECURITY.md`, `lakelet relocate`, the lede and the README. See `lakelet-build-sessions_091526b.md`.
 - 2026-09-15 — History's timestamps read back naive from SQLite and reached the app an hour out in London: one `_utc` on every read path, with a test (the Mac found it in `models.spec.ts`; the UTC container could not).
 - 2026-09-15 — The research read and recorded (`decisions-for-review_091526.md`, `research/README.md`, `research/` gitignored). Versions step 3 built: the Versions section on the model detail (Technical: the log, the diff, Gauge then/now, Restore with its line, the git line; Simple: History on the card, sentences, one button), `versions.status` and `GET /api/git` in the core. See `lakelet-build-sessions_091526.md`.
 - 2026-09-07 — Review of the original brief; `core-v0.1-plan.md` (revision 3) with D19 to D24; measurements on DuckDB 1.5.5 and pyiceberg 0.12.

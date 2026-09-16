@@ -4,6 +4,8 @@
 
 *Amended September 11, 2026, later the same day: session 9 is widened into the real-data round (`real-data-plan.md`: real S3, dbt views, the Gauge, table-detail and Models screens) and comes before session 10, whose brief (`ship-v0-plan.md`) is accepted and waits.*
 
+*Amended September 15, 2026: a **trust round** (`trust-round-plan.md`, T1 to T8, all decided and built the same day) sits between the versions round's steps 3 and 4: a replace that keeps the old table until the new one is complete, attached files checked for rewrites, the gauge's fourth verdict, schema versions read back and `/docs/recovery`, `lakelet relocate` for a moved folder, the catalog refusing what a browser can send, `PRIVACY.md` and `SECURITY.md`, the homepage lede and the README rewritten for the person who runs it. Session 5's brief must have `lakelet mcp` set `enable_external_access = false` and `lock_configuration` on the engine agent SQL reaches before any guardrail claim is made.*
+
 *Amended September 12, 2026: what the real-data round left of session 9 — git commits on save, a question's history with restore, save-as-question from the query screen, and table-level lineage — is `versions-plan.md`, G1 to G11 decided; it is the current brief and `TASKS.md` says which of its steps are built. Dark mode for the app belongs to no brief and is `decisions-for-review_091226.md` D1.*
 
 *Amended September 11, 2026 (Hants, in conversation): session 7, the ask box, is deprioritised; it stays in the map but is not next. Session 6 is at step 5 of `app-v0-plan.md`. The order after step 5 is decided and kept in `TASKS.md` ("Next, in order"): the two core items, then session 10, 9, 8, 5; `TASKS.md` is the only place status lives.*

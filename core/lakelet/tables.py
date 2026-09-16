@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from lakelet import types
-from lakelet.catalog.store import NotFound
+from lakelet.catalog.store import REPLACE_SUFFIX, NotFound
 from lakelet.engine import run_with_retry
 from lakelet.project import NAMESPACE, TABLES_END, TABLES_START, identifier
 
@@ -47,6 +47,20 @@ class NotExpirable(Exception):
 
 class NoSuchTable(Exception):
     pass
+
+
+class ReservedName(Exception):
+    """A name ending in the replace suffix is Lakelet's, not a user's (T1)."""
+
+
+def replace_name(name: str) -> str:
+    """The temporary table a replace builds before the swap."""
+    return f"{name}{REPLACE_SUFFIX}"
+
+
+def interrupted_replace_of(name: str) -> str | None:
+    """The final name a temporary table was meant to become, or None for an ordinary name."""
+    return name.removesuffix(REPLACE_SUFFIX) if name.endswith(REPLACE_SUFFIX) else None
 
 
 @dataclass
@@ -90,6 +104,12 @@ class TableInfo:
     #: bytes are 0 and whose `view_sql` is its query.
     kind: str = "table"
     view_sql: str | None = None
+    #: A replace interrupted between its drop and its rename (T1): the name this temporary
+    #: table was meant to become, so the list can say how to finish it; None otherwise.
+    interrupted_replace_of: str | None = None
+    #: The project folder moved and this table's metadata still points at where it was (T5):
+    #: rows, bytes and columns are unknown until `lakelet relocate`.
+    needs_relocate: bool = False
 
 
 @dataclass
@@ -119,6 +139,12 @@ class TableDescription(TableInfo):
     #: A view's properties (`lakelet.dbt-model` names the dbt model it came from); empty
     #: for a table.
     properties: dict[str, str] = field(default_factory=dict)
+    #: For an attached table (trust round T2): when its files were last verified against
+    #: the prefix, and the ones that changed under the same path since, ``(uri, why)``;
+    #: ``verify_error`` when the prefix could not be listed (offline, no credentials).
+    verified_at: str | None = None
+    changed_files: list[tuple[str, str]] = field(default_factory=list)
+    verify_error: str | None = None
 
 
 def _rows_after(total: int | None, position_deletes: int | None) -> int | None:
@@ -194,6 +220,8 @@ class Tables:
         path = Path(path)
         reader = self._reader(path)
         name = name or identifier(path.stem)
+        if interrupted_replace_of(name) is not None:
+            raise ReservedName(f"{name}: names ending in {REPLACE_SUFFIX} are Lakelet's own")
         target = f"lakelet.{NAMESPACE}.{_quoted(name)}"
         exists = self._exists(name)
         if mode == "create" and exists:
@@ -203,14 +231,56 @@ class Tables:
         if mode == "append":
             columns = self._existing_columns(name)
             statement = f"INSERT INTO {target} SELECT {self._select(columns)} FROM {reader}"
+            run_with_retry(self.project.engine, statement)
+        elif exists:
+            self._replace(name, reader)
         else:
-            if exists:
-                run_with_retry(self.project.engine, f"DROP TABLE {target}")
             columns = self._inferred(reader)
             statement = f"CREATE TABLE {target} AS SELECT {self._select(columns)} FROM {reader}"
-        run_with_retry(self.project.engine, statement)
+            run_with_retry(self.project.engine, statement)
         self.refresh_agents_md()
         return self._info(name)
+
+    def _replace(self, name: str, reader: str) -> None:
+        """Build the new table first, then swap (trust round T1). The columns are inferred
+        and the whole new table written under a temporary name before anything is dropped,
+        so a file that does not parse, a cast that fails or a disk that fills leaves the old
+        table exactly as it was. Only then: drop the old, rename the new into place, each
+        its own catalog commit (DuckDB-Iceberg refuses both inside one transaction; see
+        /docs/transactions). The catalog gives the temporary table the final name's folder,
+        so the rename moves no data and the old files are orphans `expire` sweeps. A crash
+        between the drop and the rename leaves the temporary table listed with the sentence
+        that says how to finish it, so the data is never invisible."""
+        temp = replace_name(name)
+        temp_target = f"lakelet.{NAMESPACE}.{_quoted(temp)}"
+        target = f"lakelet.{NAMESPACE}.{_quoted(name)}"
+        columns = self._inferred(reader)
+        if self._exists(temp):  # an earlier replace was interrupted; this one supersedes it
+            run_with_retry(self.project.engine, f"DROP TABLE {temp_target}")
+        try:
+            run_with_retry(
+                self.project.engine,
+                f"CREATE TABLE {temp_target} AS SELECT {self._select(columns)} FROM {reader}",
+            )
+        except Exception:
+            if self._exists(temp):
+                run_with_retry(self.project.engine, f"DROP TABLE {temp_target}")
+            raise
+        run_with_retry(self.project.engine, f"DROP TABLE {target}")
+        self.rename(temp, name)
+
+    def rename(self, old: str, new: str) -> TableInfo:
+        """`lakelet tables rename`: one catalog commit; the data does not move. The verb
+        that finishes an interrupted replace (T1)."""
+        if not self._exists(old):
+            raise NoSuchTable(old)
+        if self._exists(new):
+            raise TableExists(new)
+        run_with_retry(
+            self.project.engine,
+            f"ALTER TABLE lakelet.{NAMESPACE}.{_quoted(old)} RENAME TO {_quoted(new)}",
+        )
+        return self._info(new)  # the manifest cache is keyed by name and snapshot: nothing stale
 
     def import_dir(self, path: str | Path, mode: Mode = "create") -> list[TableInfo]:
         """One table per file (brief D16). Files with an unsupported extension are skipped."""
@@ -271,10 +341,29 @@ class Tables:
             else None,
             source=md.properties.get("lakelet.source-prefix"),
             public=md.properties.get("lakelet.anonymous", "").lower() == "true",
+            interrupted_replace_of=interrupted_replace_of(name),
         )
 
     def list(self, views: bool = True) -> list[TableInfo]:
-        infos = [self._info(name) for name in self.project.store.list_tables(NAMESPACE)]
+        infos = []
+        for name in self.project.store.list_tables(NAMESPACE):
+            try:
+                infos.append(self._info(name))
+            except FileNotFoundError:
+                # the metadata is not where the catalog says (T5): listed, marked, so the
+                # table is never invisible; `lakelet relocate` makes it resolve again
+                infos.append(
+                    TableInfo(
+                        name=name,
+                        rows=0,
+                        bytes=0,
+                        columns=[],
+                        location=self.project.store.get_table(NAMESPACE, name),
+                        snapshot_id=None,
+                        freshness=None,
+                        needs_relocate=True,
+                    )
+                )
         if views:
             infos += [self._view_info(v) for v in self.project.views.list()]
         return infos
@@ -355,10 +444,24 @@ class Tables:
             }
             for snap in sorted(md.snapshots, key=lambda s: s.timestamp_ms, reverse=True)
         ]
+        verified_at: str | None = None
+        changed: list[tuple[str, str]] = []
+        verify_error: str | None = None
+        if info.source:
+            from lakelet import register
+
+            try:
+                v = register.verify(self.project, name)
+                verified_at, changed = v.verified_at, v.changed
+            except Exception as e:  # noqa: BLE001 - a listing that fails is a line, not a failure
+                verify_error = str(e).splitlines()[0]
         return TableDescription(
             **info.__dict__,
             partitioning=partitioning,
             snapshot_list=snapshot_list,
+            verified_at=verified_at,
+            changed_files=changed,
+            verify_error=verify_error,
             expirable_snapshots=len(expirable),
             reclaimable_bytes=reclaimable,
             keep_days=self.project.config.catalog.keep_snapshots_days,
@@ -426,13 +529,33 @@ class Tables:
         source: str,
         metadata_in_bucket: bool = False,
         anonymous: bool = False,
+        replace: bool = False,
     ) -> TableInfo:
         """A Parquet prefix registered in place, or an existing Iceberg table by its
-        metadata location. Nothing is copied. ``anonymous``: a public bucket, no credentials."""
+        metadata location. Nothing is copied. ``anonymous``: a public bucket, no credentials.
+        ``replace`` (T2): register again over an existing table in T1's order — the new
+        registration is built under the temporary name first, then the old is dropped and
+        the new renamed, so a prefix that fails to register leaves the old table as it was."""
+        if interrupted_replace_of(name) is not None:
+            raise ReservedName(f"{name}: names ending in {REPLACE_SUFFIX} are Lakelet's own")
+        if self._exists(name):
+            if not replace:
+                raise TableExists(name)
+            temp = replace_name(name)
+            if self._exists(temp):
+                run_with_retry(
+                    self.project.engine, f"DROP TABLE lakelet.{NAMESPACE}.{_quoted(temp)}"
+                )
+            self._attach(temp, source, metadata_in_bucket, anonymous)
+            run_with_retry(self.project.engine, f"DROP TABLE lakelet.{NAMESPACE}.{_quoted(name)}")
+            return self.rename(temp, name)
+        self._attach(name, source, metadata_in_bucket, anonymous)
+        self.refresh_agents_md()
+        return self._info(name)
+
+    def _attach(self, name: str, source: str, metadata_in_bucket: bool, anonymous: bool) -> None:
         from lakelet import register
 
-        if self._exists(name):
-            raise TableExists(name)
         if source.endswith(".metadata.json"):
             if anonymous:
                 raise register.NotRegistrable(
@@ -448,8 +571,6 @@ class Tables:
                 metadata_in_bucket=metadata_in_bucket,
                 anonymous=anonymous,
             )
-        self.refresh_agents_md()
-        return self._info(name)
 
     # -- expiry (decision 4, September 11, 2026) ---------------------------------------
 
@@ -509,6 +630,11 @@ class Tables:
             raise NotExpirable(f"{name} is registered from {source}; its files are not Lakelet's")
         if not md.location.startswith(self.project.warehouse_url):
             raise NotExpirable(f"{name} lives outside the warehouse ({md.location})")
+        if self._exists(replace_name(name)):
+            raise NotExpirable(
+                f"a replace of {name} was interrupted and its new table shares the folder; "
+                f"`lakelet tables rename {replace_name(name)} {name}` finishes it first"
+            )
         grace = self.ORPHAN_GRACE_SECONDS if orphan_grace_seconds is None else orphan_grace_seconds
         before = len(md.snapshots)
         expirable = self._expirable(md, keep_days)

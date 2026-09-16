@@ -27,7 +27,7 @@ import { facts } from '../data/facts';
         </svg>
       </div>
       <h1>Your data fits on your laptop.</h1>
-      <p class="lede">An open-source lakehouse in one binary: DuckDB, Iceberg and dbt, local by default. Every query gets a pre-flight verdict; the ones that don't fit burst to a worker in your own cloud with a hard cost cap. Humans ask in English or SQL. Agents call it over MCP.</p>
+      <p class="lede">An open-source, local-first lakehouse in one binary: Iceberg tables on your laptop, DuckDB as the engine, dbt built in, and a gauge that says whether a query fits before it runs.</p>
       <Waitlist stack layout="stacked" note="Developer preview on macOS and Linux — clone it and run it today. Free forever on the laptop. No spam." />
       <div class="cta small">
         <code class="install">$ git clone …/lakelet && cd core && uv sync</code>
@@ -35,6 +35,7 @@ import { facts } from '../data/facts';
         <a href={url("/docs/install")}>Run it in ten minutes</a>
         <a href={url("/app")}>See the app</a>
       </div>
+      <p class="next" data-testid="hero-next">Next, not built yet: burst to a worker in your own cloud with a cost cap · agents over MCP · questions in English. <a href={url("/docs")}>What exists today</a>.</p>
     </div>
     <GaugeSlider />
   </div>
@@ -294,6 +295,8 @@ $ lakelet run                     # dbt, every model with its own verdict first
   @media (prefers-reduced-motion:reduce){.leaper.play{animation:none;offset-distance:50%;opacity:1}}
   .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
   .cta.small{margin-top:18px;gap:18px;font-size:14px;font-weight:600}
+  .hero .next{margin:16px 0 0;font-size:13.5px;color:var(--muted);max-width:44ch}
+  .hero .next a{color:var(--muted);text-decoration:underline}
   .cta.small a{color:var(--muted)}
   code.install{font:500 13px var(--mono);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
   .statbar{display:flex;flex-wrap:wrap;gap:10px 22px;font:500 12.5px var(--mono);color:var(--muted);padding:14px 0 6px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:8px 0 26px}

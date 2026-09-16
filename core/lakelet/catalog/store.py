@@ -18,6 +18,14 @@ from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 
 SCHEMA_VERSION = 1
+#: Numbered migrations from an older schema (trust round T4): ``(target_version, fn)``,
+#: run in order on open. None yet.
+MIGRATIONS: list = []
+
+#: `import --replace` builds the new table under `<name>` + this suffix first, then drops the
+#: old one and renames (trust round T1). The catalog gives such a table the *final* name's
+#: location, so the swap never moves data; a user's table may not end in it.
+REPLACE_SUFFIX = "__lakelet_replace"
 
 metadata = sa.MetaData()
 
@@ -88,12 +96,13 @@ class Store:
                 dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
         metadata.create_all(self.engine)
-        with self.engine.begin() as c:
-            has_version = c.execute(
-                sa.select(meta.c.value).where(meta.c.key == "schema_version")
-            ).scalar()
-            if has_version is None:
-                c.execute(meta.insert().values(key="schema_version", value=str(SCHEMA_VERSION)))
+        from lakelet.schema import ensure_schema
+
+        try:
+            ensure_schema(self.engine, meta, SCHEMA_VERSION, MIGRATIONS, "catalog")
+        except Exception:
+            self.engine.dispose()
+            raise
 
     def close(self) -> None:
         """Release the pooled connections; on SQLite each holds the db and its -wal file."""

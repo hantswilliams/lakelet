@@ -21,7 +21,11 @@ import psutil
 if TYPE_CHECKING:
     from lakelet.engine import Engine
 
-SCAN_NODES = ("ICEBERG_SCAN", "TABLE_SCAN", "PARQUET_SCAN", "READ_PARQUET")
+#: The plan nodes that read something. Only ICEBERG_SCAN reads a catalog table; the rest
+#: — a file read by function, a DuckDB native or temp table — are outside the catalog and
+#: cannot be attributed to a table the gauge has statistics for (trust round T3).
+SCAN_NODES = ("ICEBERG_SCAN", "TABLE_SCAN", "PARQUET_SCAN", "READ_PARQUET", "SEQ_SCAN")
+CATALOG_SCAN_NODES = ("ICEBERG_SCAN",)
 _UNITS = {"B": 1, "KB": 10**3, "MB": 10**6, "GB": 10**9, "TB": 10**12}
 _UNITS |= {"KIB": 2**10, "MIB": 2**20, "GIB": 2**30, "TIB": 2**40}
 
@@ -69,6 +73,8 @@ def scan_nodes(plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "projections": list(projections),
                     "filters": extra.get("Filters"),
                     "estimated_cardinality": int(extra.get("Estimated Cardinality", 0) or 0),
+                    # what the node reads, for the sentence when it is outside the catalog
+                    "label": extra.get("Table") or extra.get("Function") or node["name"],
                 }
             )
     return scans

@@ -94,4 +94,6 @@ def export_record(run: Run) -> dict[str, Any]:
 
 def export_lines(runs: Iterable[Run]) -> Iterator[str]:
     for run in runs:
+        if run.verdict == "none":
+            continue  # nothing was measured: never a calibration point (T3)
         yield json.dumps(export_record(run), sort_keys=True)

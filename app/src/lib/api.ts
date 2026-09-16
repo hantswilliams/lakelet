@@ -16,6 +16,8 @@ export interface Health {
   bandwidth_mbps: number | null;
   /** Whether the core has AWS credentials, and from where (never a key). */
   aws?: { configured: boolean; source: 'environment' | 'profile' | 'none'; profile: string | null; region: string; endpoint: string | null };
+  /** The folder this project's tables were written in, when it is not this one (trust round T5). */
+  moved_from?: string | null;
 }
 
 export interface TableInfo {
@@ -34,6 +36,20 @@ export interface TableInfo {
   /** `table`, or `view` for a catalog view (real-data R6), whose rows and bytes are 0. */
   kind?: 'table' | 'view';
   view_sql?: string | null;
+  /** A replace interrupted between its drop and its rename (T1): the name it was meant to become. */
+  interrupted_replace_of?: string | null;
+  /** The folder moved and this table's metadata points at where it was (T5). */
+  needs_relocate?: boolean;
+}
+
+/** `POST /relocate` (`lakelet relocate`, trust round T5). */
+export interface RelocateReport {
+  old_root: string | null;
+  new_root: string;
+  relocated: string[];
+  skipped: string[];
+  metadata_files: number;
+  data_files: number;
 }
 
 export interface Snapshot {
@@ -61,6 +77,12 @@ export interface TableDescription extends TableInfo {
   snapshot_list: Snapshot[];
   /** A view's properties (`lakelet.dbt-model` names the dbt model it came from); empty for a table. */
   properties?: Record<string, string>;
+  /** An attached table (trust round T2): when its files were last verified against the
+   *  prefix, the ones changed under the same path since as `[uri, why]`, or why the
+   *  prefix could not be listed. */
+  verified_at?: string | null;
+  changed_files?: [string, string][];
+  verify_error?: string | null;
 }
 
 export interface ExpireReport {
@@ -288,9 +310,10 @@ export class Api {
     return Array.isArray(p) ? p : [p];
   }
 
-  /** `lakelet tables attach <name> [--anonymous] <prefix>`: registered in place, nothing copied. */
-  attach(name: string, source: string, anonymous = false): Promise<TableInfo> {
-    return this.post<TableInfo>('/tables/attach', { name, source, anonymous });
+  /** `lakelet tables attach <name> [--anonymous] <prefix>`: registered in place, nothing
+   *  copied; `replace` registers the prefix again over an existing table (T2). */
+  attach(name: string, source: string, anonymous = false, replace = false): Promise<TableInfo> {
+    return this.post<TableInfo>('/tables/attach', { name, source, anonymous, replace });
   }
 
   history(last = 200): Promise<HistoryRun[]> {
@@ -389,6 +412,11 @@ export class Api {
 
   git(): Promise<GitStatus> {
     return this.get<GitStatus>('/git');
+  }
+
+  /** `lakelet relocate`: after the folder moved, the tables' locations rewritten under it. */
+  relocate(): Promise<RelocateReport> {
+    return this.post<RelocateReport>('/relocate', {});
   }
 
   /** `lakelet estimate '<sql>'`: the gauge's verdict for a statement, nothing run. */

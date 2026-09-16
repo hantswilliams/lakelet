@@ -29,6 +29,10 @@ if TYPE_CHECKING:
 SOURCE_PROPERTY = "lakelet.source-prefix"
 PLACEMENT_PROPERTY = "lakelet.metadata-placement"
 ANONYMOUS_PROPERTY = "lakelet.anonymous"  # "true": a public bucket read without credentials
+#: When the registered files were last checked against the prefix (trust round T2): set by
+#: attach, moved forward by every refresh that found nothing changed. A file modified after
+#: it, or whose size no longer matches its manifest entry, is "changed under the same path".
+VERIFIED_PROPERTY = "lakelet.verified-at"
 _HIVE_SEGMENT = re.compile(r"^([A-Za-z_]\w*)=([^/]*)$")
 
 
@@ -38,6 +42,37 @@ class NotRegistrable(Exception):
 
 class SchemaDrift(NotRegistrable):
     pass
+
+
+class ChangedFiles(Exception):
+    """A registered file was rewritten under the same path since the attach (T2): its
+    manifest entry — the row count and the column bounds the gauge prunes on — no longer
+    describes it. Refresh refuses until the prefix is registered again."""
+
+
+@dataclass
+class Verification:
+    """What `verify` found: every registered file compared with the prefix's listing."""
+
+    name: str
+    files: int
+    #: ``(uri, why)`` for each file that changed: "size 1.2 MB → 3.4 MB" or "rewritten
+    #: 2026-09-15T10:00:00+00:00, after the attach".
+    changed: list[tuple[str, str]]
+    verified_at: str | None
+
+    @property
+    def sentence(self) -> str | None:
+        if not self.changed:
+            return None
+        head = ", ".join(f"{uri} ({why})" for uri, why in self.changed[:5])
+        more = " …" if len(self.changed) > 5 else ""
+        n = len(self.changed)
+        return (
+            f"{n} registered file(s) changed under the same path since the attach: {head}{more}; "
+            f"the table's statistics no longer describe them. "
+            f"`lakelet tables attach --replace {self.name} <prefix>` registers the prefix again"
+        )
 
 
 class MissingFiles(Exception):
@@ -231,6 +266,9 @@ def _client(project: Project, anonymous: bool = False, bucket: str | None = None
 
 
 def _metadata_root(project: Project, name: str, prefix: str, in_bucket: bool) -> str:
+    from lakelet.catalog.store import REPLACE_SUFFIX
+
+    name = name.removesuffix(REPLACE_SUFFIX)  # a replace's temporary shares the final folder
     if in_bucket:
         scheme, path = split_uri(prefix)
         bucket = path.split("/")[0]
@@ -264,6 +302,7 @@ def attach_prefix(
     properties = {
         SOURCE_PROPERTY: prefix,
         PLACEMENT_PROPERTY: "bucket" if metadata_in_bucket else "local",
+        VERIFIED_PROPERTY: _now(),
     }
     if anonymous:
         properties[ANONYMOUS_PROPERTY] = "true"
@@ -290,8 +329,20 @@ def is_anonymous(properties: dict[str, str]) -> bool:
     return properties.get(ANONYMOUS_PROPERTY, "").lower() == "true"
 
 
-def refresh(project: Project, name: str) -> RefreshReport:
-    """Add the files new since registration; fail loudly if a registered file is gone (D27)."""
+def _now() -> str:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat()
+
+
+#: A file whose modification time is this much after the last verification counts as
+#: rewritten: the two seconds absorb S3's second-resolution LastModified and a store clock a
+#: little ahead of this machine's, so a file uploaded just before the attach is not flagged.
+REWRITE_GRACE_SECONDS = 2
+
+
+def _registered(project: Project, name: str):
+    """The table, its catalog client, its prefix and the listing of that prefix."""
     catalog = _client(project)
     table = catalog.load_table(f"main.{name}")
     anonymous = is_anonymous(table.properties)
@@ -301,7 +352,68 @@ def refresh(project: Project, name: str) -> RefreshReport:
     if anonymous:
         catalog = _client(project, anonymous=True, bucket=split_uri(prefix)[1].split("/")[0])
         table = catalog.load_table(f"main.{name}")
-    listing = _list(project, prefix, anonymous)
+    return catalog, table, prefix, _list(project, prefix, anonymous)
+
+
+def _compare(table, listing: _Listing, files: list[pafs.FileInfo]) -> Verification:
+    """Every registered file against the listing (T2). A size that no longer matches the
+    manifest's ``file_size_in_bytes`` is a rewrite for certain; a modification time after
+    the last verification is a rewrite too, even at the same size — pyarrow's listing
+    carries no ETag, so a byte-identical re-upload is reported as changed rather than let
+    a same-size, different-content one through. The sentence names which."""
+    from datetime import UTC, datetime, timedelta
+
+    by_uri = {listing.uri(f): f for f in files}
+    verified_at = table.properties.get(VERIFIED_PROPERTY)
+    since = (
+        datetime.fromisoformat(verified_at) + timedelta(seconds=REWRITE_GRACE_SECONDS)
+        if verified_at
+        else None
+    )
+    changed: list[tuple[str, str]] = []
+    known = 0
+    for task in table.scan().plan_files():
+        known += 1
+        info = by_uri.get(task.file.file_path)
+        if info is None:
+            continue  # gone: refresh raises MissingFiles for those (D27)
+        if info.size is not None and info.size != task.file.file_size_in_bytes:
+            changed.append(
+                (
+                    task.file.file_path,
+                    f"size {_human(task.file.file_size_in_bytes)} → {_human(info.size)}",
+                )
+            )
+        elif since is not None and info.mtime is not None:
+            mtime = info.mtime if info.mtime.tzinfo else info.mtime.replace(tzinfo=UTC)
+            if mtime > since:
+                changed.append(
+                    (
+                        task.file.file_path,
+                        f"rewritten {mtime.isoformat(timespec='seconds')}, after the attach",
+                    )
+                )
+    return Verification(table.name()[-1], known, changed, verified_at)
+
+
+def _human(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1000 or unit == "TB":
+            return f"{n:.0f} {unit}" if unit in ("B", "KB") else f"{n:.1f} {unit}"
+        n /= 1000
+    return f"{n:.1f} TB"
+
+
+def verify(project: Project, name: str) -> Verification:
+    """`describe` and the table detail: are the registered files still what was attached?"""
+    _, table, _, listing = _registered(project, name)
+    return _compare(table, listing, _parquet_files(listing))
+
+
+def refresh(project: Project, name: str) -> RefreshReport:
+    """Add the files new since registration; fail loudly if a registered file is gone (D27)
+    or was rewritten under the same path (T2)."""
+    catalog, table, prefix, listing = _registered(project, name)
     files = _parquet_files(listing)
     known = {t.file.file_path for t in table.scan().plan_files()}
     present = {listing.uri(f) for f in files}
@@ -312,11 +424,18 @@ def refresh(project: Project, name: str) -> RefreshReport:
             + ", ".join(gone[:5])
             + (" …" if len(gone) > 5 else "")
         )
+    verification = _compare(table, listing, files)
+    if verification.changed:
+        raise ChangedFiles(verification.sentence)
     new = [f for f in files if listing.uri(f) not in known]
     if new:
         _check_schemas(listing, [files[0], *new])
         table.add_files([listing.uri(f) for f in new])
         table = catalog.load_table(f"main.{name}")
+    # everything registered is as it was at this moment: the stamp moves forward
+    with table.transaction() as tx:
+        tx.set_properties({VERIFIED_PROPERTY: _now()})
+    table = catalog.load_table(f"main.{name}")
     rows = sum(t.file.record_count for t in table.scan().plan_files())
     return RefreshReport(name=name, added=len(new), files=len(files), rows=rows)
 

@@ -74,6 +74,8 @@ The docs already decided: a Tauri shell with the Python core as a sidecar (build
 - [x] Agree
 - [ ] Change:
 
+*Amended September 15, 2026 (`trust-round-plan.md` T7): the README is now the public front door for a person who runs Lakelet; S13's page points at it, and the clean-machine quickstart (§6) uses `examples/sample-data/make_sample.py` so no `orders.csv` is assumed.*
+
 **S13. Partner onboarding is one public page and one private file.**
 *Recommend:* `/docs/partners` on the site: what to install and how (the DMG, the `.deb`, `pipx`), the five intake questions (format, folder layout, file count, what wrote it, whether it changes daily), what `tables attach` and `refresh` mean for a bucket that changes (D27's snapshot semantics), what leaves the machine (nothing; the export and how to send it), the 45-minute call's agenda, and the weekly check-in. The partners' answers live outside the repo (no partner names in git, as the repo rules say). *Not chosen:* a form on the site (the waitlist form is not wired either; the call is the form).
 - [x] Agree

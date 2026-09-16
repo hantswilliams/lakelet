@@ -16,6 +16,8 @@ import sqlalchemy as sa
 from sqlalchemy import event
 
 SCHEMA_VERSION = 1
+#: Numbered migrations from an older schema (trust round T4). None yet.
+MIGRATIONS: list = []
 
 metadata = sa.MetaData()
 
@@ -157,12 +159,13 @@ class History:
             dbapi_conn.execute("PRAGMA busy_timeout=5000")
 
         metadata.create_all(self.engine)
-        with self.engine.begin() as c:
-            if (
-                c.execute(sa.select(meta.c.value).where(meta.c.key == "schema_version")).scalar()
-                is None
-            ):
-                c.execute(meta.insert().values(key="schema_version", value=str(SCHEMA_VERSION)))
+        from lakelet.schema import ensure_schema
+
+        try:
+            ensure_schema(self.engine, meta, SCHEMA_VERSION, MIGRATIONS, "history")
+        except Exception:
+            self.engine.dispose()
+            raise
 
     def close(self) -> None:
         self.engine.dispose()

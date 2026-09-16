@@ -34,6 +34,7 @@ Commands:
   run       Build the project's dbt models through the catalog, each with its...
   versions  The versions of one question or model: every commit that changed its...
   restore   Put an earlier version of a question or model back.
+  relocate  After the project folder was moved or copied: rewrite every local...
   serve     Run the core as the app's sidecar: catalog and API on one loopback...
   tables    List, describe and sample tables.
   catalog   The Iceberg REST catalog.
@@ -163,6 +164,20 @@ Options:
   --help  Show this message and exit.
 ```
 
+### `lakelet relocate`
+
+```text
+Usage: lakelet relocate [OPTIONS]
+
+  After the project folder was moved or copied: rewrite every local table's locations
+  under this folder so the tables resolve again. Every snapshot is kept; the old
+  metadata files become orphans for `tables expire`. Tables attached from a bucket are
+  skipped.
+
+Options:
+  --help  Show this message and exit.
+```
+
 ### `lakelet serve`
 
 ```text
@@ -191,6 +206,7 @@ Options:
 
 Commands:
   list      Tables in the catalog with rows, size, when they were last written, and...
+  rename    Rename a table: one catalog commit, the data does not move.
   describe  Columns, types, partitioning, freshness and the last commit of a table.
   expire    Drop snapshots older than the retention and delete the files only they...
   sample    The first rows of a table.
@@ -205,6 +221,22 @@ Commands:
 Usage: lakelet tables list [OPTIONS]
 
   Tables in the catalog with rows, size, when they were last written, and location.
+
+Options:
+  --help  Show this message and exit.
+```
+
+#### `lakelet tables rename`
+
+```text
+Usage: lakelet tables rename [OPTIONS] {old} {new}
+
+  Rename a table: one catalog commit, the data does not move. Finishes a replace that
+  was interrupted between its drop and its rename.
+
+Arguments:
+  old  [required]
+  new  [required]
 
 Options:
   --help  Show this message and exit.
@@ -274,6 +306,8 @@ Options:
   --metadata-in-bucket  Keep the Iceberg metadata under s3://bucket/_lakelet/.
   --anonymous           A public bucket: read it without credentials (metadata stays
                         local).
+  --replace             Register the prefix again over an existing table (after files
+                        changed).
   --help                Show this message and exit.
 ```
 
@@ -282,7 +316,8 @@ Options:
 ```text
 Usage: lakelet tables refresh [OPTIONS] {name}
 
-  Add the files new under a registered prefix since it was attached.
+  Add the files new under a registered prefix since it was attached. Refuses if a
+  registered file is gone or was rewritten under the same path since the attach.
 
 Arguments:
   name  [required]

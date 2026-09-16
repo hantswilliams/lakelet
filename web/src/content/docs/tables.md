@@ -14,11 +14,13 @@ lakelet import orders.csv                      # a table named orders
 lakelet import "Orders 2026.xlsx" --name orders  # a table named orders
 lakelet import exports/                        # one table per file in the folder
 lakelet import orders.csv --preview            # the schema it would make; nothing written
-lakelet import orders.csv --replace            # drop and recreate
+lakelet import orders.csv --replace            # the new table first, then the swap
 lakelet import orders_march.csv --append --name orders
 ```
 
 `.csv`, `.tsv`, `.parquet`, `.json`, `.jsonl` and `.xlsx` are read by DuckDB's own readers with type inference, then written as Iceberg through the catalog with `CREATE TABLE AS`. A folder imports each supported file as its own table and refuses the whole folder before writing anything if two files would collide on a name. Without `--replace` or `--append`, importing onto an existing name is an error.
+
+**`--replace` never drops the old table until the new one is complete.** The new table is built under a temporary name (`<name>__lakelet_replace`, which you cannot use for a table of your own) in the same folder, then the old one is dropped and the new one renamed into place — each its own catalog commit, because DuckDB-Iceberg refuses both [inside one transaction](/docs/transactions). A file that does not parse, a cast that fails or a disk that fills leaves the old table exactly as it was. If the process dies in the instant between the drop and the rename, `lakelet tables list` shows the temporary table with the sentence that finishes the swap: `lakelet tables rename <name>__lakelet_replace <name>`. The old table's files become orphans in the shared folder and `tables expire` sweeps them after an hour. `tables rename` works for any table: one catalog commit, the data does not move.
 
 `--preview` prints each column with the type DuckDB inferred, the Iceberg type it will become and a note where the mapping is lossy, then the first rows. Whatever the preview promised is what the table gets.
 
@@ -88,9 +90,12 @@ lakelet tables attach events s3://acme-exports/events/     # register the Parque
 lakelet tables attach events s3://acme-exports/events/ --metadata-in-bucket
 lakelet tables attach legacy s3://acme-lake/legacy/metadata/00012-….metadata.json   # an existing Iceberg table, by its metadata location
 lakelet tables refresh events                              # pick up files written since the attach
+lakelet tables attach --replace events s3://acme-exports/events/   # register again, after files changed under the same path
 ```
 
 What it does: one listing call, one Parquet footer read per file for the schema and the column statistics, and one commit through the catalog with pyiceberg's `add_files`. Ten thousand small files registered in 16 seconds on one machine against a self-hosted store.
+
+**Files that change under the same path.** An attached table's statistics describe the files as they were at the attach; a file rewritten under the same key would silently disagree with them. So every registered file is checked against the prefix's listing — its size against the manifest's, its modification time against the last verification — by `refresh` and by `describe` (and the app's table detail), and a changed file is named: `2 registered file(s) changed under the same path since the attach: part-1.parquet (size 1.2 MB → 3.4 MB) …`. `refresh` refuses until `tables attach --replace <name> <prefix>` registers the prefix again, which builds the new registration first and swaps, the way `import --replace` does. pyarrow's listing carries no ETag, so a byte-identical re-upload after the attach reads as changed too; that is the safe side. `describe` says `files: verified against <prefix> at <time>` when nothing changed.
 
 **Where the metadata goes.** By default the Iceberg metadata for an attached table is written locally under `warehouse/main/<name>/metadata/` with the data files pointing at `s3://`, so the bucket stays read-only from Lakelet's side. `--metadata-in-bucket` writes it under `s3://<bucket>/_lakelet/<name>/` instead, which is what another machine or engine needs to find the table without your laptop. Either way DuckDB reads it.
 

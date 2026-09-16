@@ -44,8 +44,8 @@ export const discoverCommand = (prefix: string, anonymous = false): string =>
   `lakelet tables discover${anonymous ? ' --anonymous' : ''} ${shellArg(prefix)}`;
 
 /** `lakelet tables attach <name> [--anonymous] <prefix>`: the preview panel's line for a prefix. */
-export const attachCommand = (name: string, prefix: string, anonymous = false): string =>
-  `lakelet tables attach ${shellArg(name)}${anonymous ? ' --anonymous' : ''} ${shellArg(prefix)}`;
+export const attachCommand = (name: string, prefix: string, anonymous = false, replace = false): string =>
+  `lakelet tables attach ${shellArg(name)}${anonymous ? ' --anonymous' : ''}${replace ? ' --replace' : ''} ${shellArg(prefix)}`;
 
 export const refreshCommand = (name: string): string => `lakelet tables refresh ${shellArg(name)}`;
 
@@ -55,6 +55,7 @@ export const sampleCommand = (name: string, n = 5): string => `lakelet tables sa
 export const expireCommand = (name: string): string => `lakelet tables expire ${shellArg(name)}`;
 
 export const initCommand = (folder: string): string => `lakelet init ${shellArg(folder)}`;
+export const relocateCommand = (): string => 'lakelet relocate';
 
 /** `--` comments outside string literals removed, so folding the SQL onto one line for the
  *  terminal cannot comment out what followed them. */

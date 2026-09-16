@@ -284,8 +284,19 @@ def _table_scans(project: Project, sql: str, plan: list[dict[str, Any]]) -> tupl
         projected = set(scan["projections"])
         candidates = [t for t in known if projected and projected <= t["columns"]]
         table = candidates[0] if len(candidates) == 1 else (unassigned[0] if unassigned else None)
-        if table is None:
-            scan.update(bytes=0, rows=0, files=0, pruning="full", bytes_per_row=8.0, fraction=1.0)
+        if scan["name"] not in inputs.CATALOG_SCAN_NODES or table is None:
+            # Outside the catalog — a file read by function, a native or temp table, or an
+            # Iceberg scan no known table accounts for: nothing is known about what it
+            # reads, so the estimate says so rather than counting it as nothing (T3).
+            scan.update(
+                bytes=0,
+                rows=0,
+                files=0,
+                pruning="full",
+                bytes_per_row=8.0,
+                fraction=1.0,
+                unattributed=str(scan["label"]).lower(),
+            )
             continue
         if table in unassigned:
             unassigned.remove(table)

@@ -24,13 +24,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from lakelet import __version__
+from lakelet import __version__, relocate
 from lakelet.engine import CatalogConflict
 from lakelet.gauge import inputs
 from lakelet.project import identifier
 from lakelet.query import Interrupted, RedRefused
 from lakelet.questions import NoSuchQuestion
-from lakelet.register import MissingFiles, NotRegistrable
+from lakelet.register import ChangedFiles, MissingFiles, NotRegistrable
 from lakelet.tables import NoSuchTable, NotExpirable, TableExists, UnsupportedFile
 from lakelet.versions import NoHistory, NoSuchModel
 
@@ -61,6 +61,7 @@ class AttachBody(BaseModel):
     source: str
     metadata_in_bucket: bool = False
     anonymous: bool = False
+    replace: bool = False  # register again over an existing table (T2)
 
 
 class SqlBody(BaseModel):
@@ -280,7 +281,15 @@ def create_router(project: Project, token: str) -> APIRouter:
             "throughput_probe": inputs.probe_method(cache),
             "bandwidth_mbps": cache.get("bandwidth_mbps"),
             "aws": project.s3.describe(),
+            # the folder this project's tables were written in, when it is not this one (T5)
+            "moved_from": relocate.moved_from(project),
         }
+
+    @router.post("/relocate", dependencies=guarded)
+    def relocate_project() -> dict[str, Any]:
+        """`lakelet relocate`: the tables' locations rewritten under this folder."""
+        with lock:
+            return _plain(relocate.relocate(project))
 
     # -- tables -----------------------------------------------------------------------
 
@@ -360,6 +369,7 @@ def create_router(project: Project, token: str) -> APIRouter:
                         body.source,
                         metadata_in_bucket=body.metadata_in_bucket,
                         anonymous=body.anonymous,
+                        replace=body.replace,
                     )
                 )
             except TableExists:
@@ -374,7 +384,7 @@ def create_router(project: Project, token: str) -> APIRouter:
                 return _plain(project.tables.refresh(name))
             except NoSuchTable:
                 return error(404, "no_such_table", f"no table named {name}")
-            except (NotRegistrable, MissingFiles) as e:
+            except (NotRegistrable, MissingFiles, ChangedFiles) as e:
                 return error(409, "refresh_failed", str(e))
 
     @router.post("/tables/{name}/expire", dependencies=guarded)

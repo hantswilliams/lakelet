@@ -32,6 +32,7 @@ With the thresholds from [`[gauge]` in `lakelet.toml`](/docs/config):
 1. **Red** if the estimated wall time is at or above `yellow_max_seconds` (600 s by default), or the estimated peak exceeds RAM plus free disk, or the table is remote and the bytes to scan cannot arrive within `yellow_max_seconds` at the measured bandwidth.
 2. **Yellow** if the estimate spills, or wall time is at or above `green_max_seconds` (60 s), or the peak is above `green_max_memory_fraction` (0.6) of the memory limit.
 3. **Green** otherwise.
+4. **Not estimated** — the fourth state, `none`, a hollow dot — when the statement reads something the gauge has no statistics for: a file read by function (`read_parquet('…')`, `read_csv`), a DuckDB temp or native table, anything outside the catalog. The line says which: `○ Not estimated · 1 scan outside the catalog: read_parquet`. No bytes, wall or cost are reported, the verdict is never Green, the statement still runs (it is not a refusal), history records `none`, and `gauge export` leaves such runs out of the calibration file. Before the trust round of September 2026 an unattributed scan counted as zero bytes and came out Green; it does not any more.
 
 A Red verdict on `sql` and `question run` is refused: the line goes to stderr, nothing to stdout, and the exit code is 2. `--run-anyway` runs it here regardless, and the run is recorded either way. Over the [HTTP API](/docs/api) the same refusal is a 409 carrying the estimate, and `allow_red: true` overrides it.
 

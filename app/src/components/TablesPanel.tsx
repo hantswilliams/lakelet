@@ -37,12 +37,12 @@ export function TablesPanel({ tables, busy, onRefresh, onOpen }: TablesPanelProp
             {tables.map((t) => (
               <tr key={t.name} data-testid={`table-${t.name}`} className={onOpen ? 'clickable' : ''} onClick={() => onOpen?.(t.name)} title={onOpen ? `lakelet tables describe ${t.name}` : undefined}>
                 <td className="mono">{t.name}</td>
-                <td>{t.kind === 'view' ? '—' : t.rows.toLocaleString()}</td>
-                <td>{t.kind === 'view' ? '—' : humanBytes(t.bytes)}</td>
-                <td>{t.columns.length}</td>
+                <td>{t.kind === 'view' || t.needs_relocate ? '—' : t.rows.toLocaleString()}</td>
+                <td>{t.kind === 'view' || t.needs_relocate ? '—' : humanBytes(t.bytes)}</td>
+                <td>{t.needs_relocate ? '—' : t.columns.length}</td>
                 <td title={t.freshness ?? ''}>{ago(t.freshness)}</td>
                 <td>
-                  <Where t={t} />
+                  {t.needs_relocate ? <span className="failed" data-testid={`moved-${t.name}`}>needs relocate</span> : t.interrupted_replace_of ? <span className="failed">a replace of {t.interrupted_replace_of} was interrupted: lakelet tables rename</span> : <Where t={t} />}
                   {t.source && onRefresh && (
                     <button type="button" className="quiet small" onClick={(e) => { e.stopPropagation(); onRefresh(t.name); }} disabled={!!busy} data-testid={`refresh-${t.name}`}>Refresh</button>
                   )}

@@ -7,7 +7,7 @@
 // model it came from and that `lakelet run` rebuilds it; no snapshots, nothing to expire.
 
 import { ago, humanBytes, type TableDescription } from '../lib/api';
-import { describeCommand, expireCommand, refreshCommand, runCommand, sampleCommand } from '../lib/command';
+import { attachCommand, describeCommand, expireCommand, refreshCommand, runCommand, sampleCommand } from '../lib/command';
 import { words, type Mode } from '../lib/vocabulary';
 import { Command } from './Command';
 
@@ -21,6 +21,8 @@ export interface TableDetailProps {
   onSample: () => void;
   onExpire: () => void;
   onRefresh: () => void;
+  /** `lakelet tables attach --replace`: register the prefix again after its files changed (T2). */
+  onReattach?: () => void;
   onClose: () => void;
 }
 
@@ -96,7 +98,8 @@ function ViewDetail({ table: t, sample, mode, busy, error, onSample, onClose }: 
 }
 
 export function TableDetail(props: TableDetailProps) {
-  const { table: t, sample, busy, error, onSample, onExpire, onRefresh, onClose } = props;
+  const { table: t, sample, busy, error, onSample, onExpire, onRefresh, onReattach, onClose } = props;
+  const changed = t.changed_files ?? [];
   if (t.kind === 'view') return <ViewDetail {...props} mode={props.mode ?? 'technical'} />;
   const reclaimable = t.expirable_snapshots > 0;
   return (
@@ -136,6 +139,15 @@ export function TableDetail(props: TableDetailProps) {
           ))}
         </tbody>
       </table>
+      {t.source && (
+        <p className={changed.length ? 'failed' : 'muted'} data-testid="files-verified">
+          {t.verify_error
+            ? `Files not verified: ${t.verify_error}`
+            : changed.length
+              ? `${changed.length} ${changed.length === 1 ? 'file' : 'files'} changed under the same path since the attach: ${changed.slice(0, 5).map(([uri, why]) => `${uri.split('/').pop()} (${why})`).join(', ')}${changed.length > 5 ? ' …' : ''}. The table's statistics no longer describe them; register the prefix again.`
+              : `Files verified against the prefix ${ago(t.verified_at ?? null)}.`}
+        </p>
+      )}
       <p className="muted" data-testid="reclaimable">
         {t.source
           ? 'An attached table is never expired: its files are not Lakelet\'s to delete.'
@@ -147,12 +159,14 @@ export function TableDetail(props: TableDetailProps) {
       {error && <div className="error" data-testid="detail-error"><pre>{error}</pre></div>}
       <footer className="actions">
         <button type="button" className="quiet" onClick={onSample} disabled={!!busy} data-testid="sample-rows">Sample rows</button>
-        {t.source ? (
+        {t.source && changed.length > 0 && onReattach ? (
+          <button type="button" className="primary" onClick={onReattach} disabled={!!busy} data-testid="reattach">{busy ?? 'Register again'}</button>
+        ) : t.source ? (
           <button type="button" className="primary" onClick={onRefresh} disabled={!!busy} data-testid="refresh">{busy ?? 'Refresh'}</button>
         ) : (
           <button type="button" className="primary" onClick={onExpire} disabled={!!busy || !reclaimable} data-testid="expire">{busy ?? 'Expire snapshots'}</button>
         )}
-        <Command line={t.source ? refreshCommand(t.name) : expireCommand(t.name)} />
+        <Command line={t.source ? (changed.length ? attachCommand(t.name, t.source, t.public, true) : refreshCommand(t.name)) : expireCommand(t.name)} />
       </footer>
     </section>
   );

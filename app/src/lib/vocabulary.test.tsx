@@ -49,6 +49,9 @@ describe('the two vocabularies', () => {
     expect(verdictSentence(model({ verdict: 'red', est_wall_local: 9000 }), 'simple')).toBe('Too big for this machine right now.');
     expect(verdictSentence(model({ error: 'Table with name x does not exist', verdict: null, words: null }), 'technical')).toBe('not estimated: Table with name x does not exist');
     expect(verdictSentence(model({ error: 'nope', verdict: null, words: null }), 'simple')).toContain('could not size');
+    // the fourth state (trust round T3): a scan outside the catalog, never Green
+    expect(verdictSentence(model({ verdict: 'none', words: 'Not estimated', reason: '1 scan outside the catalog: read_parquet', est_wall_local: null }), 'technical')).toBe('Not estimated');
+    expect(verdictSentence(model({ verdict: 'none', words: 'Not estimated', est_wall_local: null }), 'simple')).toBe('Not sized: it reads something outside the project, so there is no estimate. It will run.');
   });
 
   it('summarise the plan', () => {
@@ -58,6 +61,8 @@ describe('the two vocabularies', () => {
     expect(planSummary([model({})], 'technical')).toBe('1 model · all Green');
     expect(planSummary([model({})], 'simple')).toBe('1 question · all quick');
     expect(planSummary([model({ error: 'x', verdict: null })], 'technical')).toBe('1 model · 1 not estimated');
+    expect(planSummary([model({ verdict: 'none', words: 'Not estimated' })], 'technical')).toBe('1 model · 1 not estimated');
+    expect(planSummary([model({ verdict: 'none', words: 'Not estimated' })], 'simple')).toBe('1 question · 1 not sized');
     expect(planSummary([], 'simple')).toBe('0 questions');
   });
 
