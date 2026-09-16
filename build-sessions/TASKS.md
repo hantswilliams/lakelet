@@ -59,7 +59,7 @@ Decided 2026-09-11 (Hants, in conversation). Each item names the document that s
 - [x] The Open Data dataset (`real-data-plan.md` R3 as amended): Overture Maps `addresses` (21.9 GB, 32 files, 472.8 M rows) and `places`, attached from the Mac with no credentials 2026-09-11; `/docs/remote` has the commands and numbers. pyiceberg read it anonymously from another process (126,285 rows of a bounding-box scan).
 - [x] AWS for the real-data round (`real-data-plan.md` R2): the private bucket and its IAM user exist and the S3 tests ran against them 2026-09-11 (`/docs/remote` has the policy and the command). Keys stay in the shell's environment, never in the repo or `lakelet.toml`; the bucket's name carries the account id and stays out of the logs. No demo bucket: R3 amended to an AWS Open Data dataset.
 - [ ] The founder uses the app daily on a real dataset for a week (app brief §6). `examples/sample-data/make_sample.py` and any CSV are enough to start.
-- [ ] **Trust round, Hants' items** (`lakelet-build-sessions_091526b.md` §9): the Mac run; confirm `PUBLIC_WAITLIST_URL` is a repository variable, or submit the live form once and record the date; the README's screenshot (`docs/screenshots/query-verdict.png`); one outsider from clone to a saved question; the address in `SECURITY.md`.
+- [ ] **Trust round, Hants' items** (`lakelet-build-sessions_091526b.md` §9): the Mac run; confirm `PUBLIC_WAITLIST_URL` is a repository variable, or submit the live form once and record the date; ~~the README's screenshot~~ (taken 2026-09-16, `docs/screenshots/query-verdict.png`, revenue by month on the sample data); one outsider from clone to a saved question; the address in `SECURITY.md`.
 
 ## The map
 
@@ -107,6 +107,7 @@ Open:
 - [ ] **`lakelet audit network` counts connections, not name resolutions.** The guard patches `socket.socket.connect` but not `socket.getaddrinfo`, so on a machine without DNS an attempt to reach a host *by name* is never counted, and the self-check (a bare IP) still passes. The zero is measured on a machine with DNS and unmeasured without one. Counting a non-loopback resolution as an attempt would close it and would change what the command reports, so it is a decision; the log of 2026-09-12 §2 has the measurement.
 - [x] Three transfer archives at the repo root removed (2026-09-15, T8).
 - [ ] `deploy-pages.yml` still has the older action majors; bump when next touched.
+- [ ] From the first screenshot session (2026-09-16): the grid's column widths follow the longest cell of the first column, so a two-column result puts the number far right of its header; the "Copy as command" line's `'\''month'\''` is correct shell quoting but unreadable, `lakelet sql --file` would read better when the SQL contains quotes.
 - [ ] Known unknowns still open in the core brief's §7: the 150 ms gauge budget on a never-read table (PRD allows 800 ms uncached); how much of DuckDB's filter rendering the predicate parser needs for real workloads; partner prefixes with drift or path-only partitions (fixtures pass; intake decides); the lease carrying a metadata tree. The sidecar memory split closed with A8.
 
 Closed:

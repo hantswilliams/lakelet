@@ -4,7 +4,7 @@ An open-source, local-first lakehouse in one binary: Iceberg tables on your lapt
 
 Developer preview, macOS and Linux, from source. Apache 2.0. Site and docs: **https://hantswilliams.github.io/lakelet/**
 
-<!-- screenshot: docs/screenshots/query-verdict.png — the query screen with a verdict above the grid (taken from the app on a Mac; trust round T7) -->
+![The query screen: the verdict and the sentence before the rows, then the chart and the grid](docs/screenshots/query-verdict.png)
 
 ## What it is
 
