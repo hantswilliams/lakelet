@@ -25,7 +25,7 @@
 | 1 | `lakelet versions` and `restore`, the three routes with the diff, `[git] auto_commit` and the run-time commit, the settings row | **built** 2026-09-12 |
 | 2 | **Save as question** on the query screen: the title box, 409 `question_exists` → Replace it, the notice with the checks and the version | **built** 2026-09-12; the eighth sidecar came with it |
 | 3 | The Versions section on the model detail, both modes, Restore (G6); `GET /api/git` for the panel's line | **built** 2026-09-15; Mac green, committed `97ee6aa` |
-| 4 | `lakelet lineage`, `GET /api/lineage/{name}`, the lines on the table and model details (G8) | **next** (and V3 of `decisions-for-review_091526.md`, model staleness, if decided) |
+| 4 | `lakelet lineage`, `GET /api/lineage/{name}`, the lines on the table and model details (G8); **V3**: the per-model state (fresh, edited, upstream changed, never built) on the DAG and the cards, `lakelet run --stale` and **Refresh what changed** | **next** — V3 decided 2026-09-16 |
 | 5 | Docs, the log, `TASKS.md`, the CLI reference (the close) | to go |
 
 Gates as of 2026-09-15 (after the trust round): core **242 passed, 10 skipped** in the container, Vitest **72**, Playwright **28** against nine sidecars, `tsc` clean, `astro build` 21 pages, `gen-readme-status.py --check` current, `cargo test` 8 (unchanged; it cannot build in the container). `audit network` zero, with a dbt model built inside the guards.
@@ -59,7 +59,7 @@ Decided 2026-09-11 (Hants, in conversation). Each item names the document that s
 - [x] The Open Data dataset (`real-data-plan.md` R3 as amended): Overture Maps `addresses` (21.9 GB, 32 files, 472.8 M rows) and `places`, attached from the Mac with no credentials 2026-09-11; `/docs/remote` has the commands and numbers. pyiceberg read it anonymously from another process (126,285 rows of a bounding-box scan).
 - [x] AWS for the real-data round (`real-data-plan.md` R2): the private bucket and its IAM user exist and the S3 tests ran against them 2026-09-11 (`/docs/remote` has the policy and the command). Keys stay in the shell's environment, never in the repo or `lakelet.toml`; the bucket's name carries the account id and stays out of the logs. No demo bucket: R3 amended to an AWS Open Data dataset.
 - [ ] The founder uses the app daily on a real dataset for a week (app brief §6). `examples/sample-data/make_sample.py` and any CSV are enough to start.
-- [ ] **Trust round, Hants' items** (`lakelet-build-sessions_091526b.md` §9): the Mac run; confirm `PUBLIC_WAITLIST_URL` is a repository variable, or submit the live form once and record the date; ~~the README's screenshot~~ (taken 2026-09-16, `docs/screenshots/query-verdict.png`, revenue by month on the sample data); one outsider from clone to a saved question; the address in `SECURITY.md`.
+- [ ] **Trust round, Hants' items** (`lakelet-build-sessions_091526b.md` §9): ~~the Mac run~~ (green, committed `3c60296` 2026-09-16); ~~the waitlist~~ (the live build posts to the Formspree endpoint, confirmed 2026-09-16 by reading the deployed page; a test submission arrived 2026-09-15); ~~the README's screenshot~~ (taken 2026-09-16, `docs/screenshots/query-verdict.png`, revenue by month on the sample data); one outsider from clone to a saved question; the address in `SECURITY.md`.
 
 ## The map
 
@@ -127,7 +127,7 @@ Closed:
 
 ## The site (`web/`, live at hantswilliams.github.io/lakelet)
 
-- [ ] `PUBLIC_WAITLIST_URL` is not set; the forms log to the console and show success, so signups are lost. Pick a provider (Formspree, Buttondown, or Cloudflare Pages with `functions/api/waitlist.ts`).
+- [x] `PUBLIC_WAITLIST_URL`: Formspree, set as a repository variable; the deployed page carries the endpoint (confirmed 2026-09-16).
 - [ ] Domain: when bought, add under Settings → Pages and set `SITE_URL`.
 - [ ] Docs follow-ups: a CI check that `gen-cli-reference.py` is current; the quickstart transcripts are illustrative until the clean-machine run replaces them; a page on `audit network` and one on history's schema.
 - [x] `/docs/app` (2026-09-11), and the overview's status table names the app.
@@ -138,7 +138,7 @@ Closed:
 
 **`trust-round-plan.md` T1 to T8**: decided 2026-09-15, all agreed, built the same day (above).
 
-**`decisions-for-review_091526.md` V1 to V4** (2026-09-15, from the four articles in `research/`; `research/README.md` has the links): V1 format-version 3 for new tables after a spike; V2 `lakelet tables compact`; V3 a per-model state (fresh, edited, upstream changed, never built) and `lakelet run --stale` inside step 4; V4 the durability sentence, Renart and Duckle as comparables, the unsourced figures kept out, `research/` gitignored. V1 first: V2 depends on its result.
+**`decisions-for-review_091526.md` V1, V2, V4** (2026-09-15, from the four articles in `research/`; `research/README.md` has the links): V1 format-version 3 for new tables after a spike; V2 `lakelet tables compact`; V4 the durability sentence, Renart and Duckle as comparables, the unsourced figures kept out. V1 first: V2 depends on its result. **V3 decided 2026-09-16** (a per-model state and `lakelet run --stale`): built inside step 4 of the versions round.
 
 Decided: `decisions-for-review_091226.md` D1 (dark mode, 2026-09-12, built the same day); `versions-plan.md` G1 to G10 (2026-09-12, no amendments; one correction of fact recorded under G3 when step 0 was built); `real-data-plan.md` R1 to R10 (2026-09-11, R3 amended the same day); `ship-v0-plan.md` S1 to S14 (2026-09-11), build held until the real-data round; `decisions-for-review_091126.md`, all four (2026-09-11), shipped the same day; `app-v0-plan.md` A1 to A14 (2026-09-10); `decisions-for-review_090926.md`, all three (2026-09-09); the order of what follows step 5 (2026-09-11, above).
 

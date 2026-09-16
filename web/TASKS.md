@@ -104,6 +104,8 @@ survived. Two consequences worth keeping:
 
 ### Hants, before this is live
 
+*2026-09-16: all three done. The deployed page's waitlist handler posts to `https://formspree.io/f/meaqdnjv` (read off the live build, so the repository variable is set), Hants confirmed a test submission arrived on 2026-09-15, `npm run build` has run on the Mac and in the container (21 pages), and the trust round's lede is live.*
+
 1. **Set the repo variable.** Settings → Secrets and variables → Actions →
    Variables → New variable: name `PUBLIC_WAITLIST_URL`, value
    `https://formspree.io/f/meaqdnjv`. This is the only step nothing in the repo
