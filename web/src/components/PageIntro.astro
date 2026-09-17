@@ -1,0 +1,7 @@
+---
+// Copyright 2026 Lakelet contributors
+// SPDX-License-Identifier: Apache-2.0
+interface Props { label: string; title: string; accent: string; description: string }
+const { label, title, accent, description } = Astro.props;
+---
+<section class="page-intro section-frame"><p class="eyebrow"><span class="status-dot"></span>{label}</p><h1>{title}<br /><span>{accent}</span></h1><div class="intro-bottom"><p>{description}</p><div class="intro-actions"><slot /></div></div></section>

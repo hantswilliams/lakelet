@@ -47,9 +47,11 @@ lakehouse ready in /Users/you/acme
 
 ### 2. Import a file
 
+The repository ships a script that writes a small made-up dataset, so there is a file to import without bringing your own (`examples/sample-data/`): `python3 ~/lakelet/examples/sample-data/make_sample.py ~/acme/sample` writes `orders.csv` and three more. The output below is from a larger `orders.csv`; yours will say 5,000 rows.
+
 ```bash
-uv run --project ~/lakelet/core lakelet import orders.csv --preview   # the schema it would create, and stop
-uv run --project ~/lakelet/core lakelet import orders.csv
+uv run --project ~/lakelet/core lakelet import sample/orders.csv --preview   # the schema it would create, and stop
+uv run --project ~/lakelet/core lakelet import sample/orders.csv
 ```
 
 ```text

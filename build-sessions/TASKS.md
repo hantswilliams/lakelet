@@ -2,6 +2,42 @@
 
 *The one file to open to know where the build is. Updated every session; dates are when a status changed. "Now" names the brief the build is on. The briefs say what each step is and what its gate is (`versions-plan.md` today; `core-v0.5-plan.md` for the core, `app-v0-plan.md` for the desktop shell, both still authoritative for what they cover; a decision belonging to no brief is a dated `decisions-for-review_<MMDDYY>.md`); `lakelet-build-sessions.md` is the map of the sessions; the dated logs (`lakelet-build-sessions_<MMDDYY>.md`) say what happened. This file only says where we are and what comes next.*
 
+## Complete data-story website — 2026-09-16, this branch only
+
+Scope: `build-sessions/website-story-v1-plan.md` (repository root).
+
+- [x] Apply the selected dark/lime direction to all marketing and documentation routes.
+- [x] Move the diagram before Lookahead and introduce provider-neutral “Open storage & compute” wording (2026-09-17). Build and 65 checks pass; desktop/mobile reviewed.
+- [x] Prototype the question/local-or-S3 Lookahead flow on the homepage: six model-backed illustrative scenarios, responsive diagram and gauge, keyboard controls, assumptions. Build and 65 checks pass.
+- [x] Apply the approved local/S3 headline and Lakelet Lookahead name. Production build and 61 checks pass; desktop/mobile copy and demo reviewed.
+- [x] Restore the homepage laptop / S3 / worker / catalog diagram in dark/lime, with responsive labels and explicit planned publishing/worker paths. Build and 61 checks pass.
+- [x] Responsive site navigation, native mobile menu, documentation navigation, footer, and source-installation calls to action.
+- [x] Reuse the interactive scan visualization on the homepage and how-it-runs page.
+- [x] Actual app image, current feature status, fourth verdict, and recovery documentation.
+- [x] Import committed website documentation/status from trust round `3c60296`.
+- [x] Clearly label proposed Team/Burst pricing and other unavailable features.
+- [x] Show a usable GitHub fallback when no signup endpoint is configured.
+- [x] Production build: 25 pages; 60 pytest checks pass at `/lakelet/` and `/`, including configured signup markup. All 25 preview routes return HTTP 200.
+- [x] Browser review: desktop, 390px and 360px phones; menus, docs navigation, experiment, and disclosures verified.
+- [x] User authorized committing and publishing this separate website branch to GitHub (2026-09-17).
+- [ ] User review of the complete site before any merge or deployment.
+
+
+## Website exploration — parallel branch, 2026-09-16
+
+Scope: `website-exploration-plan.md` in `build-sessions/`; isolated branch
+`codex/website-exploration` at base `97ee6aa`. This is independent of the core steps.
+
+- [x] Separate worktree and dedicated local preview.
+- [x] Comparison page plus product, interactive data story, and editorial concepts.
+- [x] Actual app screenshot using generated data, with provenance.
+- [x] Production build and 14 persistent pytest checks pass.
+- [x] Desktop/mobile browser checks; radio, keyboard slider and details controls work.
+- [x] Exploration routes carry noindex and are excluded from the sitemap.
+- [x] User selected 02 / Data story; complete-site implementation stays in this worktree.
+
+Results: `build-sessions/lakelet-build-sessions_091626.md` (from repository root).
+
 ## Now
 
 **Session 9, the rest** (`versions-plan.md`). G1 to G10 accepted 2026-09-12 with no amendments; G11 added and decided the same day; G3's and G4's sentences corrected in the brief where they were wrong. Steps 0 to 2 are built and verified on the Mac; step 3 is built in the container (2026-09-15) and awaits the Mac; steps 4 and 5 are next. The detail is in `lakelet-build-sessions_091226.md` (steps 0 to 2) and `lakelet-build-sessions_091526.md` (step 3).

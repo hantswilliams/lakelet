@@ -1,0 +1,40 @@
+---
+// Copyright 2026 Lakelet contributors
+// SPDX-License-Identifier: Apache-2.0
+import { url } from '../lib/url';
+import '../styles/exploration.css';
+interface Props { title: string; theme?: string; active?: string }
+const { title, theme = 'studio', active = 'overview' } = Astro.props;
+const concepts = [
+  ['overview', 'All concepts', '/explore'],
+  ['product', '01 / Product', '/explore/product'],
+  ['story', '02 / Data story', '/explore/story'],
+  ['editorial', '03 / Editorial', '/explore/editorial'],
+];
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="Three website directions for Lakelet. Local design exploration." />
+    <title>{title} · Lakelet exploration</title>
+    <link rel="icon" type="image/svg+xml" href={url('/favicon.svg')} />
+  </head>
+  <body class={theme}>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <nav class="preview-bar" aria-label="Design exploration">
+      <a class="preview-label" href={url('/explore')}>LAKELET <span>DESIGN STUDY</span></a>
+      <div class="concept-tabs">
+        {concepts.map(([id, label, path]) => <a href={url(path)} aria-current={active === id ? 'page' : undefined}>{label}</a>)}
+      </div>
+    </nav>
+    <slot />
+    <footer class="explore-footer">
+      <a href={url('/explore')}>← Compare the three directions</a>
+      <span>Website exploration · September 2026</span>
+      <a href={url('/')}>Current website ↗</a>
+    </footer>
+  </body>
+</html>

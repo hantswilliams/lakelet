@@ -1,7 +1,7 @@
 export const nav = [
   { href: '/app',         label: 'The app' },
   { href: '/how-it-runs', label: 'How it runs' },
-  { href: '/medallion',   label: 'Medallion' },
+  { href: '/medallion',   label: 'Workflows' },
   { href: '/agents',      label: 'For agents' },
   { href: '/pricing',     label: 'Pricing' },
   { href: '/docs',        label: 'Docs' },
@@ -11,7 +11,7 @@ export const site = {
   name: 'Lakelet',
   tagline: 'Open-source local-first lakehouse',
   github: 'https://github.com/hantswilliams/lakelet',
-  cta: { label: 'Get early access', href: '/#waitlist' },
+  cta: { label: 'Try Lakelet', href: '/docs/install' },
   footer: {
     left: 'Lakelet · Open source under Apache 2.0 · Developer preview, macOS and Linux',
     right: 'Built on DuckDB, Apache Iceberg and dbt Core',

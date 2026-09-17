@@ -43,6 +43,7 @@ export default defineConfig({
   output: 'static',
   trailingSlash: 'never',
   build: { format: 'file' },          // /pricing -> dist/pricing.html (clean URLs on any static host)
-  integrations: [sitemap()],
+  // Exploration routes are local review artifacts, not search landing pages.
+  integrations: [sitemap({ filter: page => !new URL(page).pathname.split('/').includes('explore') })],
   markdown: { rehypePlugins: [rehypeBasePath], shikiConfig: { theme: 'github-dark' } },
 });

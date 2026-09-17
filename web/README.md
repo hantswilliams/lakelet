@@ -3,7 +3,7 @@
 Live at <https://hantswilliams.github.io/lakelet/>. Running state and what is
 deliberately not done yet: **`TASKS.md` in this folder**.
 
-Static site built with [Astro](https://astro.build). Zero client-side framework; the only JavaScript shipped is the hero slider, the looping terminal replay, and the waitlist form handler.
+Static site built with [Astro](https://astro.build). Zero client-side framework; small scripts handle the data-story controls, mobile documentation navigation, and configured signup forms.
 
 ```
 npm install
@@ -12,11 +12,71 @@ npm run build      # -> dist/
 npm run preview
 ```
 
+## Data-story website (this branch)
+
+Branch `codex/website-exploration` is developed in the separate sibling worktree
+`/Users/hants/Development/Python/lakelet-website-exploration`. The selected concept,
+02 / Data story, now covers the complete website: home, app, how it runs, workflows,
+agent interfaces, pricing, and all developer documentation. This branch is shared
+for review; integration and deployment remain separate.
+
+```sh
+npm run build
+npm run preview -- --host 127.0.0.1 --port 4328
+# Open http://127.0.0.1:4328/lakelet/
+```
+
+Run the website gates after building, using a Python environment with the core dependencies and pytest available:
+
+```sh
+python -m pytest tests -p no:cacheprovider
+```
+
+The existing core Python environment can run these checks. The tests cover every
+page's landmarks, navigation, local links, fragments, assets, feature availability,
+interactive markup, docs, and signup states. For a root-domain build, set
+`SITE_BASE=/` for both the build and pytest. Set `PUBLIC_WAITLIST_URL` for both
+when checking the configured form; otherwise the pricing page offers GitHub updates.
+
+Original study routes remain at `/lakelet/explore` and its `/product`, `/story`, and
+`/editorial` children. They are excluded from the sitemap and carry noindex. The real
+site uses `Base.astro`, the selected theme, and `website.css`; the study keeps its
+own layout. `DataStory.astro` retains the measured Overture transfer demonstration on
+how-it-runs and concept 02. The homepage uses `LookaheadDemo.astro`: three questions,
+local/S3 choices, the data flow, memory/spill, time, and a verdict.
+
+Product documentation and status were reconciled to committed trust-round changes
+at `3c60296`; core/app source in this worktree was not changed. Screenshot provenance
+is in `public/exploration/README.md`. Scope and gates are in
+`../build-sessions/website-story-v1-plan.md`; results are in the dated session log.
+
+## Homepage Lookahead scenarios
+
+These are illustrative model outputs, not measured query runs or visitor-machine
+benchmarks. `scripts/generate_lookahead.py` defines three synthetic operator plans,
+assumed table statistics, and one explicit laptop profile. It calls the existing core
+estimator for local and S3 storage, and exports six results as TypeScript constants.
+No query executes and no data is fetched when a visitor changes the controls.
+
+With the core's Python dependencies available, run from `web/`:
+
+```sh
+python -B scripts/generate_lookahead.py --write  # regenerate after changing inputs
+python -B scripts/generate_lookahead.py          # verify against the current model
+python -B -m pytest tests -p no:cacheprovider
+```
+
+The model checks ensure location changes read time, but not bytes or peak memory;
+that the examples cover both disk spill and a slow remote transfer; and that exported
+values remain consistent with the core. Browser review covers all six selections,
+keyboard radio controls, responsive layout, and the setup disclosure. The original
+Overture experiment remains available on `/how-it-runs` for comparison.
+
 ## Layout
 
 ```
 src/
-  layouts/Base.astro       <head>, fonts, Nav, Footer, site-wide waitlist handler
+  layouts/Base.astro       metadata, selected dark theme, Nav, Footer, signup handler
   components/              Nav, Footer, Logo, Fish, Waitlist, Terminal, ReplayTerminal,
                            GaugeSlider, Verdicts, CompareBars, VendorCard, WorkerLadder
   data/
@@ -24,7 +84,9 @@ src/
     pricing.ts             every number with a dollar sign: plans, worker ladder, modeled month
     facts.ts               the dated facts the pages cite
     status.ts              what is built and what is planned -- the ONE place; drives <BuildState/>
-    demo.ts                the measured Overture numbers the homepage demo uses
+    demo.ts                measured Overture numbers for the original transfer demo
+    lookahead.ts           homepage scenario labels and display formatting
+    lookahead-estimates.ts generated illustrative estimates from the core gauge model
   styles/tokens.css        global tokens and shared primitives (page-specific CSS lives in each page)
   pages/                   index, app, how-it-runs, medallion, agents, pricing
 public/                    favicon.svg, llms.txt   (robots.txt is generated: src/pages/robots.txt.ts)
