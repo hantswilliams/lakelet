@@ -807,9 +807,17 @@ def run_models(
     plan_only: Annotated[
         bool, typer.Option("--plan", help="Print the DAG with its verdicts and stop.")
     ] = False,
+    stale: Annotated[
+        bool,
+        typer.Option(
+            "--stale",
+            help="Build only what is not fresh: edited, an input changed, or never built.",
+        ),
+    ] = False,
 ) -> None:
     """Build the project's dbt models through the catalog, each with its verdict first.
-    A `view` model becomes a view in the catalog; a `table` model an Iceberg table."""
+    A `view` model becomes a view in the catalog; a `table` model an Iceberg table. The
+    DAG says each model's state: fresh, edited, upstream (an input changed) or never."""
     from lakelet.dbt import runner
 
     with _open() as p:
@@ -818,7 +826,7 @@ def run_models(
                 models = runner.plan(p, select)
                 out.print("\n".join(runner.dag_lines(models)), highlight=False)
                 return
-            report = runner.run(p, select, burst=burst, run_anyway=run_anyway)
+            report = runner.run(p, select, burst=burst, run_anyway=run_anyway, stale=stale)
         except runner.NoBurstYet as e:
             _fail(str(e))
         except runner.RedRefusedRun as e:
@@ -827,6 +835,9 @@ def run_models(
         except (runner.DbtMissing, runner.DbtFailed) as e:
             _fail(str(e))
     out.print("\n".join(runner.dag_lines(report.models)), highlight=False)
+    if report.selected is not None and not report.selected:
+        out.print("every model is fresh; nothing to run", highlight=False)
+        return
     for r in report.results:
         line = f"  {r.name}: {r.status} in {r.seconds:.2f} s"
         if r.message and r.status != "success":
@@ -904,6 +915,62 @@ def restore(
         )
     else:
         out.print("that version is what the file already held; no new version", highlight=False)
+
+
+@app.command()
+def lineage(
+    name: Annotated[str, typer.Argument(help="A table, a view or a model.")],
+    depth: Annotated[
+        int, typer.Option("--depth", min=1, help="How many levels each way; 1 is direct.")
+    ] = 1,
+    as_json: Annotated[bool, typer.Option("--json", help="The same as the API returns.")] = False,
+) -> None:
+    """What a table, view or model reads and what reads it, and how each edge is known:
+    a dbt ref() or source(), a table named in the SQL, or a catalog view's SQL. From the
+    last compile's manifest and the catalog; compiles first when the models are newer."""
+    from lakelet.dbt import runner
+    from lakelet.lineage import NoSuchNode, lineage
+
+    with _open() as p:
+        try:
+            result = lineage(p, name, depth)
+        except NoSuchNode as e:
+            _fail(str(e))
+        except runner.DbtFailed as e:
+            _fail(f"dbt could not compile the models: {e}")
+    if as_json:
+        out.print(json.dumps(_lineage_json(result), indent=2), highlight=False)
+        return
+    for line in lineage_lines(result):
+        out.print(line, highlight=False, soft_wrap=True)
+
+
+def _lineage_json(result) -> dict[str, Any]:
+    from dataclasses import asdict
+
+    return asdict(result)
+
+
+def lineage_lines(result) -> list[str]:
+    head = f"{result.name}  {result.kind}"
+    if result.built_by in ("imported", None) or result.built_by.startswith("attached from "):
+        head += f", {result.built_by}" if result.built_by else ""
+    else:
+        head += f", built by {result.built_by}"
+    if result.kind == "model":
+        head += ", never built"
+    if result.last_built:
+        head += f", {result.last_built[:19].replace('T', ' ')} UTC"
+    lines = [head]
+    for title, edges in (("reads from", result.upstream), ("feeds", result.downstream)):
+        lines.append(f"  {title}" if edges else f"  {title}: nothing")
+        width = max((len(e.name) for e in edges), default=0)
+        for e in edges:
+            indent = "    " + "  " * (e.depth - 1)
+            lines.append(f"{indent}{e.name:<{width}}  {e.kind:<5}  {e.via}")
+    if result.compiled:
+        lines.append("(the models were compiled first: the manifest was older than they are)")
+    return lines
 
 
 @app.command()

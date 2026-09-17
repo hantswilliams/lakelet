@@ -64,6 +64,28 @@ Rows and bytes come from the current snapshot's manifests, so they are exact for
 
 Row counts in `tables list` and `describe` are the data files' record counts less the position deletes on file, which is exact for DuckDB's own deletes (one entry per row) and an upper bound for an equality delete written by another engine.
 
+## Lineage
+
+```bash
+lakelet lineage orders               # what reads it, and what it reads
+lakelet lineage by_customer --depth 3
+lakelet lineage stg --json           # the same as GET /api/lineage/stg
+```
+
+`lineage` answers for a table, a view or a dbt model, at table level, in both directions:
+
+```
+by_customer  table, built by by_customer, 2026-09-16 11:16:34 UTC
+  reads from
+    stg      view   ref
+  feeds
+    top      model  ref
+```
+
+Every edge says how it is known: `ref` and `source` come from the dbt manifest of the last compile (compiled first when it is missing or older than the models, and the command says so); `sql` is a table a model names bare in its SQL, which every saved question does; `view` is a table a catalog view that did not come from dbt binds to. A name is a table or a view in the catalog, or a `model` not built yet; a table model and the table it built are one thing. The head line says who built it — a model, `imported`, or `attached from <prefix>` — and when, from history's record of the model's last run or the table's current snapshot. `--depth N` walks further, each name once at the level it was first reached. Nothing here parses SQL: the manifest and DuckDB's own parse of the statement already know. Column-level lineage is a later day.
+
+The app shows the same two lines, **Reads from** and **Feeds**, on every table, view and model detail, each name a link to that detail; see [the app](/docs/app).
+
 ## Snapshots, history and expiry
 
 Every write is an Iceberg snapshot, and an Iceberg table never deletes a data file on its own: a table rebuilt in place (a `dbt run`, a `DELETE` then `INSERT`) keeps every previous version's files until snapshots are expired, and `import --replace` drops and recreates the table, leaving the old table's files in the same folder. Nothing in Lakelet removes files unless you ask, because that is the one thing that cannot be undone.

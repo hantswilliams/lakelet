@@ -5,7 +5,9 @@
 // the models in that project. Run a statement, save it with a title, see the checks and the
 // version in the notice, meet the 409 on the same title and take Replace it, then find the
 // question on the Models screen with its title as the description — which is the whole of
-// G7's sentence, end to end against a real core.
+// G7's sentence, end to end against a real core. Then V3 (decisions 2026-09-16): the
+// question is `never` until Refresh what changed builds it, an edit through Save makes it
+// `edited`, and refreshing what changed makes it `fresh` again.
 
 import { test, expect } from '@playwright/test';
 import { pageUrl, readStates } from './sidecar';
@@ -64,4 +66,48 @@ test('a question is saved from the query screen and appears on the Models screen
   await row.click();
   await expect(screen.getByTestId('model-detail')).toContainText('Total by customer');
   await expect(screen.getByTestId('model-detail')).toContainText('models/questions/total_by_customer.sql');
+
+  // V3: never built; Run what changed is `lakelet run --stale` and builds it
+  await expect(row.getByTestId('state')).toHaveText('never');
+  await expect(screen.getByTestId('model-detail').getByTestId('state-sentence')).toHaveText('never · never built');
+  await expect(screen.getByTestId('run-stale')).toHaveText(/^Run what changed \(\d+\)$/);
+  await expect(screen.getByTestId('command').filter({ hasText: 'lakelet run --stale' })).toHaveCount(1);
+  await screen.getByTestId('run-stale').click();
+  await expect(screen.getByTestId('run-report')).toContainText('built in', { timeout: 90_000 });
+  await expect(row.getByTestId('state')).toHaveText('fresh', { timeout: 90_000 });
+
+  // an edit through Save (the same title, Replace it) makes it edited; refreshing what
+  // changed makes it fresh again
+  await page.getByTestId('screen-tables').click();
+  await editor.click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.insertText('select customer, sum(amt) as total, count(*) as orders from orders group by 1');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('run').click();
+  await expect(page.getByTestId('query')).toHaveAttribute('data-done-ms', /\d+/);
+  await page.getByTestId('save-question').click();
+  await page.getByTestId('question-title').fill('Total by customer');
+  await page.getByTestId('question-save').click();
+  await expect(page.getByTestId('question-exists')).toContainText('total_by_customer');
+  await page.getByTestId('question-replace').click();
+  await expect(page.getByTestId('saved-question')).toContainText('Total by customer');
+  await page.getByTestId('saved-close').click();
+  await page.getByTestId('screen-models').click();
+  await expect(screen.getByTestId('dag')).toBeVisible({ timeout: 90_000 });
+  await expect(row.getByTestId('state')).toHaveText('edited');
+  await row.click();
+  await expect(screen.getByTestId('model-detail').getByTestId('state-sentence')).toContainText('edited · the SQL changed since the last run');
+  // and what changed is shown: the diff of the compiled SQL since the run
+  const diff = screen.getByTestId('model-detail').getByTestId('state-diff');
+  await expect(diff.locator('.del')).toContainText('sum(amt) as total from');
+  await expect(diff.locator('.add')).toContainText('count(*) as orders');
+  // the review above the DAG lists it with the same diff, to read before running
+  const review = screen.getByTestId('review');
+  await expect(review).toContainText('Out of date');
+  await expect(review.getByTestId('review-total_by_customer').getByTestId('state-diff').locator('.add')).toContainText('count(*) as orders');
+  await screen.getByTestId('run-stale').click();
+  await expect(row.getByTestId('state')).toHaveText('fresh', { timeout: 90_000 });
+  await expect(screen.getByTestId('model-detail').getByTestId('state-sentence')).toHaveText('fresh');
+  await expect(screen.getByTestId('model-detail').getByTestId('what-changed')).toHaveCount(0);
+  await expect(screen.getByTestId('review')).toHaveCount(0);
 });

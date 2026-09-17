@@ -15,7 +15,7 @@ What it is not, yet: burst to your own cloud when the laptop is not enough, ques
 ## What is built and what is planned
 
 <!-- status:start -->
-*Generated from `web/src/data/status.ts` (as of 2026-09-15); `python3 web/scripts/gen-readme-status.py` rewrites it, CI checks it.*
+*Generated from `web/src/data/status.ts` (as of 2026-09-17); `python3 web/scripts/gen-readme-status.py` rewrites it, CI checks it.*
 
 **Built, from source, today**
 
@@ -30,6 +30,7 @@ What it is not, yet: burst to your own cloud when the laptop is not enough, ques
 - **The desktop app**: from source, no installer: projects, drop-to-import with a preview, the SQL screen with the verdict before the rows, the streaming grid, the auto-chart, the table detail, the Gauge screen with estimate-versus-actual, settings — [docs](https://hantswilliams.github.io/lakelet/docs/app)
 - **Proof it stays put**: lakelet audit network measures zero outbound attempts on the quickstart; PRIVACY.md says exactly what is stored where — [docs](https://hantswilliams.github.io/lakelet/docs/install)
 - **Every save is a version**: the project is a git repository, a save or a run is a commit, lakelet versions and restore, the Versions section on the model detail — [docs](https://hantswilliams.github.io/lakelet/docs/questions)
+- **Lineage, and whether a model is out of date**: lakelet lineage says what a table, view or model reads and what reads it, and how each edge is known; every model carries a state — fresh, edited, upstream, never — with what changed, and lakelet run --stale builds only what is not — [docs](https://hantswilliams.github.io/lakelet/docs/tables#lineage)
 - **Backups, crashes, upgrades and moves**: a copy of the folder is the backup, a failed replace keeps the old table, a moved folder is relocated, a newer schema is refused — every sentence tested — [docs](https://hantswilliams.github.io/lakelet/docs/recovery)
 
 **Planned, not built** (the site marks these the same way)
@@ -39,7 +40,6 @@ What it is not, yet: burst to your own cloud when the laptop is not enough, ques
 - **lakelet mcp (the agent tools)**: the MCP server, per-tool permissions, the per-agent daily cap and the audit log *(session 5, after session 8)*
 - **The Team catalog**: hosted Postgres, vended credentials, scheduled runs, compaction and alerts *(session 8 onward)*
 - **Installers and a brew tap**: signed DMG, the extensions bundled, a PyPI release. Until then: clone and uv sync *(session 10)*
-- **Lineage**: table-level lineage from the dbt manifest and the catalog, on the CLI, the API and both details *(session 9, the rest — step 4)*
 - **Per-machine correction**: the gauge's constants were tuned on one machine; the record is kept, the correction is not applied yet *(session 10)*
 - **Self-hosted**: the catalog and control plane in your own VPC, SSO, audit to your SIEM *(after the Team tier)*
 <!-- status:end -->

@@ -3,7 +3,8 @@
 // Real-data brief R5, step 6: the Models screen against the seventh sidecar, whose dbt
 // project has `stg` (a view over orders, two tests in schema.yml) and `by_customer` (a
 // table over stg). The plan lists both with verdicts; the detail shows the compiled SQL,
-// the refs and the tests; Run all builds through `lakelet run`, the view lands in the
+// the lineage lines (versions brief G8: each name a link that opens that detail, across
+// screens) and the tests; Run all builds through `lakelet run`, the view lands in the
 // catalog with its own detail shape, and the Gauge screen has the two runs; Simple mode
 // says question and check and the switch is remembered.
 
@@ -35,21 +36,42 @@ test('the plan, a model, Run all, the view detail, the runs, and Simple mode', a
   await expect(rows.nth(1)).toContainText('table');
   await expect(screen.getByTestId('command').first()).toContainText('lakelet run');
 
-  // the first model is open: its compiled SQL, refs, tests, and its line
+  // the first model is open: its compiled SQL, lineage, tests, and its line
   const detail = screen.getByTestId('model-detail');
   await expect(detail).toContainText('models/stg.sql');
   await expect(detail).toContainText('Orders with a positive amount.');
   await expect(detail.getByTestId('compiled-sql')).toContainText('amt > 0');
   await expect(detail.getByTestId('compiled-sql')).toContainText('"lakelet"."main"."orders"');
-  await expect(detail.getByTestId('refs')).toContainText('reads tables directly');
+  await expect(detail.getByTestId('reads-from')).toHaveText('orders (table, source)', { timeout: 60_000 });
+  await expect(detail.getByTestId('feeds')).toHaveText('by_customer (model, ref)');
   await expect(detail.getByTestId('tests')).toContainText('not_null(id)');
   await expect(detail.getByTestId('tests')).toContainText('unique(id)');
   await expect(detail).toContainText('run: never');
   await expect(detail.getByTestId('command').first()).toContainText('lakelet run stg'); // the Versions section has its own line
   await rows.nth(1).click();
-  await expect(detail.getByTestId('refs')).toHaveText('stg');
+  await expect(detail.getByTestId('reads-from')).toHaveText('stg (model, ref)', { timeout: 60_000 });
+  await expect(detail.getByTestId('feeds')).toHaveText('nothing');
   await expect(detail.getByTestId('compiled-sql')).toContainText('sum(amt)');
   await expect(detail.getByTestId('tests')).toContainText('none in schema.yml');
+
+  // G8: a lineage name is a link. A model of this project is selected here; an imported
+  // table opens its detail on the Tables screen, whose own lines lead back.
+  await detail.getByTestId('lineage-stg').click();
+  await expect(rows.nth(0)).toHaveClass('on');
+  await expect(detail.getByTestId('feeds')).toHaveText('by_customer (model, ref)', { timeout: 60_000 });
+  await detail.getByTestId('lineage-by_customer').click();
+  await expect(rows.nth(1)).toHaveClass('on');
+  await detail.getByTestId('lineage-stg').click();
+  await detail.getByTestId('lineage-orders').click();
+  const orders = page.getByTestId('detail');
+  await expect(orders).toContainText('orders · 4 rows');
+  await expect(orders.getByTestId('reads-from')).toHaveText('nothing', { timeout: 60_000 });
+  await expect(orders.getByTestId('feeds')).toHaveText('stg (model, source)');
+  await expect(orders.getByTestId('command').first()).toContainText('lakelet tables describe orders');
+  await orders.getByTestId('lineage-stg').click();
+  await expect(screen.getByTestId('dag')).toBeVisible({ timeout: 90_000 });
+  await expect(rows.nth(0)).toHaveClass('on');
+  await expect(detail).toContainText('models/stg.sql');
 
   // Run all is lakelet run: both build, the view is recorded, the plan re-reads with last runs
   await screen.getByTestId('run-all').click();
@@ -74,6 +96,8 @@ test('the plan, a model, Run all, the view detail, the runs, and Simple mode', a
   await expect(view.getByTestId('view-sql')).toContainText('"main"."orders"');
   await expect(view.getByTestId('view-version')).toContainText('1 version · this one just now');
   await expect(view.getByTestId('view-model')).toContainText('lakelet run stg');
+  await expect(view.getByTestId('reads-from')).toHaveText('orders (table, source)', { timeout: 60_000 });
+  await expect(view.getByTestId('feeds')).toHaveText('by_customer (table, ref)');
   await expect(view).not.toContainText('0 rows');
   await expect(view.getByTestId('no-snapshots')).toContainText('nothing to expire');
   await expect(view.getByTestId('expire')).toHaveCount(0);

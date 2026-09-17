@@ -104,6 +104,8 @@ class DbtRunBody(BaseModel):
     select: list[str] = []
     burst: str = "never"
     run_anyway: bool = False
+    #: V3: build only the models that are not fresh (`lakelet run --stale`).
+    stale: bool = False
 
 
 class RunBody(BaseModel):
@@ -246,7 +248,16 @@ def _plan_json(m: Any) -> dict[str, Any]:
         "description": m.description,
         "path": m.path,
         "tests": [dataclasses.asdict(t) for t in m.tests],
-        "last_run": dataclasses.asdict(m.last_run) if m.last_run else None,
+        "last_run": (
+            {k: v for k, v in dataclasses.asdict(m.last_run).items() if k != "sql_text"}
+            if m.last_run
+            else None
+        ),
+        "state": m.state,
+        "state_reason": m.state_reason,
+        "state_since": m.state_since,
+        "state_diff": m.state_diff,
+        "state_changes": m.state_changes,
     }
 
 
@@ -556,6 +567,24 @@ def create_router(project: Project, token: str) -> APIRouter:
                 return error(400, "sql_error", str(e).splitlines()[0])
             return {"name": name, "commit": result.id, "git": result.reason}
 
+    # -- lineage (versions brief G8) ---------------------------------------------------
+
+    @router.get("/lineage/{name}", dependencies=guarded)
+    def lineage(name: str, depth: int = 1):
+        """What a table, view or model reads and what reads it, with how each edge is
+        known; compiles the models first when the manifest is older than they are."""
+        from lakelet.dbt import runner
+        from lakelet.lineage import NoSuchNode
+        from lakelet.lineage import lineage as _lineage
+
+        with lock:
+            try:
+                return _plain(_lineage(project, name, max(1, depth)))
+            except NoSuchNode:
+                return error(404, "no_such_node", f"no table, view or model named {name}")
+            except runner.DbtFailed as e:
+                return error(400, "dbt", str(e))
+
     # -- history ----------------------------------------------------------------------
 
     @router.get("/history", dependencies=guarded)
@@ -583,7 +612,11 @@ def create_router(project: Project, token: str) -> APIRouter:
         with lock:
             try:
                 report = runner.run(
-                    project, body.select or None, burst=body.burst, run_anyway=body.run_anyway
+                    project,
+                    body.select or None,
+                    burst=body.burst,
+                    run_anyway=body.run_anyway,
+                    stale=body.stale,
                 )
             except runner.NoBurstYet as e:
                 return error(400, "no_burst_yet", str(e))
@@ -598,6 +631,7 @@ def create_router(project: Project, token: str) -> APIRouter:
             "views_dropped": report.views_dropped,
             "seconds": report.seconds,
             "ok": report.ok,
+            "selected": report.selected,
         }
 
     # -- the gauge screen (real-data brief R8) -----------------------------------------

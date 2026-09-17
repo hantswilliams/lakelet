@@ -56,6 +56,8 @@ export const expireCommand = (name: string): string => `lakelet tables expire ${
 
 export const initCommand = (folder: string): string => `lakelet init ${shellArg(folder)}`;
 export const relocateCommand = (): string => 'lakelet relocate';
+/** The lineage lines' command (versions brief G8). */
+export const lineageCommand = (name: string): string => `lakelet lineage ${shellArg(name)}`;
 
 /** `--` comments outside string literals removed, so folding the SQL onto one line for the
  *  terminal cannot comment out what followed them. */
@@ -112,10 +114,11 @@ export const gaugeProbeCommand = (): string => 'lakelet gauge probe';
 /** The Models panel's lines (real-data brief R5, step 6): `lakelet run` builds the whole
  *  DAG, `lakelet run <model>` one model (and, through dbt's selector, only it), `--plan`
  *  estimates without building, `--run-anyway` runs a Red model here regardless. */
-export function runCommand(select: string[] = [], opts: { plan?: boolean; runAnyway?: boolean } = {}): string {
+export function runCommand(select: string[] = [], opts: { plan?: boolean; runAnyway?: boolean; stale?: boolean } = {}): string {
   const parts = ['lakelet run', ...select.map(shellArg)];
   if (opts.plan) parts.push('--plan');
   if (opts.runAnyway) parts.push('--run-anyway');
+  if (opts.stale) parts.push('--stale');
   return parts.join(' ');
 }
 

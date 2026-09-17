@@ -28,6 +28,27 @@ export function parseDiff(diff: string): DiffLine[] {
   });
 }
 
+/** The diff folded to its changes: context lines further than ``context`` from a changed
+ *  line are dropped and each dropped run is one `…` hunk line, so a whole-file diff (the
+ *  state's, V3) reads as changes only; `whole` is the same lines untouched. */
+export function collapseDiff(lines: DiffLine[], context = 3): { lines: DiffLine[]; folded: boolean } {
+  const changed = lines.map((l) => l.kind === 'add' || l.kind === 'del');
+  const keep = lines.map((l, i) => {
+    if (l.kind !== 'ctx') return true;
+    for (let j = Math.max(0, i - context); j <= Math.min(lines.length - 1, i + context); j++) if (changed[j]) return true;
+    return false;
+  });
+  const out: DiffLine[] = [];
+  let folded = false;
+  let skipping = false;
+  lines.forEach((l, i) => {
+    if (keep[i]) { out.push(l); skipping = false; return; }
+    folded = true;
+    if (!skipping) { out.push({ kind: 'hunk', text: '…' }); skipping = true; }
+  });
+  return { lines: out, folded };
+}
+
 /** "1 line changed", "2 lines added", "3 lines added, 1 removed", or "no change to the SQL". */
 export function diffSummary(diff: string): string {
   const lines = parseDiff(diff);

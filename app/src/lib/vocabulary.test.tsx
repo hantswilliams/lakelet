@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { PlannedModel } from './api';
-import { humanSeconds, planSummary, testLabel, verdictSentence, words } from './vocabulary';
+import { changeSentence, humanSeconds, outOfDateName, planSummary, staleCount, stateSentence, testLabel, verdictSentence, words } from './vocabulary';
 
 const model = (over: Partial<PlannedModel>): PlannedModel => ({
   name: 'stg',
@@ -23,6 +23,9 @@ const model = (over: Partial<PlannedModel>): PlannedModel => ({
   path: 'models/stg.sql',
   tests: [],
   last_run: null,
+  state: null,
+  state_reason: null,
+  state_since: null,
   ...over,
 });
 
@@ -68,5 +71,45 @@ describe('the two vocabularies', () => {
 
   it('say a wait in seconds, minutes or hours', () => {
     expect([0.3, 1.4, 5, 48, 240, 1800, 7200].map(humanSeconds)).toEqual(['under a second', '1.4 s', '5 s', '48 s', '4.0 min', '30 min', '2.0 h']);
+  });
+
+  it('say a model\'s state (V3) as the DAG\'s words or the card\'s sentence, with when', () => {
+    const now = Date.parse('2026-09-16T12:00:00Z');
+    const since = '2026-09-16T10:00:00+00:00';
+    const cases: [Partial<PlannedModel>, string, string][] = [
+      [{ state: 'fresh' }, 'fresh', 'Up to date.'],
+      [{ state: 'edited', state_reason: 'the SQL changed since the last run' }, 'edited · the SQL changed since the last run', 'Changed since it was last refreshed.'],
+      [{ state: 'upstream', state_reason: 'orders changed', state_since: since }, 'upstream · orders changed 2 h ago', 'Out of date: orders changed 2 h ago.'],
+      [{ state: 'upstream', state_reason: 'by_c is out of date', state_since: since }, 'upstream · by_c is out of date', 'Out of date, because by_c is.'],
+      [{ state: 'never', state_reason: 'never built' }, 'never · never built', 'Never refreshed.'],
+      [{ state: 'never', state_reason: 'the last run failed', state_since: since }, 'never · the last run failed', 'The last refresh failed.'],
+      [{ state: null }, '—', '—'],
+    ];
+    for (const [over, technical, simple] of cases) {
+      expect(stateSentence(model(over), 'technical', now)).toBe(technical);
+      expect(stateSentence(model(over), 'simple', now)).toBe(simple);
+    }
+    expect(staleCount([model({ state: 'fresh' }), model({ state: 'never' }), model({ state: 'edited' }), model({ state: null })])).toBe(2);
+    expect(words('technical').runStale).toBe('Run what changed');
+    expect(words('simple').runStale).toBe('Refresh what changed');
+  });
+
+  it('say what was committed to a table since the run, and name the model blamed', () => {
+    const now = Date.parse('2026-09-16T12:00:00Z');
+    const at = '2026-09-16T11:30:00+00:00';
+    const append = { name: 'orders', operation: 'append', added_rows: 1200, deleted_rows: null, timestamp: at };
+    const del = { name: 'orders', operation: 'delete', added_rows: null, deleted_rows: 10, timestamp: at };
+    const both = { name: 'orders', operation: 'overwrite', added_rows: 1, deleted_rows: 1, timestamp: at };
+    const view = { name: 'orders_v', operation: 'new version', added_rows: null, deleted_rows: null, timestamp: null };
+    expect(changeSentence(append, 'technical', now)).toBe('orders · append +1,200 rows · 30 min ago');
+    expect(changeSentence(del, 'technical', now)).toBe('orders · delete −10 rows · 30 min ago');
+    expect(changeSentence(view, 'technical', now)).toBe('orders_v · new version');
+    expect(changeSentence(append, 'simple', now)).toBe('orders: 1,200 rows added 30 min ago');
+    expect(changeSentence(del, 'simple', now)).toBe('orders: 10 rows deleted 30 min ago');
+    expect(changeSentence(both, 'simple', now)).toBe('orders: 1 row added, 1 row deleted 30 min ago');
+    expect(changeSentence(view, 'simple', now)).toBe('orders_v: a new version');
+    expect(outOfDateName('by_c is out of date')).toBe('by_c');
+    expect(outOfDateName('orders changed')).toBeNull();
+    expect(outOfDateName(null)).toBeNull();
   });
 });

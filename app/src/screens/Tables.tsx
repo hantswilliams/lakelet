@@ -49,9 +49,15 @@ export interface TablesProps {
   /** Screen 8: the view detail's words (`lakelet run` or Refresh). */
   mode?: Mode;
   onChanged: () => Promise<void>;
+  /** A detail to open on arrival (a lineage link on the Models screen named a table, G8);
+   *  `onOpened` says it was, so the request is not repeated. */
+  openName?: string;
+  onOpened?: () => void;
+  /** A lineage link named a model that is not in the catalog yet: the Models screen opens it. */
+  onOpenModel?: (name: string) => void;
 }
 
-export function Tables({ session, tables, aws, movedFrom, onRelocated, mode = 'technical', onChanged }: TablesProps) {
+export function Tables({ session, tables, aws, movedFrom, onRelocated, mode = 'technical', onChanged, openName, onOpened, onOpenModel }: TablesProps) {
   const api = new Api(session);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState<string>();
@@ -214,6 +220,19 @@ export function Tables({ session, tables, aws, movedFrom, onRelocated, mode = 't
     }
   }
 
+  // G8: a name on the lineage lines opens that detail; a model not built yet is the
+  // Models screen's.
+  useEffect(() => {
+    if (!openName) return;
+    void open(openName);
+    onOpened?.();
+  }, [openName]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function follow(name: string, kind: 'table' | 'view' | 'model') {
+    if (kind === 'model' && onOpenModel) onOpenModel(name);
+    else void open(name);
+  }
+
   async function sample() {
     if (!detail) return;
     setBusy('reading rows…');
@@ -296,6 +315,8 @@ export function Tables({ session, tables, aws, movedFrom, onRelocated, mode = 't
           onRefresh={() => void refresh(detail.table.name)}
           onReattach={() => detail.table.source && void reattach(detail.table.name, detail.table.source, !!detail.table.public)}
           onClose={() => setDetail(undefined)}
+          session={session}
+          onOpen={follow}
         />
       ) : pending ? (
         <PreviewPanel

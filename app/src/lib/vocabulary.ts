@@ -5,7 +5,7 @@
 // Simple says question, check, "answered live", a sentence about the wait, Refresh. The
 // mapping lives here so a test can pin it and every screen says the same words.
 
-import type { ModelTest, PlannedModel } from './api';
+import { ago, type ModelTest, type PlannedModel, type StateChange } from './api';
 
 export type Mode = 'simple' | 'technical';
 
@@ -29,6 +29,8 @@ export interface Words {
   running: string;
   /** The model panel's history section (versions brief G6): "Versions", or "History". */
   versions: string;
+  /** `lakelet run --stale` (V3): the button beside Run all. */
+  runStale: string;
 }
 
 const TECHNICAL: Words = {
@@ -46,6 +48,7 @@ const TECHNICAL: Words = {
   planning: 'planning…',
   running: 'running…',
   versions: 'Versions',
+  runStale: 'Run what changed',
 };
 
 const SIMPLE: Words = {
@@ -63,6 +66,7 @@ const SIMPLE: Words = {
   planning: 'looking…',
   running: 'refreshing…',
   versions: 'History',
+  runStale: 'Refresh what changed',
 };
 
 export const words = (mode: Mode): Words => (mode === 'simple' ? SIMPLE : TECHNICAL);
@@ -143,3 +147,50 @@ export function planSummary(models: PlannedModel[], mode: Mode): string {
   const parts = [red && `${red} Red`, yellow && `${yellow} Yellow`, unknown && `${unknown} not estimated`].filter(Boolean);
   return `${head} · ${parts.length ? parts.join(', ') : 'all Green'}`;
 }
+
+/** A model's state (V3) as the DAG's words or the card's sentence. Technical: `fresh`,
+ *  `edited · the SQL changed since the last run`, `upstream · orders changed 2 h ago`,
+ *  `upstream · by_c is out of date`, `never · never built`. Simple: "Up to date.",
+ *  "Changed since it was last refreshed.", "Out of date: orders changed 2 h ago.",
+ *  "Out of date, because by_c is.", "Never refreshed." */
+export function stateSentence(m: Pick<PlannedModel, 'state' | 'state_reason' | 'state_since'>, mode: Mode, now = Date.now()): string {
+  if (!m.state) return '—';
+  const reason = m.state_reason ?? '';
+  const changed = /changed$/.test(reason) && m.state_since ? `${reason} ${ago(m.state_since, now)}` : reason;
+  if (mode === 'technical') return m.state === 'fresh' ? 'fresh' : changed ? `${m.state} · ${changed}` : m.state;
+  switch (m.state) {
+    case 'fresh': return 'Up to date.';
+    case 'edited': return 'Changed since it was last refreshed.';
+    case 'upstream': return / is out of date$/.test(reason) ? `Out of date, because ${reason.replace(/ is out of date$/, '')} is.` : `Out of date: ${changed || 'something it reads changed'}.`;
+    case 'never': return reason === 'the last run failed' ? 'The last refresh failed.' : 'Never refreshed.';
+  }
+}
+
+/** How many models are not fresh, for the button: null when every one is. */
+export function staleCount(models: PlannedModel[]): number {
+  return models.filter((m) => m.state && m.state !== 'fresh').length;
+}
+
+/** One commit behind an `upstream` state, as a line. Technical: `orders · append +1,200 rows · 2 h ago`;
+ *  Simple: "orders: 1,200 rows added 2 h ago". */
+export function changeSentence(c: StateChange, mode: Mode, now = Date.now()): string {
+  const when = c.timestamp ? ago(c.timestamp, now) : '';
+  const rows = (v: number) => `${v.toLocaleString()} ${v === 1 ? 'row' : 'rows'}`;
+  if (mode === 'technical') {
+    const what = [c.operation ?? 'commit', c.added_rows ? `+${rows(c.added_rows)}` : '', c.deleted_rows ? `−${rows(c.deleted_rows)}` : ''].filter(Boolean).join(' ');
+    return [c.name, what, when].filter(Boolean).join(' · ');
+  }
+  const parts = [c.added_rows ? `${rows(c.added_rows)} added` : '', c.deleted_rows ? `${rows(c.deleted_rows)} deleted` : ''].filter(Boolean);
+  const what = parts.length ? parts.join(', ')
+    : c.operation === 'new version' ? 'a new version'
+      : c.operation === 'overwrite' || c.operation === 'replace' ? 'replaced'
+        : c.operation === 'delete' ? 'rows deleted'
+          : 'changed';
+  return `${c.name}: ${what}${when ? ` ${when}` : ''}`;
+}
+
+/** The name in "<name> is out of date", or null for any other reason. */
+export const outOfDateName = (reason: string | null): string | null => {
+  const m = /^(.+) is out of date$/.exec(reason ?? '');
+  return m ? m[1] : null;
+};

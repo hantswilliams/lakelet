@@ -2,19 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 // Screens 7 and 8 of the mockups (real-data brief R5, step 6): the project's dbt models
 // through the gauge. Technical mode is `lakelet run --plan` as a panel: the DAG with a
-// verdict per model, and a model's compiled SQL, refs, tests, and last run; `Run all` is
+// verdict per model, and a model's compiled SQL, lineage, tests, and last run; `Run all` is
 // `lakelet run`, `Run this` is `lakelet run <model>`, a Red model refuses until
 // `Run anyway`. Simple mode is the same DAG as cards: questions, checks, freshness, and
 // one `Refresh all`. The model's panel carries its history (versions brief G6, step 3):
 // the versions with the diff and Restore in Technical, the same as sentences behind
-// History on the card in Simple. Nothing here does what the terminal cannot.
+// History on the card in Simple. Each model carries its state (decisions V3, step 4):
+// fresh, edited, upstream (an input changed) or never, on the DAG and the cards, and
+// `Run what changed` is `lakelet run --stale`. Nothing here does what the terminal cannot.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Api, ApiError, ago, humanBytes, type ModelResult, type PlannedModel, type RunReport, type TableInfo } from '../lib/api';
 import { runCommand } from '../lib/command';
 import type { Session } from '../lib/session';
-import { humanSeconds, planSummary, testLabel, verdictSentence, words, type Mode } from '../lib/vocabulary';
+import { changeSentence, humanSeconds, outOfDateName, planSummary, staleCount, stateSentence, testLabel, verdictSentence, words, type Mode } from '../lib/vocabulary';
+import { collapseDiff, diffSummary, parseDiff } from '../lib/versions';
 import { Command } from '../components/Command';
+import { LineageRows } from '../components/Lineage';
 import { Versions } from '../components/Versions';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -27,6 +31,12 @@ export interface ModelsProps {
   tables: TableInfo[];
   /** After a run: tables and views changed. */
   onChanged: () => Promise<void>;
+  /** The model to select on arrival (a lineage link named it, G8); the first otherwise.
+   *  `onSelected` says it was, so the request is not repeated. */
+  select?: string;
+  onSelected?: () => void;
+  /** A lineage link named a table or view: the Tables screen opens its detail. */
+  onOpenTable?: (name: string) => void;
 }
 
 function Verdict({ m }: { m: PlannedModel }) {
@@ -44,23 +54,81 @@ function LastRunLine({ m, label }: { m: PlannedModel; label: string }) {
   );
 }
 
-function Refs({ m, byId }: { m: PlannedModel; byId: Map<string, PlannedModel> }) {
-  if (m.depends_on.length === 0) return <span className="muted">none: reads tables directly</span>;
+/** The state's sentence, with the model it blames as a link when there is one (V3). */
+function StateLine({ m, mode, onSelect }: { m: PlannedModel; mode: Mode; onSelect: (name: string) => void }) {
+  const blamed = m.state === 'upstream' ? outOfDateName(m.state_reason) : null;
+  const text = stateSentence(m, mode);
+  if (!blamed) return <>{text}</>;
+  const [before, after] = text.split(blamed, 2);
   return (
-    <span className="mono">
-      {m.depends_on.map((d) => byId.get(d)?.name ?? d.split('.').pop() ?? d).join(', ')}
-    </span>
+    <>{before}<button type="button" className="link mono" data-testid={`state-link-${blamed}`} onClick={() => onSelect(blamed)}>{blamed}</button>{after}</>
   );
 }
 
-export function Models({ session, mode, tables, onChanged }: ModelsProps) {
+/** What changed, shown and not only said (V3): the SQL diff since the last run for an
+ *  edited model — the changed lines with three of context, or the whole SQL on request —
+ *  and the commits to the table since the run for one whose input changed. */
+function WhatChanged({ m, mode }: { m: PlannedModel; mode: Mode }) {
+  const [whole, setWhole] = useState(false);
+  if (m.state === 'edited' && m.state_diff) {
+    const all = parseDiff(m.state_diff);
+    const { lines, folded } = whole ? { lines: all, folded: false } : collapseDiff(all);
+    const canFold = folded || whole;
+    return (
+      <div className="what-changed" data-testid="what-changed">
+        <p className="muted">
+          {mode === 'simple' ? 'The SQL, against what was last refreshed' : 'the compiled SQL against the last run'}: {diffSummary(m.state_diff)}
+          {canFold && <button type="button" className="link" data-testid="diff-whole" onClick={() => setWhole((w) => !w)}>{whole ? 'changes only' : 'whole SQL'}</button>}
+        </p>
+        <pre className="diff" data-testid="state-diff">
+          {lines.map((l, i) => <span key={i} className={l.kind}>{l.text}{'\n'}</span>)}
+        </pre>
+      </div>
+    );
+  }
+  if (m.state === 'upstream' && m.state_changes?.length) {
+    return (
+      <ul className="what-changed changes" data-testid="what-changed">
+        {m.state_changes.map((c, i) => <li key={i} className="mono">{changeSentence(c, mode)}</li>)}
+      </ul>
+    );
+  }
+  return null;
+}
+
+/** The review (V3): every model that is not fresh, in the order the run would build
+ *  them, each with why and what changed — read through before Run what changed. */
+function Review({ models, mode, onSelect }: { models: PlannedModel[]; mode: Mode; onSelect: (name: string) => void }) {
+  const w = words(mode);
+  const stale = models.filter((m) => m.state && m.state !== 'fresh');
+  if (stale.length === 0) return null;
+  return (
+    <section className="review" data-testid="review">
+      <h3>
+        {mode === 'simple' ? 'What changed since the last refresh' : 'Out of date'}
+        <span className="muted"> · {stale.length} {stale.length === 1 ? w.model : w.models} · {w.runStale} builds them in this order</span>
+      </h3>
+      {stale.map((m) => (
+        <article key={m.unique_id} data-testid={`review-${m.name}`}>
+          <h4>
+            <button type="button" className="link mono" onClick={() => onSelect(m.name)}>{m.name}</button>
+            <span className={`state ${m.state ?? ''}`}> <StateLine m={m} mode={mode} onSelect={onSelect} /></span>
+          </h4>
+          <WhatChanged m={m} mode={mode} />
+        </article>
+      ))}
+    </section>
+  );
+}
+
+export function Models({ session, mode, tables, onChanged, select, onSelected, onOpenTable }: ModelsProps) {
   const api = new Api(session);
   const w = words(mode);
   const [models, setModels] = useState<PlannedModel[]>();
-  const [selected, setSelected] = useState<string>();
+  const [selected, setSelected] = useState<string | undefined>(select);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
-  const [refusal, setRefusal] = useState<{ text: string; select: string[] }>();
+  const [refusal, setRefusal] = useState<{ text: string; select: string[]; stale?: boolean }>();
   const [report, setReport] = useState<RunReport>();
   const [historyOf, setHistoryOf] = useState<string>();
 
@@ -80,41 +148,58 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
   }, [session.port, session.token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (select) { setSelected(select); onSelected?.(); } }, [select]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function run(select: string[], runAnyway = false) {
+  // G8: a name on the lineage lines opens that detail: a model of this project here (built
+  // or not), anything else — an imported table, a view put by hand — on the Tables screen.
+  function follow(name: string, kind: 'table' | 'view' | 'model') {
+    if (kind === 'model' || !onOpenTable || models?.some((m) => m.name === name)) setSelected(name);
+    else onOpenTable(name);
+  }
+
+  async function run(select: string[], runAnyway = false, stale = false) {
     setBusy(w.running);
     setError(undefined);
     setRefusal(undefined);
     try {
-      const r = await api.run(select, runAnyway);
+      const r = await api.run(select, runAnyway, stale);
       setReport(r);
       await onChanged();
       await load();
     } catch (e: unknown) {
-      if (e instanceof ApiError && e.code === 'red_refused') setRefusal({ text: e.message, select });
+      if (e instanceof ApiError && e.code === 'red_refused') setRefusal({ text: e.message, select, stale });
       else setError(message(e));
       setBusy(undefined);
     }
   }
 
-  const byId = new Map((models ?? []).map((m) => [m.unique_id, m]));
   const byName = new Map(tables.map((t) => [t.name, t]));
   const results = new Map<string, ModelResult>((report?.results ?? []).map((r) => [r.name, r]));
   const current = models?.find((m) => m.name === selected);
   const anyRed = (models ?? []).some((m) => m.verdict === 'red');
 
+  const stale = staleCount(models ?? []);
   const runAll = (
-    <button type="button" className="primary" disabled={!!busy || !models?.length} data-testid="run-all" onClick={() => void run([])}>
-      {busy ?? w.runAll}
-    </button>
+    <>
+      <button type="button" className="primary" disabled={!!busy || !models?.length} data-testid="run-all" onClick={() => void run([])}>
+        {busy ?? w.runAll}
+      </button>
+      <Command line={runCommand()} />
+      <button type="button" className="quiet" disabled={!!busy || !stale} data-testid="run-stale" title={stale ? '' : `every ${w.model} is up to date`} onClick={() => void run([], false, true)}>
+        {w.runStale}{stale ? ` (${stale})` : ''}
+      </button>
+      {stale > 0 && <Command line={runCommand([], { stale: true })} />}
+    </>
   );
 
   const reportLine = report && (
     <section className="notice" data-testid="run-report">
       <b>
-        {report.ok
-          ? `${report.results.length} ${report.results.length === 1 ? w.model : w.models} built in ${humanSeconds(report.seconds)}.`
-          : `${report.results.filter((r) => r.status !== 'success').length} of ${report.results.length} failed.`}
+        {report.selected && report.selected.length === 0
+          ? `Every ${w.model} is up to date; nothing ran.`
+          : report.ok
+            ? `${report.results.length} ${report.results.length === 1 ? w.model : w.models} built in ${humanSeconds(report.seconds)}.`
+            : `${report.results.filter((r) => r.status !== 'success').length} of ${report.results.length} failed.`}
         {report.views_recorded.length > 0 && ` ${mode === 'simple' ? 'Answered live' : 'Views in the catalog'}: ${report.views_recorded.join(', ')}.`}
         {report.views_dropped.length > 0 && ` Dropped: ${report.views_dropped.join(', ')}.`}
       </b>
@@ -129,8 +214,8 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
       <b>{mode === 'simple' ? 'Too big for this machine right now.' : 'The gauge refused the run.'}</b>
       <pre>{refusal.text}</pre>
       <div className="actions">
-        <button type="button" className="quiet" disabled={!!busy} data-testid="run-anyway" onClick={() => void run(refusal.select, true)}>{w.runAnyway}</button>
-        <Command line={runCommand(refusal.select, { runAnyway: true })} />
+        <button type="button" className="quiet" disabled={!!busy} data-testid="run-anyway" onClick={() => void run(refusal.select, true, refusal.stale)}>{w.runAnyway}</button>
+        <Command line={runCommand(refusal.select, { runAnyway: true, stale: refusal.stale })} />
       </div>
     </section>
   );
@@ -148,12 +233,13 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
       <section className="models-screen simple" data-testid="models-screen" data-mode="simple">
         <header>
           <h2>{w.screen}<span className="muted"> · {models ? planSummary(models, mode) : '…'}</span></h2>
-          <span className="run-all">{runAll}<Command line={runCommand()} /></span>
+          <span className="run-all">{runAll}</span>
         </header>
         {reportLine}
         {refusalBox}
         {error && <section className="error" data-testid="models-error"><pre>{error}</pre></section>}
         {empty}
+        {models && <Review models={models} mode={mode} onSelect={(name) => document.querySelector(`[data-testid="card-${name}"]`)?.scrollIntoView({ block: 'nearest' })} />}
         <div className="cards" data-testid="cards">
           {(models ?? []).map((m) => {
             const t = byName.get(m.name);
@@ -162,6 +248,8 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
               <article key={m.unique_id} className={`card ${m.verdict ?? ''}`} data-testid={`card-${m.name}`}>
                 <h3 className="mono">{m.name}</h3>
                 <p className="kind">{m.materialized === 'view' ? w.view : w.table}{t?.freshness ? ` · ${w.lastRun.toLowerCase()} ${ago(t.freshness)}` : ''}</p>
+                <p className={`state ${m.state ?? ''}`} data-testid="state">{stateSentence(m, mode)}</p>
+                <WhatChanged m={m} mode={mode} />
                 {m.description && <p className="description">{m.description}</p>}
                 <p className="sentence" data-testid="sentence">{verdictSentence(m, mode)}</p>
                 <p className="checks" data-testid="checks">
@@ -186,7 +274,7 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
     <section className="models-screen" data-testid="models-screen" data-mode="technical">
       <header>
         <h2>{w.screen}<span className="muted"> · {models ? planSummary(models, mode) : '…'}</span></h2>
-        <span className="run-all">{runAll}<Command line={runCommand()} /></span>
+        <span className="run-all">{runAll}</span>
       </header>
       {reportLine}
       {refusalBox}
@@ -198,10 +286,12 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
         </section>
       )}
       {empty}
+      {models && <Review models={models} mode={mode} onSelect={setSelected} />}
       {models && models.length > 0 && (
         <div className="split">
+          <div className="dag-wrap">
           <table className="dag" data-testid="dag">
-            <thead><tr><th>Model</th><th>Kind</th><th>Verdict</th><th>Estimate</th><th>Scans</th><th>Last run</th></tr></thead>
+            <thead><tr><th>Model</th><th>Kind</th><th>State</th><th>Verdict</th><th>Estimate</th><th>Scans</th><th>Last run</th></tr></thead>
             <tbody>
               {models.map((m) => {
                 const r = results.get(m.name);
@@ -209,6 +299,7 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
                   <tr key={m.unique_id} className={m.name === selected ? 'on' : ''} data-testid={`model-${m.name}`} onClick={() => setSelected(m.name)}>
                     <td className="mono">{m.name}</td>
                     <td>{m.materialized}</td>
+                    <td className={`state ${m.state ?? ''}`} data-testid="state">{m.state ?? '—'}</td>
                     <td><Verdict m={m} /></td>
                     <td>{m.est_wall_local === null ? '—' : humanSeconds(m.est_wall_local)}</td>
                     <td>{m.est_bytes === null ? '—' : humanBytes(m.est_bytes)}</td>
@@ -220,6 +311,7 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
               })}
             </tbody>
           </table>
+          </div>
           {current && (
             <article className="model" data-testid="model-detail">
               <header>
@@ -227,10 +319,11 @@ export function Models({ session, mode, tables, onChanged }: ModelsProps) {
               </header>
               {current.description && <p>{current.description}</p>}
               <dl className="facts">
+                <dt>State</dt>
+                <dd className={`state ${current.state ?? ''}`} data-testid="state-sentence"><StateLine m={current} mode={mode} onSelect={setSelected} /><WhatChanged m={current} mode={mode} /></dd>
                 <dt>Verdict</dt>
                 <dd><Verdict m={current} /> <span data-testid="sentence">{verdictSentence(current, mode)}</span>{current.reason && !current.error ? <span className="muted"> · {current.reason}</span> : null}</dd>
-                <dt>Refs</dt>
-                <dd data-testid="refs"><Refs m={current} byId={byId} /></dd>
+                <LineageRows session={session} name={current.name} mode={mode} onOpen={follow} refreshKey={current.last_run?.ts ?? null} />
                 <dt>Tests</dt>
                 <dd data-testid="tests">
                   {current.tests.length === 0 ? <span className="muted">none in schema.yml</span> : (

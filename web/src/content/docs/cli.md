@@ -34,6 +34,7 @@ Commands:
   run       Build the project's dbt models through the catalog, each with its...
   versions  The versions of one question or model: every commit that changed its...
   restore   Put an earlier version of a question or model back.
+  lineage   What a table, view or model reads and what reads it, and how each edge...
   relocate  After the project folder was moved or copied: rewrite every local...
   serve     Run the core as the app's sidecar: catalog and API on one loopback...
   tables    List, describe and sample tables.
@@ -120,7 +121,8 @@ Options:
 Usage: lakelet run [OPTIONS] [select]...
 
   Build the project's dbt models through the catalog, each with its verdict first. A
-  `view` model becomes a view in the catalog; a `table` model an Iceberg table.
+  `view` model becomes a view in the catalog; a `table` model an Iceberg table. The DAG
+  says each model's state: fresh, edited, upstream (an input changed) or never.
 
 Arguments:
   select...  dbt selectors; none means every model.
@@ -129,6 +131,7 @@ Options:
   --burst <str>  never (here) or auto (session 8; refuses today).  [default: never]
   --run-anyway   Run the DAG here even if a model is Red.
   --plan         Print the DAG with its verdicts and stop.
+  --stale        Build only what is not fresh: edited, an input changed, or never built.
   --help         Show this message and exit.
 ```
 
@@ -162,6 +165,24 @@ Arguments:
 
 Options:
   --help  Show this message and exit.
+```
+
+### `lakelet lineage`
+
+```text
+Usage: lakelet lineage [OPTIONS] {name}
+
+  What a table, view or model reads and what reads it, and how each edge is known: a dbt
+  ref() or source(), a table named in the SQL, or a catalog view's SQL. From the last
+  compile's manifest and the catalog; compiles first when the models are newer.
+
+Arguments:
+  name  A table, a view or a model.  [required]
+
+Options:
+  --depth <int range>  How many levels each way; 1 is direct.  [default: 1; x>=1]
+  --json               The same as the API returns.
+  --help               Show this message and exit.
 ```
 
 ### `lakelet relocate`

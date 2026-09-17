@@ -39,6 +39,12 @@ export default function App() {
   const [session, setSession] = useState<Session>();
   const [health, setHealth] = useState<Health>();
   const [screen, setScreen] = useState<'tables' | 'models' | 'gauge'>('tables');
+  // G8: a lineage link crosses screens — a table's detail from the Models screen, a model
+  // from the Tables screen; the target screen reads the name once and clears it.
+  const [openTable, setOpenTable] = useState<string>();
+  const [openModel, setOpenModel] = useState<string>();
+  const followTable = (name: string) => { setOpenTable(name); setScreen('tables'); };
+  const followModel = (name: string) => { setOpenModel(name); setScreen('models'); };
   // Screen 8: Simple or Technical, one switch for the window, remembered.
   const [mode, setModeState] = useState<Mode>(loadMode);
   const setMode = (m: Mode) => { saveMode(m); setModeState(m); };
@@ -218,7 +224,7 @@ export default function App() {
             )}
             {session && status !== 'down' && screen === 'models' && (
               <Suspense fallback={<section className="models-screen" data-testid="models-loading" />}>
-                <Models session={session} mode={mode} tables={tables} onChanged={refreshTables} />
+                <Models session={session} mode={mode} tables={tables} onChanged={refreshTables} select={openModel} onSelected={() => setOpenModel(undefined)} onOpenTable={followTable} />
               </Suspense>
             )}
             {session && status !== 'down' && screen === 'gauge' && (
@@ -241,7 +247,7 @@ export default function App() {
             {session && status !== 'down' && screen === 'tables' && tables.length > 0 && (
               <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} mode={mode} onDone={() => void refreshTables()} /></Suspense>
             )}
-            {session && status !== 'down' && screen === 'tables' && <Tables session={session} tables={tables} aws={health?.aws} movedFrom={health?.moved_from} onRelocated={refreshHealth} mode={mode} onChanged={refreshTables} />}
+            {session && status !== 'down' && screen === 'tables' && <Tables session={session} tables={tables} aws={health?.aws} movedFrom={health?.moved_from} onRelocated={refreshHealth} mode={mode} onChanged={refreshTables} openName={openTable} onOpened={() => setOpenTable(undefined)} onOpenModel={followModel} />}
           </>
         )}
       </main>

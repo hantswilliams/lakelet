@@ -42,6 +42,29 @@ export interface TableInfo {
   needs_relocate?: boolean;
 }
 
+/** One edge of `GET /lineage/{name}` (versions brief G8): a table or view in the catalog,
+ *  or a model not built yet; `via` is how the edge is known — a dbt `ref()` or `source()`,
+ *  a table named bare in the model's SQL, or a catalog view's SQL. */
+export interface LineageEdge {
+  name: string;
+  kind: 'table' | 'view' | 'model';
+  via: 'ref' | 'source' | 'sql' | 'view';
+  /** 1 for a direct edge; more when the call asked for depth. */
+  depth: number;
+}
+
+/** `lakelet lineage <name>`: what it reads and what reads it, and who built it. */
+export interface Lineage {
+  name: string;
+  kind: 'table' | 'view' | 'model';
+  upstream: LineageEdge[];
+  downstream: LineageEdge[];
+  /** The model that builds it, `imported`, `attached from <prefix>`, or null (never built; a view put by hand). */
+  built_by: string | null;
+  last_built: string | null;
+  compiled: boolean;
+}
+
 /** `POST /relocate` (`lakelet relocate`, trust round T5). */
 export interface RelocateReport {
   old_root: string | null;
@@ -133,7 +156,14 @@ export interface LastRun {
   seconds: number | null;
   verdict: string | null;
   error: string | null;
+  /** The hash of the compiled SQL that run built (V3: an edit since is `edited`). */
+  sql_hash?: string | null;
 }
+
+/** A model's state (decisions V3, versions step 4): `fresh` (nothing it is made of changed
+ *  since its last successful run), `edited` (its own SQL did), `upstream` (a table or view
+ *  it reads changed, or a model it reads is not fresh), `never` (no successful run). */
+export type ModelState = 'fresh' | 'edited' | 'upstream' | 'never';
 
 /** One model of `lakelet run --plan` (`GET /api/run/plan`): compiled, estimated, in dependency order. */
 export interface PlannedModel {
@@ -153,6 +183,26 @@ export interface PlannedModel {
   path: string;
   tests: ModelTest[];
   last_run: LastRun | null;
+  state: ModelState | null;
+  /** Why it is not fresh, naming what changed: "orders changed", "by_c is out of date",
+   *  "the SQL changed since the last run", "never built", "the last run failed". */
+  state_reason: string | null;
+  /** When, ISO 8601, when a time is known. */
+  state_since: string | null;
+  /** `edited`: the unified diff of the compiled SQL the last run built against the SQL now. */
+  state_diff?: string | null;
+  /** `upstream` naming a table or view: what was committed to it since the run, newest first. */
+  state_changes?: StateChange[];
+}
+
+/** One commit to a table (or a new version of a view) since a model's last run (V3). */
+export interface StateChange {
+  name: string;
+  /** Iceberg's `append`, `overwrite`, `delete`, `replace`, or `new version` for a view. */
+  operation: string | null;
+  added_rows: number | null;
+  deleted_rows: number | null;
+  timestamp: string | null;
 }
 
 export interface ModelResult {
@@ -170,6 +220,8 @@ export interface RunReport {
   views_dropped: string[];
   seconds: number;
   ok: boolean;
+  /** A `stale` run: the models it chose because they were not fresh (empty: nothing ran); null otherwise. */
+  selected?: string[] | null;
 }
 
 export interface PreviewColumn {
@@ -365,8 +417,9 @@ export class Api {
 
   /** `lakelet run [select]... [--run-anyway]`: build the DAG here; a Red model refuses
    *  (409 `red_refused`) until `run_anyway`. */
-  run(select: string[] = [], runAnyway = false): Promise<RunReport> {
-    return this.post<RunReport>('/run', { select, burst: 'never', run_anyway: runAnyway });
+  /** `lakelet run [<models>] [--run-anyway] [--stale]`; `stale` (V3) builds only what is not fresh. */
+  run(select: string[] = [], runAnyway = false, stale = false): Promise<RunReport> {
+    return this.post<RunReport>('/run', { select, burst: 'never', run_anyway: runAnyway, stale });
   }
 
   settings(): Promise<Settings> {
@@ -412,6 +465,11 @@ export class Api {
 
   git(): Promise<GitStatus> {
     return this.get<GitStatus>('/git');
+  }
+
+  /** `lakelet lineage <name> --depth N`: reads from and feeds, one level by default (G8). */
+  lineage(name: string, depth = 1): Promise<Lineage> {
+    return this.get<Lineage>(`/lineage/${encodeURIComponent(name)}?depth=${depth}`);
   }
 
   /** `lakelet relocate`: after the folder moved, the tables' locations rewritten under it. */

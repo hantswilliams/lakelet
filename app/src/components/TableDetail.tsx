@@ -6,10 +6,12 @@
 // (real-data R6, step 6) has its own shape: its query, its columns, its version, the dbt
 // model it came from and that `lakelet run` rebuilds it; no snapshots, nothing to expire.
 
-import { ago, humanBytes, type TableDescription } from '../lib/api';
+import { ago, humanBytes, type LineageEdge, type TableDescription } from '../lib/api';
 import { attachCommand, describeCommand, expireCommand, refreshCommand, runCommand, sampleCommand } from '../lib/command';
+import type { Session } from '../lib/session';
 import { words, type Mode } from '../lib/vocabulary';
 import { Command } from './Command';
+import { LineageRows } from './Lineage';
 
 export interface TableDetailProps {
   table: TableDescription;
@@ -24,6 +26,10 @@ export interface TableDetailProps {
   /** `lakelet tables attach --replace`: register the prefix again after its files changed (T2). */
   onReattach?: () => void;
   onClose: () => void;
+  /** The lineage lines (G8) are read through the API when a session is given; a name
+   *  clicked opens that detail (a table or view here, a model on the Models screen). */
+  session?: Session;
+  onOpen?: (name: string, kind: LineageEdge['kind']) => void;
 }
 
 const cell = (v: unknown) => (v === null || v === undefined ? '∅' : typeof v === 'object' ? JSON.stringify(v) : String(v));
@@ -52,8 +58,9 @@ function SampleBlock({ t, sample }: { t: TableDescription; sample: Record<string
   );
 }
 
-function ViewDetail({ table: t, sample, mode, busy, error, onSample, onClose }: TableDetailProps & { mode: Mode }) {
+function ViewDetail({ table: t, sample, mode, busy, error, onSample, onClose, session, onOpen }: TableDetailProps & { mode: Mode }) {
   const w = words(mode);
+  const lineage = session && onOpen && <LineageRows session={session} name={t.name} mode={mode} onOpen={onOpen} refreshKey={t.freshness} />;
   const modelId = t.properties?.[DBT_MODEL];
   const modelName = modelId ? modelId.split('.').pop() ?? modelId : undefined;
   return (
@@ -77,6 +84,7 @@ function ViewDetail({ table: t, sample, mode, busy, error, onSample, onClose }: 
             <span className="muted">{mode === 'simple' ? 'not a saved question: a view put in the catalog directly' : 'not a dbt model: put in the catalog directly (the REST catalog, or the Python API)'}</span>
           )}
         </dd>
+        {lineage}
       </dl>
       <table className="columns">
         <thead><tr><th>Column</th><th>Iceberg</th></tr></thead>
@@ -98,10 +106,11 @@ function ViewDetail({ table: t, sample, mode, busy, error, onSample, onClose }: 
 }
 
 export function TableDetail(props: TableDetailProps) {
-  const { table: t, sample, busy, error, onSample, onExpire, onRefresh, onReattach, onClose } = props;
+  const { table: t, sample, busy, error, onSample, onExpire, onRefresh, onReattach, onClose, session, onOpen } = props;
   const changed = t.changed_files ?? [];
   if (t.kind === 'view') return <ViewDetail {...props} mode={props.mode ?? 'technical'} />;
   const reclaimable = t.expirable_snapshots > 0;
+  const lineage = session && onOpen && <LineageRows session={session} name={t.name} mode={props.mode ?? 'technical'} onOpen={onOpen} refreshKey={t.freshness} />;
   return (
     <section className="preview detail" data-testid="detail">
       <header>
@@ -114,6 +123,7 @@ export function TableDetail(props: TableDetailProps) {
         <dt>Partitioning</dt><dd>{t.partitioning}</dd>
         <dt>Last written</dt><dd title={t.freshness ?? ''}>{ago(t.freshness)}{t.last_commit.operation ? ` (${t.last_commit.operation})` : ''}</dd>
         <dt>Format</dt><dd>Iceberg v{t.format_version}, {t.snapshots} {t.snapshots === 1 ? 'snapshot' : 'snapshots'}</dd>
+        {lineage}
       </dl>
       <table className="columns">
         <thead><tr><th>Column</th><th>Iceberg</th></tr></thead>

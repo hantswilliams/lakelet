@@ -30,6 +30,9 @@ main>*{min-width:0} /* a wide table scrolls inside its panel, never the page */
 button.primary{font:600 14px var(--sans);color:#fff;background:var(--lake);border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
 button.primary:disabled,button.quiet:disabled{opacity:.5;cursor:default}
 button.quiet{font:500 12px var(--mono);color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+/* the lineage lines' names (G8): a name is a link that opens that detail */
+button.link{font:inherit;color:var(--lake);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+button.link.mono{font-family:var(--mono)}
 .welcome{max-width:640px;margin:48px auto 0;display:grid;gap:16px}
 .welcome h1{font-size:26px;letter-spacing:-.02em}
 .welcome .actions{display:flex;align-items:center;gap:14px}
@@ -162,7 +165,9 @@ nav.screens.theme+button{margin-left:8px}
 .models-screen .split{display:grid;grid-template-columns:minmax(280px,2fr) minmax(320px,3fr);gap:14px;align-items:start}
 @media (max-width:900px){.models-screen .split{grid-template-columns:1fr}}
 .models-screen table.dag{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.models-screen table.dag th,.models-screen table.dag td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left}
+/* seven columns since the State column (V3): the cells keep to one line and the table scrolls sideways in its half rather than wrapping "under a second" */
+.models-screen .dag-wrap{min-width:0;overflow-x:auto}
+.models-screen table.dag th,.models-screen table.dag td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
 .models-screen table.dag th{font-size:12px;color:var(--muted);font-weight:600;background:var(--head)}
 .models-screen table.dag tbody tr{cursor:pointer}
 .models-screen table.dag tbody tr:hover td{background:var(--bg)}
@@ -210,3 +215,20 @@ pre.diff .del{background:color-mix(in srgb,var(--burst) 18%,transparent);text-de
 pre.diff .hunk,pre.diff .meta{color:var(--muted)}
 .models-screen .versions p.notice{margin:0}
 .detail.view pre.sql{max-height:200px}
+
+/* a model's state (V3): fresh is quiet, the other three are the eye's cue */
+.state.fresh{color:var(--muted)}
+.state.edited,.state.upstream{color:var(--slow)}
+.state.never{color:var(--muted);font-style:italic}
+.models-screen .card p.state{margin:2px 0 6px;font-size:13px}
+/* what changed behind a state (V3): the diff or the commits, under the sentence */
+.models-screen .what-changed{margin-top:6px;color:var(--ink)}
+.models-screen .what-changed p{margin:0 0 4px;font-size:12.5px}
+.models-screen ul.changes{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:2px}
+.models-screen .card .what-changed pre.diff{max-height:160px}
+/* the review (V3): every model that is not fresh, with why and what changed, before Run what changed */
+.models-screen .review{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--slow);border-radius:0 12px 12px 0;padding:14px 18px;display:grid;gap:12px}
+.models-screen .review h3{font-size:14px;margin:0}
+.models-screen .review h4{font-size:13.5px;margin:0 0 4px;font-weight:600}
+.models-screen .review article{padding-top:8px;border-top:1px solid var(--line)}
+.models-screen .what-changed p button.link{margin-left:8px;font-size:12px}

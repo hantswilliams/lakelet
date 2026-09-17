@@ -12,7 +12,8 @@ A Lakelet project is a dbt project: `init` writes `dbt_project.yml` with `models
 ```bash
 lakelet run                       # every model, each with its verdict first
 lakelet run stg_orders+           # dbt selectors, as `dbt run --select` takes them
-lakelet run --plan                # the DAG with verdicts, nothing built
+lakelet run --plan                # the DAG with verdicts and states, nothing built
+lakelet run --stale               # only the models that are not fresh, in dependency order
 lakelet run --run-anyway          # build even where a model is Red
 ```
 
@@ -23,14 +24,29 @@ Needs dbt: `pip install 'lakelet[dbt]'` (dbt-core and dbt-duckdb; a clone's `uv 
 `lakelet run` compiles the project with dbt (into `.lakelet/dbt/`, with a `profiles.yml` it writes on every run, because the catalog's address is per process), then takes the models in dependency order and asks [the gauge](/docs/gauge) about each one's compiled SQL, giving the engine a view for each model as it goes so the models after it bind: a `view` model as itself, a `table` model not built yet as a stand-in over its query. That is the DAG it prints:
 
 ```
-  stg_orders  view   green  ~0.0 s
-  by_c        table  green  ~2 s
-  top         view   green  ~0.0 s
+  stg_orders  view   green  ~0.0 s    fresh
+  by_c        table  green  ~2 s      edited: the SQL changed since the last run
+  top         view   green  ~0.0 s    upstream: by_c is out of date
 ```
 
 If any model is Red the run stops there, the way `lakelet sql` refuses a Red statement, until `--run-anyway`; `--burst auto` is session 8's and refuses today with that sentence. Then dbt runs the DAG through Lakelet's plugin (`lakelet.dbt.plugin`, which attaches the catalog to every connection dbt opens and sets the search path the engine uses), each model's estimate and dbt's actual time go into [history](/docs/gauge) like a query's, and every `view` model that built is recorded in the catalog as described next. `table` models build through the materialisation `init` writes into `macros/lakelet.sql` ([Transactions and the catalog](/docs/transactions) says why dbt's own cannot).
 
-The same run is the app's **Models** screen: the plan as a list with a verdict per model, a model's compiled SQL, refs and tests from `schema.yml`, its last run from history, **Run all** and **Run this** with the `lakelet run` line beside them, and the same refusal on Red. History keeps which run was which model (a `model_runs` table beside the runs), which is how the screen says when a model last ran. See [the app](/docs/app).
+The same run is the app's **Models** screen: the plan as a list with a verdict and a state per model, a model's compiled SQL, what it reads and what reads it, its tests from `schema.yml`, its last run from history, **Run all**, **Run what changed** and **Run this** with the `lakelet run` line beside them, and the same refusal on Red. History keeps which run was which model (a `model_runs` table beside the runs), which is how the screen says when a model last ran. See [the app](/docs/app).
+
+## Is it out of date?
+
+The last column of the DAG is the model's state, computed at plan time from what the run already recorded, so it costs nothing new:
+
+| State | Meaning |
+|---|---|
+| `fresh` | Nothing it is made of has changed since its last successful run. |
+| `edited` | Its own SQL differs from what that run built (the compiled SQL's hash, kept in history). `--plan` and the app show the diff. |
+| `upstream` | A table it reads has a newer snapshot than the run, a view it reads a newer version, or a model it reads is not fresh; the reason names the nearest one (`orders changed`, `by_c is out of date`) and when. |
+| `never` | No successful `lakelet run` in history — never built, or the last run failed. |
+
+`lakelet run --stale` plans the whole project and builds only the models that are not fresh, in dependency order; when every model is fresh it says so and nothing runs, nothing is recorded. The app's **Run what changed** (Simple: **Refresh what changed**) is the same verb, and its **Review** section lists every out-of-date model with what changed — the SQL diff since the run, or the commits to the table since — before you run it. Both `GET /api/run/plan` and `lakelet run --plan --json` carry `state`, `state_reason`, `state_since`, `state_diff` and `state_changes`.
+
+What "changed" compares against is the time the run was recorded, not a fingerprint of the inputs: a model downstream of a table model is estimated before that table is rebuilt, so the snapshot ids an estimate sees are always one run behind, and comparing times against the record is exact.
 
 ## Views
 
