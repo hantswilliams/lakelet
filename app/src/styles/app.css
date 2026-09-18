@@ -30,6 +30,9 @@ main>*{min-width:0} /* a wide table scrolls inside its panel, never the page */
 button.primary{font:600 14px var(--sans);color:#fff;background:var(--lake);border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
 button.primary:disabled,button.quiet:disabled{opacity:.5;cursor:default}
 button.quiet{font:500 12px var(--mono);color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+/* the lineage lines' names (G8): a name is a link that opens that detail */
+button.link{font:inherit;color:var(--lake);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+button.link.mono{font-family:var(--mono)}
 .welcome{max-width:640px;margin:48px auto 0;display:grid;gap:16px}
 .welcome h1{font-size:26px;letter-spacing:-.02em}
 .welcome .actions{display:flex;align-items:center;gap:14px}
@@ -83,9 +86,9 @@ button.quiet{font:500 12px var(--mono);color:var(--muted);background:var(--bg);b
 .query-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .gauge{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:14px;padding:10px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
 .gauge i{width:10px;height:10px;border-radius:50%;background:var(--line);display:inline-block;align-self:center}
-.gauge.green i{background:var(--local)} .gauge.yellow i{background:var(--slow)} .gauge.red i{background:var(--burst)}
+.gauge.green i{background:var(--local)} .gauge.yellow i{background:var(--slow)} .gauge.red i{background:var(--burst)} .gauge.none i{background:transparent;border:2px solid var(--muted);box-sizing:border-box}
 .gauge .words{font-weight:700}
-.gauge.green .words{color:var(--local)} .gauge.yellow .words{color:var(--slow)} .gauge.red .words{color:var(--burst)}
+.gauge.green .words{color:var(--local)} .gauge.yellow .words{color:var(--slow)} .gauge.red .words{color:var(--burst)} .gauge.none .words{color:var(--muted)}
 .gauge .reason,.gauge .tail{color:var(--muted)}
 .gauge.refused{border-color:var(--burst);background:var(--refused)}
 .gauge.error{border-color:var(--burst)}
@@ -145,7 +148,7 @@ nav.screens button.on{background:var(--cloud);color:var(--lake)}
 .gauge-screen table.runs th,.gauge-screen table.runs td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left}
 .gauge-screen table.runs th{font-size:12px;color:var(--muted);font-weight:600;background:var(--head)}
 .gauge-screen table.runs tr:last-child td{border-bottom:0}
-.gauge-screen td.verdict.green{color:var(--local)} .gauge-screen td.verdict.yellow{color:var(--slow)} .gauge-screen td.verdict.red{color:var(--burst)}
+.gauge-screen td.verdict.green{color:var(--local)} .gauge-screen td.verdict.yellow{color:var(--slow)} .gauge-screen td.verdict.red{color:var(--burst)} .gauge-screen td.verdict.none{color:var(--muted)}
 .gauge-screen footer.actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .gauge-screen .confirm{display:inline-flex;align-items:center;gap:8px;font-size:13px}
 /* real-data round, step 6: the Models screen (screens 7 and 8) and the view detail */
@@ -162,7 +165,9 @@ nav.screens.theme+button{margin-left:8px}
 .models-screen .split{display:grid;grid-template-columns:minmax(280px,2fr) minmax(320px,3fr);gap:14px;align-items:start}
 @media (max-width:900px){.models-screen .split{grid-template-columns:1fr}}
 .models-screen table.dag{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.models-screen table.dag th,.models-screen table.dag td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left}
+/* seven columns since the State column (V3): the cells keep to one line and the table scrolls sideways in its half rather than wrapping "under a second" */
+.models-screen .dag-wrap{min-width:0;overflow-x:auto}
+.models-screen table.dag th,.models-screen table.dag td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
 .models-screen table.dag th{font-size:12px;color:var(--muted);font-weight:600;background:var(--head)}
 .models-screen table.dag tbody tr{cursor:pointer}
 .models-screen table.dag tbody tr:hover td{background:var(--bg)}
@@ -210,3 +215,65 @@ pre.diff .del{background:color-mix(in srgb,var(--burst) 18%,transparent);text-de
 pre.diff .hunk,pre.diff .meta{color:var(--muted)}
 .models-screen .versions p.notice{margin:0}
 .detail.view pre.sql{max-height:200px}
+
+/* a model's state (V3): fresh is quiet, the other three are the eye's cue */
+.state.fresh{color:var(--muted)}
+.state.edited,.state.upstream{color:var(--slow)}
+.state.never{color:var(--muted);font-style:italic}
+.models-screen .card p.state{margin:2px 0 6px;font-size:13px}
+/* what changed behind a state (V3): the diff or the commits, under the sentence */
+.models-screen .what-changed{margin-top:6px;color:var(--ink)}
+.models-screen .what-changed p{margin:0 0 4px;font-size:12.5px}
+.models-screen ul.changes{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:2px}
+.models-screen .card .what-changed pre.diff{max-height:160px}
+/* the review (V3): every model that is not fresh, with why and what changed, before Run what changed */
+.models-screen .review{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--slow);border-radius:0 12px 12px 0;padding:14px 18px;display:grid;gap:12px}
+.models-screen .review h3{font-size:14px;margin:0}
+.models-screen .review h4{font-size:13.5px;margin:0 0 4px;font-weight:600}
+.models-screen .review article{padding-top:8px;border-top:1px solid var(--line)}
+.models-screen .what-changed p button.link{margin-left:8px;font-size:12px}
+/* a table's commits made models out of date (L3): the line under the snapshots */
+.preview .affected{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0;font-size:13.5px}
+.preview .snapshots td [data-testid=affects]{font-size:12px;white-space:normal}
+/* the Lineage screen (L1): the graph the app draws */
+.lineage-screen{display:grid;gap:12px}
+.lineage-screen header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.lineage-screen h2{font-size:18px}
+.lineage-screen .graph-wrap{overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px}
+.lineage-screen svg.graph{display:block;font-family:var(--sans)}
+.lineage-screen .edge{fill:none;stroke:var(--line);stroke-width:1.5}
+.lineage-screen .edge.ref{stroke:var(--lake)} .lineage-screen .edge.source,.lineage-screen .edge.sql{stroke:var(--muted)} .lineage-screen .edge.view{stroke:var(--muted);stroke-dasharray:4 3}
+.lineage-screen .node{cursor:pointer}
+.lineage-screen .node rect{fill:var(--bg);stroke:var(--line);stroke-width:1.2}
+.lineage-screen .node.model rect{stroke:var(--lake)}
+.lineage-screen .node.fresh rect{stroke:var(--local)}
+.lineage-screen .node.edited rect,.lineage-screen .node.upstream rect{fill:color-mix(in srgb,var(--slow) 16%,var(--bg));stroke:var(--slow)}
+.lineage-screen .node.never rect{stroke:var(--muted);stroke-dasharray:3 3}
+.lineage-screen .node:hover rect,.lineage-screen .node:focus rect{stroke-width:2.2;outline:none}
+.lineage-screen .node text.name{font:600 12.5px var(--mono);fill:var(--ink)}
+.lineage-screen .node text.caption{font:11px var(--sans);fill:var(--muted)}
+.lineage-screen .node.edited text.caption,.lineage-screen .node.upstream text.caption{fill:var(--slow)}
+.lineage-screen .legend{font-size:12.5px}
+/* the Changes screen (L2): the feed, and the Recent strip on a detail */
+.changes-screen{display:grid;gap:12px}
+.changes-screen header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.changes-screen h2{font-size:18px}
+.changes-screen .filter{display:flex;align-items:center;gap:8px;font-size:13px}
+.changes-screen .filter input{font:inherit;font-family:var(--mono);padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);min-width:220px}
+.changes-screen .feed{list-style:none;margin:0;padding:0;display:grid;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.changes-screen .entry{display:grid;grid-template-columns:76px 64px 1fr;gap:10px;align-items:baseline;padding:8px 14px;border-top:1px solid var(--line);font-size:13.5px}
+.changes-screen .entry:first-child{border-top:0}
+.changes-screen .entry .when{font-size:12px;white-space:nowrap}
+.changes-screen .entry .kind{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.changes-screen .entry .kind.snapshot{color:var(--local)} .changes-screen .entry .kind.run{color:var(--lake)} .changes-screen .entry .kind.version{color:var(--muted)}
+.changes-screen .entry.failed .line{color:var(--slow)}
+.changes-screen .entry .line button.link{margin-left:8px;font-size:12.5px}
+.changes-screen .legend{font-size:12.5px}
+ul.recent{list-style:none;margin:0;padding:0;display:grid;gap:3px;font-size:13px}
+ul.recent li .muted{font-size:12px;margin-right:4px}
+dd button.link{font-size:12.5px}
+/* the publish box (W2) on a local table's detail */
+.preview .publish{display:grid;gap:8px;width:100%;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;background:var(--bg)}
+.preview .publish p{margin:0;font-size:13px}
+.preview .publish .path{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.preview .publish .path input{flex:1;min-width:240px;font:13px var(--mono);padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}

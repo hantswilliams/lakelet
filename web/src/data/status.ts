@@ -7,10 +7,10 @@
 // This must agree with src/content/docs/index.md, which is the authority because it
 // describes the code. Where they disagree, index.md is right and this file is the bug.
 
-export const asOf = '2026-09-15';
+export const asOf = '2026-09-18';
 
-// Last reconciled against src/content/docs/index.md: 2026-09-15, after the versions round's
-// step 3 (the Versions section) and the trust round (T1 to T6) landed. This file also
+// Last reconciled against src/content/docs/index.md: 2026-09-18, after S3 writes,
+// table publishing, and the Lineage and Changes screens landed. This file also
 // feeds README.md's status block (web/scripts/gen-readme-status.py, checked in CI).
 
 export type State = 'built' | 'planned';
@@ -64,6 +64,15 @@ export const surfaces: Surface[] = [
   { id: 'versions', label: 'Every save is a version', state: 'built',
     detail: 'the project is a git repository, a save or a run is a commit, lakelet versions and restore, the Versions section on the model detail',
     href: '/docs/questions' },
+  { id: 's3warehouse', label: 'A warehouse in a bucket', state: 'built',
+    detail: 'lakelet init --warehouse s3://bucket/prefix puts every table\'s data and metadata in the bucket; import, run, expire and every reader work against it, tested on Moto and a real bucket; lakelet tables publish moves one local table into a bucket later, every snapshot kept',
+    href: '/docs/remote' },
+  { id: 'lineage', label: 'Lineage, and whether a model is out of date', state: 'built',
+    detail: 'lakelet lineage says what a table, view or model reads and what reads it, and how each edge is known; every model carries a state — fresh, edited, upstream, never — with what changed, and lakelet run --stale builds only what is not',
+    href: '/docs/tables#lineage' },
+  { id: 'changes', label: 'What happened: the changes feed', state: 'built',
+    detail: 'lakelet changes merges every table\'s snapshots, each model\'s and question\'s last run and the versions git holds into one list, newest first; the app\'s Changes screen and a Recent strip on every detail read the same route',
+    href: '/docs/tables#what-happened-the-changes-feed' },
   { id: 'recovery', label: 'Backups, crashes, upgrades and moves', state: 'built',
     detail: 'a copy of the folder is the backup, a failed replace keeps the old table, a moved folder is relocated, a newer schema is refused — every sentence tested',
     href: '/docs/recovery' },
@@ -84,9 +93,6 @@ export const surfaces: Surface[] = [
   { id: 'installers', label: 'Installers and a brew tap', state: 'planned',
     detail: 'signed DMG, the extensions bundled, a PyPI release. Until then: clone and uv sync',
     session: 'session 10' },
-  { id: 'lineage', label: 'Lineage', state: 'planned',
-    detail: 'table-level lineage from the dbt manifest and the catalog, on the CLI, the API and both details',
-    session: 'session 9, the rest — step 4' },
   { id: 'correction', label: 'Per-machine correction', state: 'planned',
     detail: "the gauge's constants were tuned on one machine; the record is kept, the correction is not applied yet",
     session: 'session 10' },
@@ -106,8 +112,8 @@ export const pick = (ids: string[]): Surface[] => ids.map(by);
 /** Which surfaces each page should own up about, in the order they should read. */
 export const pageState: Record<string, { built: string[]; planned: string[]; note: string }> = {
   app: {
-    built: ['app', 'gauge', 'dbtrun', 'tables', 's3'],
-    planned: ['ask', 'burst', 'mcp', 'lineage', 'installers'],
+    built: ['app', 'gauge', 'dbtrun', 'tables', 's3', 'lineage', 'changes'],
+    planned: ['ask', 'burst', 'mcp', 'installers'],
     note: 'Screens 1, 2 and 5 are real and run today, from source, along with the table detail. The rest of this page is design, not software — it is here so you can see where it goes, and it is labelled so you never have to guess which is which.',
   },
   agents: {

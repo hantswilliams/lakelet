@@ -43,6 +43,14 @@
 - [x] Package the completed website and planning records in a DCO-signed commit; use the configured email and established author name for this commit only.
 - [x] Publish `codex/website-exploration` as a separate branch of `hantswilliams/lakelet`; integration and deployment remain separate work.
 
+## Remote-main integration — approved September 18, 2026
+
+- [x] User approved bringing the committed GitHub `main` into `codex/website-exploration` in its separate worktree. Merge `origin/main` at `d0f1324`; do not copy local main-checkout work.
+- [x] Keep the selected website design and Lookahead prototype; retain the newer CLI/API documentation, shipped feature status, and both branches’ session logs.
+- [x] Reconcile website copy with S3 warehouse writes, table publishing, Lineage, and Changes now built on main. Remote compute and the shared Team catalog remain planned.
+- [x] Gate: 25-page production build, 66 website tests including generated estimates against the merged core, README status check, desktop/mobile browser review, and core/app matching remote main.
+- [x] Publication decision: commit the verified merge with DCO sign-off and push the existing website branch under the earlier publication authorization. Integration into main and deployment remain separate.
+
 ## Gate
 
 Production build and persistent pytest checks pass for all pages, base-aware links/assets,
@@ -62,4 +70,4 @@ implementation of the selected concept; no product capabilities are being decide
 - [x] Browser: query choices and keyboard slider, mobile menu, documentation navigation,
   disclosures, actual image loading, and console checks passed.
 - [x] Session log and both task lists updated in the separate worktree.
-- [ ] User review before integration or deployment.
+- [ ] User review before merging the website into main or deploying it.

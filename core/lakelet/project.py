@@ -248,12 +248,23 @@ class Project:
 
     @classmethod
     def init(
-        cls, path: str | Path = ".", name: str | None = None, probe_mb: int = 512
+        cls,
+        path: str | Path = ".",
+        name: str | None = None,
+        probe_mb: int = 512,
+        warehouse: str | None = None,
     ) -> InitReport:
+        """``warehouse`` (decisions W1): an `s3://bucket/prefix` puts every table's data and
+        metadata in the bucket from the first import; the catalog stays in `.lakelet/`.
+        None is the folder's own `warehouse/`."""
         root = Path(path).resolve()
         root.mkdir(parents=True, exist_ok=True)
         if (root / "lakelet.toml").exists():
             raise ProjectExists(str(root))
+        if warehouse is not None and not warehouse.startswith("s3://"):
+            raise ValueError(
+                f"the warehouse is ./warehouse or an s3://bucket/prefix, not {warehouse}"
+            )
         name = name or root.name
         report = InitReport(root=root)
 
@@ -265,7 +276,7 @@ class Project:
             target.write_text(content, encoding="utf-8")
             report.created.append(relative)
 
-        write_if_absent("lakelet.toml", render_default(name))
+        write_if_absent("lakelet.toml", render_default(name, warehouse or "./warehouse"))
         write_if_absent("AGENTS.md", agents_md(name))
         write_if_absent("dbt_project.yml", dbt_project_yml(name))
         write_if_absent("models/.gitkeep", "")
@@ -280,7 +291,7 @@ class Project:
                     f.write("\n")
                 f.write("\n".join(missing) + "\n")
             report.created.append(".gitignore")
-        for directory in ("warehouse", ".lakelet/cache"):
+        for directory in ([] if warehouse else ["warehouse"]) + [".lakelet/cache"]:
             (root / directory).mkdir(parents=True, exist_ok=True)
         cls._ensure_namespace(Store(f"sqlite:///{root / '.lakelet' / 'catalog.db'}"))
         report.created.append(".lakelet/catalog.db")
@@ -354,24 +365,28 @@ class Project:
         self.lakelet_dir.mkdir(exist_ok=True)
         self.cache_dir.mkdir(exist_ok=True)
         self._ensure_namespace(self.store)
+        from lakelet.api import TAURI_ORIGINS
+
+        # LAKELET_DEV_ORIGIN lets the app's frontend be driven from a browser against a
+        # real sidecar in development and tests (app brief A12); the shell never sets it.
+        dev_origin = os.environ.get("LAKELET_DEV_ORIGIN") if self.token else None
+        api_origins = TAURI_ORIGINS + ([dev_origin] if dev_origin else [])
         app = create_app(
             self.store,
             warehouse=self.warehouse_url,
             io_properties=self.io_properties,
             cache_dir=self.cache_dir / "objects",
+            api_origins=api_origins,
         )
         if self.token:
             from fastapi.middleware.cors import CORSMiddleware
 
-            from lakelet.api import TAURI_ORIGINS, VERDICT_HEADERS, create_router
+            from lakelet.api import VERDICT_HEADERS, create_router
 
             app.include_router(create_router(self, self.token))
-            # LAKELET_DEV_ORIGIN lets the app's frontend be driven from a browser against a
-            # real sidecar in development and tests (app brief A12); the shell never sets it.
-            dev_origin = os.environ.get("LAKELET_DEV_ORIGIN")
             app.add_middleware(
                 CORSMiddleware,
-                allow_origins=TAURI_ORIGINS + ([dev_origin] if dev_origin else []),
+                allow_origins=api_origins,
                 allow_methods=["*"],
                 allow_headers=["*"],
                 expose_headers=VERDICT_HEADERS,

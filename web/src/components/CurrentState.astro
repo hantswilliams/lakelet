@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { pick, asOf } from '../data/status';
 import { url } from '../lib/url';
-const built = pick(['app','tables','gauge','dbtrun','versions','recovery']);
+const built = pick(['app','tables','gauge','dbtrun','versions','s3warehouse','lineage','changes','recovery']);
 const planned = pick(['burst','ask','mcp','team','installers']);
 ---
 <section class="current-state section-frame" aria-labelledby="current-state-title"><div class="section-heading"><div><p class="eyebrow">The current picture / {asOf}</p><h2 id="current-state-title">Know what’s here.<br /><span class="accent">And what comes next.</span></h2></div><p>Developer preview, built in the open.<br />The documentation describes what runs today.</p></div><div class="state-grid"><div><h3><span class="status-dot"></span>Available today</h3><ul>{built.map(s => <li><a href={url(s.href!)}><span>{s.label}</span><span aria-hidden="true">↗</span></a></li>)}</ul></div><div><h3><span class="status-dot planned"></span>Planned</h3><ul>{planned.map(s => <li>{s.label}<small>Not available yet</small></li>)}</ul></div></div></section>

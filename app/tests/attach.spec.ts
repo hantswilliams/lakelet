@@ -7,8 +7,10 @@
 // sidecar, whose bucket is a Moto server with public-read ACLs.
 
 import { test, expect, type Page } from '@playwright/test';
+import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
-import { pageUrl, readStates } from './sidecar';
+import { join } from 'node:path';
+import { pageUrl, readStates, sidecarExecutable } from './sidecar';
 
 const sidecar = () => readStates()[4];
 
@@ -79,4 +81,35 @@ test('the public-bucket switch attaches without credentials and the panel says p
   await page.getByTestId('attach').click();
   await expect(page.getByTestId('imported')).toContainText('Attached open_events');
   await expect(page.getByTestId('where-open_events')).toContainText('public');
+});
+
+test('a local table is published into the bucket from its detail: weighed first, then moved with its history (W2)', async ({ page }) => {
+  const s = sidecar();
+  // a local table, imported from another process; the panel reads the list on open
+  writeFileSync(join(s.project, 'orders.csv'), 'id,customer,amt\n1,c1,1.5\n2,c2,3.0\n3,c1,4.5\n');
+  const imported = spawnSync(sidecarExecutable(), ['-C', s.project, 'import', join(s.project, 'orders.csv')], { encoding: 'utf8' });
+  expect(imported.status, imported.stdout + imported.stderr).toBe(0);
+  await openReady(page);
+  await expect(page.getByTestId('table-orders')).toContainText('local');
+  await page.getByTestId('table-orders').click();
+  const detail = page.getByTestId('detail');
+  await expect(detail.getByTestId('detail-where')).not.toContainText('bucket');
+
+  await detail.getByTestId('publish-open').click();
+  await detail.getByTestId('publish-prefix').fill('s3://lakelet-test/published');
+  await expect(detail.getByTestId('publish-box').getByTestId('command')).toContainText('lakelet tables publish orders s3://lakelet-test/published --dry-run');
+  await detail.getByTestId('publish-weigh').click();
+  await expect(detail.getByTestId('publish-weighed')).toContainText('to copy to s3://lakelet-test/published/main/orders');
+  await expect(detail.getByTestId('publish-box').getByTestId('command')).toContainText('lakelet tables publish orders s3://lakelet-test/published');
+
+  await detail.getByTestId('publish-go').click();
+  await expect(page.getByTestId('imported')).toContainText('Published orders to s3://lakelet-test/published/main/orders');
+  await expect(page.getByTestId('imported')).toContainText('the local files are orphans for expire');
+  await expect(page.getByTestId('imported').getByTestId('command')).toContainText('lakelet tables publish orders s3://lakelet-test/published');
+  await expect(page.getByTestId('where-orders')).toContainText('bucket');
+  await expect(detail.getByTestId('detail-where')).toContainText('in a bucket');
+  await expect(detail.getByTestId('detail-where')).toContainText('s3://lakelet-test/published/main/orders');
+  await expect(detail.getByTestId('local-copy')).toContainText('of the local copy still under the project\'s warehouse');
+  await expect(detail.getByTestId('publish-open')).toHaveCount(0);
+  await expect(detail.getByTestId('snapshots').locator('tbody tr')).toHaveCount(1);
 });

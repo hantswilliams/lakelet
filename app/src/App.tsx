@@ -22,6 +22,8 @@ import { applyTheme, loadTheme, saveTheme, THEMES, themeLabel, type Theme } from
 const Query = lazy(() => import('./screens/Query').then((m) => ({ default: m.Query })));
 const Gauge = lazy(() => import('./screens/Gauge').then((m) => ({ default: m.Gauge })));
 const Models = lazy(() => import('./screens/Models').then((m) => ({ default: m.Models })));
+const Lineage = lazy(() => import('./screens/Lineage').then((m) => ({ default: m.Lineage })));
+const Changes = lazy(() => import('./screens/Changes').then((m) => ({ default: m.Changes })));
 import { Tables } from './screens/Tables';
 import { Welcome } from './screens/Welcome';
 
@@ -38,7 +40,16 @@ export default function App() {
   const [detail, setDetail] = useState<string>();
   const [session, setSession] = useState<Session>();
   const [health, setHealth] = useState<Health>();
-  const [screen, setScreen] = useState<'tables' | 'models' | 'gauge'>('tables');
+  const [screen, setScreen] = useState<'tables' | 'models' | 'gauge' | 'lineage' | 'changes'>('tables');
+  // G8: a lineage link crosses screens — a table's detail from the Models screen, a model
+  // from the Tables screen; the target screen reads the name once and clears it.
+  const [openTable, setOpenTable] = useState<string>();
+  const [openModel, setOpenModel] = useState<string>();
+  const followTable = (name: string) => { setOpenTable(name); setScreen('tables'); };
+  const followModel = (name: string) => { setOpenModel(name); setScreen('models'); };
+  // L2: a detail's Recent strip opens the Changes screen filtered to that name.
+  const [changesName, setChangesName] = useState<string>();
+  const followChanges = (name: string) => { setChangesName(name); setScreen('changes'); };
   // Screen 8: Simple or Technical, one switch for the window, remembered.
   const [mode, setModeState] = useState<Mode>(loadMode);
   const setMode = (m: Mode) => { saveMode(m); setModeState(m); };
@@ -171,6 +182,8 @@ export default function App() {
           <nav className="screens" aria-label="Screens" data-testid="screens">
             <button type="button" className={screen === 'tables' ? 'on' : ''} onClick={() => setScreen('tables')} aria-pressed={screen === 'tables'} data-testid="screen-tables">Tables</button>
             <button type="button" className={screen === 'models' ? 'on' : ''} onClick={() => setScreen('models')} aria-pressed={screen === 'models'} data-testid="screen-models">{words(mode).screen}</button>
+            <button type="button" className={screen === 'lineage' ? 'on' : ''} onClick={() => setScreen('lineage')} aria-pressed={screen === 'lineage'} data-testid="screen-lineage">{mode === 'simple' ? 'Map' : 'Lineage'}</button>
+            <button type="button" className={screen === 'changes' ? 'on' : ''} onClick={() => { setChangesName(undefined); setScreen('changes'); }} aria-pressed={screen === 'changes'} data-testid="screen-changes">{mode === 'simple' ? 'Recent' : 'Changes'}</button>
             <button type="button" className={screen === 'gauge' ? 'on' : ''} onClick={() => setScreen('gauge')} aria-pressed={screen === 'gauge'} data-testid="screen-gauge">Gauge</button>
           </nav>
         )}
@@ -218,7 +231,17 @@ export default function App() {
             )}
             {session && status !== 'down' && screen === 'models' && (
               <Suspense fallback={<section className="models-screen" data-testid="models-loading" />}>
-                <Models session={session} mode={mode} tables={tables} onChanged={refreshTables} />
+                <Models session={session} mode={mode} tables={tables} onChanged={refreshTables} select={openModel} onSelected={() => setOpenModel(undefined)} onOpenTable={followTable} onOpenChanges={followChanges} />
+              </Suspense>
+            )}
+            {session && status !== 'down' && screen === 'lineage' && (
+              <Suspense fallback={<section className="lineage-screen" data-testid="lineage-loading" />}>
+                <Lineage session={session} mode={mode} onOpenModel={followModel} onOpenTable={followTable} refreshKey={tables.map((t) => `${t.name}:${t.freshness ?? ''}`).join('|')} />
+              </Suspense>
+            )}
+            {session && status !== 'down' && screen === 'changes' && (
+              <Suspense fallback={<section className="changes-screen" data-testid="changes-loading" />}>
+                <Changes session={session} mode={mode} name={changesName} onOpenModel={followModel} onOpenTable={followTable} refreshKey={tables.map((t) => `${t.name}:${t.freshness ?? ''}`).join('|')} />
               </Suspense>
             )}
             {session && status !== 'down' && screen === 'gauge' && (
@@ -241,7 +264,7 @@ export default function App() {
             {session && status !== 'down' && screen === 'tables' && tables.length > 0 && (
               <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} mode={mode} onDone={() => void refreshTables()} /></Suspense>
             )}
-            {session && status !== 'down' && screen === 'tables' && <Tables session={session} tables={tables} aws={health?.aws} mode={mode} onChanged={refreshTables} />}
+            {session && status !== 'down' && screen === 'tables' && <Tables session={session} tables={tables} aws={health?.aws} movedFrom={health?.moved_from} onRelocated={refreshHealth} mode={mode} onChanged={refreshTables} openName={openTable} onOpened={() => setOpenTable(undefined)} onOpenModel={followModel} onOpenChanges={followChanges} />}
           </>
         )}
       </main>

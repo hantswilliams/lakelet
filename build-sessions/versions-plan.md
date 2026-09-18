@@ -111,12 +111,12 @@ Out: push, pull, branches, remotes and "Connect GitHub" (Day 1, the team catalog
 
 ## 6. Definition of done
 
-- [ ] **Every save is a version.** A question saved from the CLI or the app is a commit with the title and the author; a second save is a second version; `git log` on the Mac shows them as ordinary commits.
-- [ ] **Restore is one click.** On the Models screen, in either mode, a question's earlier version is restored with one button and the result is a new version, never a rewrite.
-- [ ] **A non-developer gets a versioned, tested dbt model without being told.** From "Save this question" in Simple mode to a model with two checks and a history, with no git word on the screen.
-- [ ] **A developer's git is respected.** An existing repository is used, nothing of theirs is swept into a commit, `auto_commit = false` stops the run-time commits, and a project without a repository still works.
-- [ ] **Lineage answers at table level** for a table, a view and a model, on the CLI, the API and both details.
-- [ ] **Tests green** on both CI runners; `audit network` zero.
+- [x] **Every save is a version.** A question saved from the CLI or the app is a commit with the title and the author; a second save is a second version; `git log` on the Mac shows them as ordinary commits. *Steps 0 to 2, 2026-09-12; `test_versions.py`.*
+- [x] **Restore is one click.** On the Models screen, in either mode, a question's earlier version is restored with one button and the result is a new version, never a rewrite. *Step 3, 2026-09-15; `versions.spec.ts`.*
+- [x] **A non-developer gets a versioned, tested dbt model without being told.** From "Save this question" in Simple mode to a model with two checks and a history, with no git word on the screen. *Steps 2 and 3; `save-question.spec.ts`, `versions.spec.ts` (Simple mode's sentences carry no id).*
+- [x] **A developer's git is respected.** An existing repository is used, nothing of theirs is swept into a commit, `auto_commit = false` stops the run-time commits, and a project without a repository still works. *Steps 0 and 1; `test_versions.py`, `test_run.py`.*
+- [x] **Lineage answers at table level** for a table, a view and a model, on the CLI, the API and both details. *Step 4, 2026-09-16; `test_lineage.py`, `models.spec.ts`.*
+- [ ] **Tests green** on both CI runners; `audit network` zero. *Green on the Mac and in the container 2026-09-17; CI runs on the push.*
 - [ ] **You used it**: a question saved, changed and restored on your own project, and lineage on your own models.
 
 ---

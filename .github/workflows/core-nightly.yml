@@ -1,0 +1,35 @@
+# The core's accuracy gate on a schedule (trust round T3). `tests/test_step5_tpch.py` asserts
+# the gauge's timing accuracy against TPC-H SF1 only under LAKELET_TPCH=1, because it is slow
+# and was tuned on one machine; ordinary CI never sets it. This job does, nightly, on the
+# Ubuntu runner, so the assertion the brief's definition of done counts on is exercised
+# somewhere on a schedule rather than only when someone remembers.
+name: core nightly
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  tpch:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: core/uv.lock
+      - run: uv sync --locked
+      - id: duckdb
+        run: echo "version=$(uv run python -c 'import duckdb; print(duckdb.__version__)')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        with:
+          path: ~/.duckdb/extensions
+          key: duckdb-extensions-${{ runner.os }}-${{ runner.arch }}-${{ steps.duckdb.outputs.version }}-iceberg-httpfs-excel-aws-tpch
+      - run: uv run python -c "import duckdb; duckdb.connect().execute('INSTALL iceberg; INSTALL httpfs; INSTALL excel; INSTALL aws; INSTALL tpch')"
+      - run: uv run pytest tests/test_step5_tpch.py tests/test_step5_gauge.py -q
+        env:
+          LAKELET_TPCH: '1'

@@ -16,7 +16,7 @@ import { Command } from '../components/Command';
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const seconds = (s: number | null) => (s === null ? '—' : s < 10 ? `${s.toFixed(1)} s` : s < 600 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1)} min`);
-const words: Record<string, string> = { green: 'Green', yellow: 'Yellow', red: 'Red' };
+const words: Record<string, string> = { green: 'Green', yellow: 'Yellow', red: 'Red', none: 'Not estimated' };
 const when = (iso: string) => {
   const d = new Date(iso);
   const today = new Date();
@@ -26,7 +26,7 @@ const when = (iso: string) => {
 
 export function points(runs: HistoryRun[]): GaugePoint[] {
   return runs
-    .filter((r) => r.ran && r.ran_where === 'local' && !r.error && r.est_wall_local && r.actual_wall && r.est_wall_local > 0 && r.actual_wall > 0)
+    .filter((r) => r.ran && r.ran_where === 'local' && !r.error && r.verdict !== 'none' && r.est_wall_local && r.actual_wall && r.est_wall_local > 0 && r.actual_wall > 0)
     .map((r) => ({ est: r.est_wall_local!, actual: r.actual_wall!, verdict: r.verdict ?? 'green', when: when(r.ts) }));
 }
 

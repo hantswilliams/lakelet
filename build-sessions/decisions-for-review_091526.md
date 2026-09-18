@@ -122,7 +122,7 @@ table, a fresh project), `--stale` selecting only the right models; Vitest for t
 Playwright: edit the seeded question through Save, see it `edited`, refresh what changed, see
 it `fresh`.
 
-- [ ] Agree
+- [x] Agree — decided by Hants 2026-09-16, in conversation: built inside step 4 of the versions round.
 - [ ] Change:
 
 ---

@@ -5,12 +5,20 @@ name: core
 on:
   push:
     branches: [main]
-    paths: ['core/**', '.github/workflows/core-ci.yml']
+    paths: ['core/**', '.github/workflows/core-ci.yml', 'README.md', 'web/src/data/status.ts', 'web/scripts/gen-readme-status.py']
   pull_request:
-    paths: ['core/**', '.github/workflows/core-ci.yml']
+    paths: ['core/**', '.github/workflows/core-ci.yml', 'README.md', 'web/src/data/status.ts', 'web/scripts/gen-readme-status.py']
   workflow_dispatch:
 
 jobs:
+  readme:
+    # README.md's built-versus-planned block is generated from web/src/data/status.ts, the one
+    # file the site reads (trust round T7); a stale block fails here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 web/scripts/gen-readme-status.py --check
+
   test:
     strategy:
       fail-fast: false

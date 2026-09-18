@@ -31,7 +31,9 @@ Scope: `build-sessions/website-story-v1-plan.md` (repository root).
 - [x] Production build: 25 pages; 60 pytest checks pass at `/lakelet/` and `/`, including configured signup markup. All 25 preview routes return HTTP 200.
 - [x] Browser review: desktop, 390px and 360px phones; menus, docs navigation, experiment, and disclosures verified.
 - [x] User authorized committing and publishing this separate website branch to GitHub (2026-09-17).
-- [ ] User review of the complete site before any merge or deployment.
+- [x] User approved merging committed remote main into this website branch (2026-09-18); resolve design/docs/log conflicts and reconcile newly shipped features.
+- [x] Combined website verified: 25-page build, 66 website checks, README status check, desktop/mobile review; core/app exactly match remote main `d0f1324`. Merge ready for the existing website branch; publication remains authorized.
+- [ ] User review before merging this website into main or deploying it.
 
 
 ## Website exploration — 2026-09-16 (this branch only)
@@ -139,6 +141,8 @@ survived. Two consequences worth keeping:
 | 6 | `SITE_URL` / canonicals / robots | **done** | `astro.config.mjs`, `public/robots.txt` (deleted), `README.md` |
 
 ### Hants, before this is live
+
+*2026-09-16: all three done. The deployed page's waitlist handler posts to `https://formspree.io/f/meaqdnjv` (read off the live build, so the repository variable is set), Hants confirmed a test submission arrived on 2026-09-15, `npm run build` has run on the Mac and in the container (21 pages), and the trust round's lede is live.*
 
 1. **Set the repo variable.** Settings → Secrets and variables → Actions →
    Variables → New variable: name `PUBLIC_WAITLIST_URL`, value

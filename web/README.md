@@ -45,8 +45,9 @@ own layout. `DataStory.astro` retains the measured Overture transfer demonstrati
 how-it-runs and concept 02. The homepage uses `LookaheadDemo.astro`: three questions,
 local/S3 choices, the data flow, memory/spill, time, and a verdict.
 
-Product documentation and status were reconciled to committed trust-round changes
-at `3c60296`; core/app source in this worktree was not changed. Screenshot provenance
+Remote `main` at `d0f1324` was merged into this branch on September 18. Product
+documentation and status include S3 writes, publishing, Lineage, and Changes. Core
+and desktop-app source match that committed main version. Screenshot provenance
 is in `public/exploration/README.md`. Scope and gates are in
 `../build-sessions/website-story-v1-plan.md`; results are in the dated session log.
 

@@ -24,13 +24,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from lakelet import __version__
+from lakelet import __version__, relocate
 from lakelet.engine import CatalogConflict
 from lakelet.gauge import inputs
 from lakelet.project import identifier
 from lakelet.query import Interrupted, RedRefused
 from lakelet.questions import NoSuchQuestion
-from lakelet.register import MissingFiles, NotRegistrable
+from lakelet.register import ChangedFiles, MissingFiles, NotRegistrable
 from lakelet.tables import NoSuchTable, NotExpirable, TableExists, UnsupportedFile
 from lakelet.versions import NoHistory, NoSuchModel
 
@@ -61,6 +61,7 @@ class AttachBody(BaseModel):
     source: str
     metadata_in_bucket: bool = False
     anonymous: bool = False
+    replace: bool = False  # register again over an existing table (T2)
 
 
 class SqlBody(BaseModel):
@@ -75,6 +76,13 @@ class EstimateBody(BaseModel):
 
 class ExpireBody(BaseModel):
     keep_days: int | None = None
+
+
+class PublishBody(BaseModel):
+    prefix: str
+    dry_run: bool = False
+    #: Publish even when the copy would take longer than the gauge's yellow threshold (W2).
+    yes: bool = False
 
 
 class SettingBody(BaseModel):
@@ -103,6 +111,8 @@ class DbtRunBody(BaseModel):
     select: list[str] = []
     burst: str = "never"
     run_anyway: bool = False
+    #: V3: build only the models that are not fresh (`lakelet run --stale`).
+    stale: bool = False
 
 
 class RunBody(BaseModel):
@@ -245,7 +255,16 @@ def _plan_json(m: Any) -> dict[str, Any]:
         "description": m.description,
         "path": m.path,
         "tests": [dataclasses.asdict(t) for t in m.tests],
-        "last_run": dataclasses.asdict(m.last_run) if m.last_run else None,
+        "last_run": (
+            {k: v for k, v in dataclasses.asdict(m.last_run).items() if k != "sql_text"}
+            if m.last_run
+            else None
+        ),
+        "state": m.state,
+        "state_reason": m.state_reason,
+        "state_since": m.state_since,
+        "state_diff": m.state_diff,
+        "state_changes": m.state_changes,
     }
 
 
@@ -280,7 +299,15 @@ def create_router(project: Project, token: str) -> APIRouter:
             "throughput_probe": inputs.probe_method(cache),
             "bandwidth_mbps": cache.get("bandwidth_mbps"),
             "aws": project.s3.describe(),
+            # the folder this project's tables were written in, when it is not this one (T5)
+            "moved_from": relocate.moved_from(project),
         }
+
+    @router.post("/relocate", dependencies=guarded)
+    def relocate_project() -> dict[str, Any]:
+        """`lakelet relocate`: the tables' locations rewritten under this folder."""
+        with lock:
+            return _plain(relocate.relocate(project))
 
     # -- tables -----------------------------------------------------------------------
 
@@ -360,6 +387,7 @@ def create_router(project: Project, token: str) -> APIRouter:
                         body.source,
                         metadata_in_bucket=body.metadata_in_bucket,
                         anonymous=body.anonymous,
+                        replace=body.replace,
                     )
                 )
             except TableExists:
@@ -374,7 +402,7 @@ def create_router(project: Project, token: str) -> APIRouter:
                 return _plain(project.tables.refresh(name))
             except NoSuchTable:
                 return error(404, "no_such_table", f"no table named {name}")
-            except (NotRegistrable, MissingFiles) as e:
+            except (NotRegistrable, MissingFiles, ChangedFiles) as e:
                 return error(409, "refresh_failed", str(e))
 
     @router.post("/tables/{name}/expire", dependencies=guarded)
@@ -389,6 +417,24 @@ def create_router(project: Project, token: str) -> APIRouter:
                 return error(404, "no_such_table", f"no table named {name}")
             except NotExpirable as e:
                 return error(409, "not_expirable", str(e))
+
+    @router.post("/tables/{name}/publish", dependencies=guarded)
+    def publish_table(name: str, body: PublishBody):
+        """`lakelet tables publish` (decisions W2): the table moved into a bucket, every
+        snapshot kept; `dry_run` counts and weighs first."""
+        from lakelet.relocate import NotPublishable, publish
+
+        with lock:
+            try:
+                cap = None if body.yes else project.config.gauge.yellow_max_seconds
+                report = publish(project, name, body.prefix, dry_run=body.dry_run, cap_seconds=cap)
+            except NoSuchTable:
+                return error(404, "no_such_table", f"no table named {name}")
+            except NotPublishable as e:
+                return error(409, "not_publishable", str(e))
+            if not body.dry_run:
+                project.tables.refresh_agents_md()
+        return _plain(report)
 
     # -- settings (the panel is `lakelet config set`) ---------------------------------
 
@@ -546,6 +592,50 @@ def create_router(project: Project, token: str) -> APIRouter:
                 return error(400, "sql_error", str(e).splitlines()[0])
             return {"name": name, "commit": result.id, "git": result.reason}
 
+    # -- lineage (versions brief G8) ---------------------------------------------------
+
+    @router.get("/lineage", dependencies=guarded)
+    def lineage_all():
+        """The whole graph for the Lineage screen (decisions L1): every table, view and
+        model with its kind and state, every edge with how it is known."""
+        from lakelet.dbt import runner
+        from lakelet.lineage import whole
+
+        with lock:
+            try:
+                return whole(project)
+            except runner.DbtFailed as e:
+                return error(400, "dbt", str(e))
+
+    @router.get("/changes", dependencies=guarded)
+    def changes_feed(since: str | None = None, last: int = 50, name: str | None = None):
+        """`lakelet changes` (decisions L2): snapshots, runs and versions merged by time,
+        newest first; `since` as the CLI takes it, `name` for one table, model or question."""
+        from lakelet.changes import changes, parse_since
+
+        try:
+            cutoff = parse_since(since) if since else None
+        except ValueError as e:
+            return error(400, "bad_since", str(e))
+        with lock:
+            return [c.as_dict() for c in changes(project, since=cutoff, last=last, name=name)]
+
+    @router.get("/lineage/{name}", dependencies=guarded)
+    def lineage(name: str, depth: int = 1):
+        """What a table, view or model reads and what reads it, with how each edge is
+        known; compiles the models first when the manifest is older than they are."""
+        from lakelet.dbt import runner
+        from lakelet.lineage import NoSuchNode
+        from lakelet.lineage import lineage as _lineage
+
+        with lock:
+            try:
+                return _plain(_lineage(project, name, max(1, depth)))
+            except NoSuchNode:
+                return error(404, "no_such_node", f"no table, view or model named {name}")
+            except runner.DbtFailed as e:
+                return error(400, "dbt", str(e))
+
     # -- history ----------------------------------------------------------------------
 
     @router.get("/history", dependencies=guarded)
@@ -573,7 +663,11 @@ def create_router(project: Project, token: str) -> APIRouter:
         with lock:
             try:
                 report = runner.run(
-                    project, body.select or None, burst=body.burst, run_anyway=body.run_anyway
+                    project,
+                    body.select or None,
+                    burst=body.burst,
+                    run_anyway=body.run_anyway,
+                    stale=body.stale,
                 )
             except runner.NoBurstYet as e:
                 return error(400, "no_burst_yet", str(e))
@@ -588,6 +682,7 @@ def create_router(project: Project, token: str) -> APIRouter:
             "views_dropped": report.views_dropped,
             "seconds": report.seconds,
             "ok": report.ok,
+            "selected": report.selected,
         }
 
     # -- the gauge screen (real-data brief R8) -----------------------------------------

@@ -118,8 +118,25 @@ def test_home_data_flow_is_labeled_and_distinguishes_planned_paths():
     content = text("index")
     for phrase in ["Your laptop", "Your S3 bucket", "Remote compute", "Iceberg REST catalog",
                    "Read existing Parquet in place", "Same prefix, same files",
-                   "metadata stays on your laptop by default",
-                   "Table publishing and remote compute are planned"]:
+                   "metadata stays on your laptop by default", "publish a local table",
+                   "every snapshot kept", "The catalog stays local",
+                   "Remote compute and a shared catalog are planned"]:
         assert phrase in content
-    assert any(a.get("aria-label") == "S3 data is read on your laptop today. Publishing tables to S3 is planned."
+    assert any(a.get("aria-label") == "Read S3 data on your laptop and publish local tables to S3 today."
                for _, a in page.tags)
+
+
+def test_merged_features_are_available_and_documented():
+    for route in ["index", "app"]:
+        content = text(route)
+        for feature in ["A warehouse in a bucket", "Lineage, and whether a model is out of date",
+                        "What happened: the changes feed"]:
+            assert feature in content
+        assert "Table publishing and remote compute are planned" not in content
+    assert "lineage interface are planned" not in text("medallion")
+    for command in ["lakelet tables publish", "lakelet lineage", "lakelet changes", "--warehouse"]:
+        assert command in text("docs/cli")
+    for endpoint in ["POST /tables/{name}/publish", "GET /lineage", "GET /changes"]:
+        assert endpoint in text("docs/api")
+    assert any(a.get("href") == f"{BASE}/docs/tables#publishing-a-table-into-a-bucket"
+               for a in Page(DIST / "index.html").elements("a"))

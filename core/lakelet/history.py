@@ -16,6 +16,8 @@ import sqlalchemy as sa
 from sqlalchemy import event
 
 SCHEMA_VERSION = 1
+#: Numbered migrations from an older schema (trust round T4). None yet.
+MIGRATIONS: list = []
 
 metadata = sa.MetaData()
 
@@ -137,6 +139,10 @@ def _utc(ts: datetime | None) -> datetime | None:
     return ts.replace(tzinfo=UTC) if ts is not None and ts.tzinfo is None else ts
 
 
+def _without(row, key: str) -> dict:
+    return {k: v for k, v in dict(row).items() if k != key}
+
+
 def _run(row) -> Run:
     data = dict(row)
     for column in JSON_COLUMNS:
@@ -157,12 +163,13 @@ class History:
             dbapi_conn.execute("PRAGMA busy_timeout=5000")
 
         metadata.create_all(self.engine)
-        with self.engine.begin() as c:
-            if (
-                c.execute(sa.select(meta.c.value).where(meta.c.key == "schema_version")).scalar()
-                is None
-            ):
-                c.execute(meta.insert().values(key="schema_version", value=str(SCHEMA_VERSION)))
+        from lakelet.schema import ensure_schema
+
+        try:
+            ensure_schema(self.engine, meta, SCHEMA_VERSION, MIGRATIONS, "history")
+        except Exception:
+            self.engine.dispose()
+            raise
 
     def close(self) -> None:
         self.engine.dispose()
@@ -240,6 +247,34 @@ class History:
                 .first()
             )
         return None if row is None else _run(row)
+
+    def last_runs(self) -> list[tuple[str, str, Run]]:
+        """Every model's and every question's last run (decisions L2, the Changes feed):
+        ``("model", unique_id, run)`` and ``("question", slug, run)``. History keeps one run
+        per model and per question, so this is what there is to list."""
+        out: list[tuple[str, str, Run]] = []
+        with self.engine.connect() as c:
+            for row in (
+                c.execute(
+                    sa.select(model_runs.c.unique_id, runs).join(
+                        runs, model_runs.c.run_id == runs.c.id
+                    )
+                )
+                .mappings()
+                .all()
+            ):
+                out.append(("model", row["unique_id"], _run(_without(row, "unique_id"))))
+            for row in (
+                c.execute(
+                    sa.select(question_runs.c.slug, runs).join(
+                        runs, question_runs.c.run_id == runs.c.id
+                    )
+                )
+                .mappings()
+                .all()
+            ):
+                out.append(("question", row["slug"], _run(_without(row, "slug"))))
+        return out
 
     def record_question_run(self, slug: str, run_id: int) -> None:
         now = datetime.now(UTC)

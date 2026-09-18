@@ -187,7 +187,10 @@ def estimate_plan(
     wall = FIXED_OVERHEAD_SECONDS + max(io_seconds, cpu_seconds) + spill_seconds
 
     free_room = (machine.get("ram") or 0) + (machine.get("free_disk") or 0)
-    if wall >= thresholds.yellow_max_seconds or peak > free_room:
+    unattributed = [s["unattributed"] for s in scan_info if s.get("unattributed")]
+    if unattributed:
+        verdict = "none"  # a scan the gauge knows nothing about: never Green (T3)
+    elif wall >= thresholds.yellow_max_seconds or peak > free_room:
         verdict = "red"
     elif (
         remote
@@ -219,4 +222,5 @@ def estimate_plan(
         "cost_burst": cost_burst,
         "cap": cap,
         "memory_limit": limit,
+        "unattributed": unattributed,
     }

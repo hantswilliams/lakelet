@@ -169,12 +169,19 @@ class Config(BaseModel):
         return cls(**known, extra=data)
 
 
-def render_default(name: str) -> str:
+def render_default(name: str, warehouse: str = "./warehouse") -> str:
     """The file ``init`` writes: the brief's §3.3, with the sections core v0 does not read
-    present so the file is already valid for the sessions that will."""
+    present so the file is already valid for the sessions that will. ``warehouse`` is
+    `./warehouse` or an `s3://bucket/prefix` (`init --warehouse`, decisions W1); it is fixed
+    at init, because tables carry absolute locations."""
+    note = (
+        "# ./warehouse, or s3://bucket/prefix: fixed at init"
+        if warehouse == "./warehouse"
+        else "# fixed at init; a bucket table carries its absolute location"
+    )
     return f'''[project]
 name = "{name}"
-warehouse = "./warehouse"        # or s3://bucket/prefix, later
+warehouse = "{warehouse}"        {note}
 
 [catalog]
 mode = "local"                    # local | team | external

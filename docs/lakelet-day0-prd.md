@@ -166,7 +166,7 @@ Each feature has: user stories, functional requirements (FR), acceptance criteri
 2. MUST show row count, elapsed time, and (if burst) actual cost in the status line.
 3. Auto-chart MUST appear when the result has exactly one date/category column and 1–3 numeric columns: line for dates, bar for categories. MUST be dismissible and MUST be swappable between line/bar/table.
 4. Export MUST support CSV and Parquet; copy-as-Markdown SHOULD exist for P3.
-5. "Save as question" MUST write a dbt model: `models/questions/<slug>.sql` plus a `schema.yml` entry with the title as description and two default checks, so it is git-friendly, human-readable and a valid dbt project from the first save; `last_run` lives in history, not in the file (brief D30, D16).
+5. "Save as question" MUST write a dbt model: `models/questions/<slug>.sql` plus a `schema.yml` entry with the title as description and two default checks, so it is committed (every save is a version, `versions-plan.md` G2 and G3, built September 12, 2026), human-readable and a valid dbt project from the first save; `last_run` lives in history, not in the file (brief D30, D16).
 6. Saved questions MUST re-run with one click and show the gauge first.
 
 **AC**
@@ -270,7 +270,7 @@ Each feature has: user stories, functional requirements (FR), acceptance criteri
 
 **FR**
 1. `lakelet mcp [--project <dir>]` MUST start a stdio MCP server over the same core as the CLI and app.
-2. Tools: `list_tables`, `describe(table)`, `sample(table, n≤5)`, `estimate(sql)`, `query(sql)`, `burst(sql, cap_usd)`, `import_file(path)`, `save_question(title, sql)`, `lineage(table)`, `publish(table, uri)`. In Day 0 `lineage` is table level, from the dbt manifest and Iceberg snapshot history (brief D32); column level is Day 3.
+2. Tools: `list_tables`, `describe(table)`, `sample(table, n≤5)`, `estimate(sql)`, `query(sql)`, `burst(sql, cap_usd)`, `import_file(path)`, `save_question(title, sql)`, `lineage(table)`, `publish(table, uri)`. In Day 0 `lineage` is table level, from the dbt manifest and Iceberg snapshot history (brief D32); column level is Day 3. *Met September 16, 2026 at table level: `lakelet lineage`, `GET /api/lineage/{name}` and the app's lines (`versions-plan.md` step 4); the MCP tool is session 5's.*
 3. Read tools MUST be enabled by default. `burst`, `import_file`, `save_question`, `publish` MUST be off until enabled per project in `lakelet.toml` (`[agents] allow = [...]`).
 4. `burst` MUST require `cap_usd`; the control plane MUST refuse a burst without one. `LAKELET_AGENT_CAP_USD` MUST set a per-agent, per-day ceiling; calls past it MUST return a refusal with the remaining budget, not an error.
 5. Every call MUST be logged locally with agent/client name, tool, verdict, cost, duration and outcome; `lakelet agents log` MUST print it.

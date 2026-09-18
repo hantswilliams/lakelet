@@ -86,3 +86,54 @@ test('the versions, the diff, Gauge then and now, Restore as a third version, an
   await expect(history.getByRole('button')).toHaveCount(1);
   await expect(history.getByRole('button')).toHaveText('Restore this version');
 });
+
+test('the Recent strip on the detail, and the Changes screen: the saves, the restore, a run, the tables (L2)', async ({ page }) => {
+  test.setTimeout(240_000);
+  const s = sidecar();
+  await page.goto(pageUrl(s));
+  await expect(page.getByRole('status')).toHaveText('core ready');
+  await page.getByTestId('mode-technical').click();
+  await page.getByTestId('screen-models').click();
+  const screen = page.getByTestId('models-screen');
+  await expect(screen.getByTestId('dag')).toBeVisible({ timeout: 90_000 });
+  await screen.getByTestId('dag').locator('tbody tr', { hasText: name }).click();
+  const detail = screen.getByTestId('model-detail');
+  const recent = detail.getByTestId('recent');
+  // the versions the CLI and the test before made, newest first
+  await expect(recent.getByTestId('recent-version').first()).toContainText(`restore question: ${SEEDED_QUESTION.title}`);
+  await expect(recent).toContainText(`update question: ${SEEDED_QUESTION.title}`);
+  // (the first save can be past the strip's five when the save spec, on the same sidecar, ran the DAG first)
+  // a run of the question: a run entry on the strip
+  await detail.getByTestId('run-this').click();
+  await expect(screen.getByTestId('run-report')).toBeVisible({ timeout: 90_000 });
+  await screen.getByTestId('dag').locator('tbody tr', { hasText: name }).click();
+  await expect(recent.getByTestId('recent-run')).toContainText(`${name} built in`, { timeout: 30_000 });
+  await expect(recent.getByTestId('recent-run')).toContainText('just now');
+
+  // All changes: the screen arrives filtered to this name, with the CLI's line
+  await detail.getByTestId('recent-more').click();
+  const changes = page.getByTestId('changes-screen');
+  await expect(changes.getByTestId('changes-filter')).toHaveValue(name);
+  await expect(changes.getByTestId('feed')).toBeVisible();
+  await expect(changes.getByTestId('command')).toContainText(`lakelet changes ${name} --last 100`);
+  await expect(changes.getByTestId('entry-run').first()).toContainText(`${name} built in`);
+  await expect(changes.getByTestId('entry-version').last()).toContainText(`save question: ${SEEDED_QUESTION.title}`);
+  await expect(changes.getByTestId('entry-snapshot').first()).toContainText(`${name}:`); // the run wrote the question's table
+
+  // the whole project: the import's snapshot and init's version at the bottom, the run at the top
+  await changes.getByTestId('changes-filter').fill('');
+  await expect(changes.getByTestId('command')).toContainText('lakelet changes --last 100');
+  await expect(changes.getByTestId('entry-snapshot').last()).toContainText('orders: append +4 rows');
+  await expect(changes.getByTestId('entry-version').last()).toContainText('lakelet init');
+  await expect(changes.getByTestId('feed').locator('li').first()).toContainText(`${name} built in`);
+  // an entry is a link: the table's opens its detail on the Tables screen
+  await changes.getByTestId('entry-snapshot').last().getByTestId('open-orders').click();
+  await expect(page.getByTestId('detail')).toContainText('orders · 4 rows');
+  await expect(page.getByTestId('detail').getByTestId('recent')).toContainText('orders: append +4 rows');
+
+  // Simple mode: the screen is Recent, and its words
+  await page.getByTestId('mode-simple').click();
+  await page.getByTestId('screen-changes').click();
+  await expect(changes.getByTestId('entry-run').first()).toContainText(`${name} refreshed in`);
+  await expect(changes.getByTestId('entry-snapshot').last()).toContainText('orders: 4 rows added');
+});

@@ -16,6 +16,8 @@ export interface Health {
   bandwidth_mbps: number | null;
   /** Whether the core has AWS credentials, and from where (never a key). */
   aws?: { configured: boolean; source: 'environment' | 'profile' | 'none'; profile: string | null; region: string; endpoint: string | null };
+  /** The folder this project's tables were written in, when it is not this one (trust round T5). */
+  moved_from?: string | null;
 }
 
 export interface TableInfo {
@@ -34,6 +36,107 @@ export interface TableInfo {
   /** `table`, or `view` for a catalog view (real-data R6), whose rows and bytes are 0. */
   kind?: 'table' | 'view';
   view_sql?: string | null;
+  /** A replace interrupted between its drop and its rename (T1): the name it was meant to become. */
+  interrupted_replace_of?: string | null;
+  /** The folder moved and this table's metadata points at where it was (T5). */
+  needs_relocate?: boolean;
+}
+
+/** One edge of `GET /lineage/{name}` (versions brief G8): a table or view in the catalog,
+ *  or a model not built yet; `via` is how the edge is known — a dbt `ref()` or `source()`,
+ *  a table named bare in the model's SQL, or a catalog view's SQL. */
+export interface LineageEdge {
+  name: string;
+  kind: 'table' | 'view' | 'model';
+  via: 'ref' | 'source' | 'sql' | 'view';
+  /** 1 for a direct edge; more when the call asked for depth. */
+  depth: number;
+}
+
+/** `lakelet lineage <name>`: what it reads and what reads it, and who built it. */
+export interface Lineage {
+  name: string;
+  kind: 'table' | 'view' | 'model';
+  upstream: LineageEdge[];
+  downstream: LineageEdge[];
+  /** The model that builds it, `imported`, `attached from <prefix>`, or null (never built; a view put by hand). */
+  built_by: string | null;
+  last_built: string | null;
+  compiled: boolean;
+}
+
+/** One node of the whole graph (`GET /lineage`, decisions L1): a table or view in the
+ *  catalog or a model not built yet; `model` says a dbt model builds it, and then `state`
+ *  is its state as the Models screen shows it. */
+export interface LineageNode {
+  name: string;
+  kind: 'table' | 'view' | 'model';
+  model: boolean;
+  state: ModelState | null;
+  state_reason: string | null;
+  /** The prefix an attached table was registered from. */
+  source: string | null;
+  freshness: string | null;
+}
+
+/** `lakelet changes` (decisions L2): one entry of the feed. `kind` says the source — a
+ *  table's `snapshot`, a model's or question's last `run`, a git `version` — and `target`
+ *  what `name` is, for the link; a version names everything it touched in `names`. */
+export interface Change {
+  when: string;
+  kind: 'snapshot' | 'run' | 'version';
+  name: string | null;
+  target: 'table' | 'model' | 'question' | 'project';
+  operation: string | null;
+  snapshot_id: number | null;
+  added_rows: number | null;
+  deleted_rows: number | null;
+  /** The models the snapshot made out of date (L3). */
+  affects: string[];
+  ok: boolean | null;
+  seconds: number | null;
+  verdict: string | null;
+  error: string | null;
+  /** The version's short id, author and message. */
+  id: string | null;
+  author: string | null;
+  message: string | null;
+  names: string[];
+}
+
+export interface ChangesQuery { since?: string; last?: number; name?: string }
+
+/** `lakelet lineage --all`: the whole project as the Lineage screen draws it. */
+export interface LineageGraph {
+  nodes: LineageNode[];
+  edges: { from: string; to: string; via: LineageEdge['via'] }[];
+  compiled: boolean;
+}
+
+/** `POST /tables/{name}/publish` (`lakelet tables publish`, decisions W2): a table moved into a bucket. */
+export interface PublishReport {
+  name: string;
+  source: string;
+  target: string;
+  files: number;
+  bytes: number;
+  copied: number;
+  skipped: number;
+  metadata_files: number;
+  data_files: number;
+  /** The bandwidth figure's estimate for the copy, when the cache has one. */
+  seconds: number | null;
+  dry_run: boolean;
+}
+
+/** `POST /relocate` (`lakelet relocate`, trust round T5). */
+export interface RelocateReport {
+  old_root: string | null;
+  new_root: string;
+  relocated: string[];
+  skipped: string[];
+  metadata_files: number;
+  data_files: number;
 }
 
 export interface Snapshot {
@@ -47,6 +150,8 @@ export interface Snapshot {
   total_rows: number | null;
   current: boolean;
   expirable: boolean;
+  /** The models this snapshot made out of date — their last run predates it — in dependency order (decisions L3). */
+  affects?: string[];
 }
 
 /** `lakelet tables describe`: the list's fields plus partitioning, the snapshots, and what `expire` would take. */
@@ -61,6 +166,14 @@ export interface TableDescription extends TableInfo {
   snapshot_list: Snapshot[];
   /** A view's properties (`lakelet.dbt-model` names the dbt model it came from); empty for a table. */
   properties?: Record<string, string>;
+  /** An attached table (trust round T2): when its files were last verified against the
+   *  prefix, the ones changed under the same path since as `[uri, why]`, or why the
+   *  prefix could not be listed. */
+  verified_at?: string | null;
+  changed_files?: [string, string][];
+  verify_error?: string | null;
+  /** A table published to a bucket (W2) whose files are still under the local warehouse, until `expire`. */
+  local_copy_files?: number;
 }
 
 export interface ExpireReport {
@@ -111,7 +224,14 @@ export interface LastRun {
   seconds: number | null;
   verdict: string | null;
   error: string | null;
+  /** The hash of the compiled SQL that run built (V3: an edit since is `edited`). */
+  sql_hash?: string | null;
 }
+
+/** A model's state (decisions V3, versions step 4): `fresh` (nothing it is made of changed
+ *  since its last successful run), `edited` (its own SQL did), `upstream` (a table or view
+ *  it reads changed, or a model it reads is not fresh), `never` (no successful run). */
+export type ModelState = 'fresh' | 'edited' | 'upstream' | 'never';
 
 /** One model of `lakelet run --plan` (`GET /api/run/plan`): compiled, estimated, in dependency order. */
 export interface PlannedModel {
@@ -131,6 +251,26 @@ export interface PlannedModel {
   path: string;
   tests: ModelTest[];
   last_run: LastRun | null;
+  state: ModelState | null;
+  /** Why it is not fresh, naming what changed: "orders changed", "by_c is out of date",
+   *  "the SQL changed since the last run", "never built", "the last run failed". */
+  state_reason: string | null;
+  /** When, ISO 8601, when a time is known. */
+  state_since: string | null;
+  /** `edited`: the unified diff of the compiled SQL the last run built against the SQL now. */
+  state_diff?: string | null;
+  /** `upstream` naming a table or view: what was committed to it since the run, newest first. */
+  state_changes?: StateChange[];
+}
+
+/** One commit to a table (or a new version of a view) since a model's last run (V3). */
+export interface StateChange {
+  name: string;
+  /** Iceberg's `append`, `overwrite`, `delete`, `replace`, or `new version` for a view. */
+  operation: string | null;
+  added_rows: number | null;
+  deleted_rows: number | null;
+  timestamp: string | null;
 }
 
 export interface ModelResult {
@@ -148,6 +288,8 @@ export interface RunReport {
   views_dropped: string[];
   seconds: number;
   ok: boolean;
+  /** A `stale` run: the models it chose because they were not fresh (empty: nothing ran); null otherwise. */
+  selected?: string[] | null;
 }
 
 export interface PreviewColumn {
@@ -288,9 +430,10 @@ export class Api {
     return Array.isArray(p) ? p : [p];
   }
 
-  /** `lakelet tables attach <name> [--anonymous] <prefix>`: registered in place, nothing copied. */
-  attach(name: string, source: string, anonymous = false): Promise<TableInfo> {
-    return this.post<TableInfo>('/tables/attach', { name, source, anonymous });
+  /** `lakelet tables attach <name> [--anonymous] <prefix>`: registered in place, nothing
+   *  copied; `replace` registers the prefix again over an existing table (T2). */
+  attach(name: string, source: string, anonymous = false, replace = false): Promise<TableInfo> {
+    return this.post<TableInfo>('/tables/attach', { name, source, anonymous, replace });
   }
 
   history(last = 200): Promise<HistoryRun[]> {
@@ -342,8 +485,9 @@ export class Api {
 
   /** `lakelet run [select]... [--run-anyway]`: build the DAG here; a Red model refuses
    *  (409 `red_refused`) until `run_anyway`. */
-  run(select: string[] = [], runAnyway = false): Promise<RunReport> {
-    return this.post<RunReport>('/run', { select, burst: 'never', run_anyway: runAnyway });
+  /** `lakelet run [<models>] [--run-anyway] [--stale]`; `stale` (V3) builds only what is not fresh. */
+  run(select: string[] = [], runAnyway = false, stale = false): Promise<RunReport> {
+    return this.post<RunReport>('/run', { select, burst: 'never', run_anyway: runAnyway, stale });
   }
 
   settings(): Promise<Settings> {
@@ -389,6 +533,36 @@ export class Api {
 
   git(): Promise<GitStatus> {
     return this.get<GitStatus>('/git');
+  }
+
+  /** `lakelet lineage --all`: the whole graph (L1). */
+  lineageAll(): Promise<LineageGraph> {
+    return this.get<LineageGraph>('/lineage');
+  }
+
+  /** `lakelet changes [name] [--since] [--last]`: the feed (L2). */
+  changes(q: ChangesQuery = {}): Promise<Change[]> {
+    const params = new URLSearchParams();
+    if (q.since) params.set('since', q.since);
+    if (q.last) params.set('last', String(q.last));
+    if (q.name) params.set('name', q.name);
+    const qs = params.toString();
+    return this.get<Change[]>(`/changes${qs ? `?${qs}` : ''}`);
+  }
+
+  /** `lakelet lineage <name> --depth N`: reads from and feeds, one level by default (G8). */
+  lineage(name: string, depth = 1): Promise<Lineage> {
+    return this.get<Lineage>(`/lineage/${encodeURIComponent(name)}?depth=${depth}`);
+  }
+
+  /** `lakelet tables publish <name> <prefix> [--dry-run] [--yes]` (W2). 409 `not_publishable` with the reason. */
+  publish(name: string, prefix: string, dryRun = false, yes = false): Promise<PublishReport> {
+    return this.post<PublishReport>(`/tables/${encodeURIComponent(name)}/publish`, { prefix, dry_run: dryRun, yes });
+  }
+
+  /** `lakelet relocate`: after the folder moved, the tables' locations rewritten under it. */
+  relocate(): Promise<RelocateReport> {
+    return this.post<RelocateReport>('/relocate', {});
   }
 
   /** `lakelet estimate '<sql>'`: the gauge's verdict for a statement, nothing run. */

@@ -97,4 +97,4 @@ Two things learned from the clients and built in: DuckDB expects a table's `data
 
 ## Where the files go
 
-`[project] warehouse` in `lakelet.toml` is the base: `./warehouse` by default, resolved to `file://`, or an `s3://` prefix. A table's data and metadata sit under `<warehouse>/main/<table>/`. Every commit writes a new `<version>-<uuid>.metadata.json`; the catalog holds the pointer to the current one. Leaving Lakelet means keeping `warehouse/` and pointing any Iceberg reader at the latest `metadata.json` of each table.
+`[project] warehouse` in `lakelet.toml` is the base: `./warehouse` by default, resolved to `file://`, or an `s3://` prefix given to `lakelet init --warehouse` ([A real bucket](/docs/remote) has the page); it is fixed at `init`, because tables carry absolute locations. A table's data and metadata sit under `<warehouse>/main/<table>/`. Every commit writes a new `<version>-<uuid>.metadata.json`; the catalog holds the pointer to the current one. Leaving Lakelet means keeping `warehouse/` and pointing any Iceberg reader at the latest `metadata.json` of each table.

@@ -12,6 +12,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -66,6 +67,18 @@ class LastRun:
     seconds: float | None
     verdict: str | None
     error: str | None
+    #: The hash of the compiled SQL that run built (decisions V3: an edit since is `edited`),
+    #: and the SQL itself for the diff; the API leaves the text out of the JSON.
+    sql_hash: str | None = None
+    sql_text: str | None = None
+
+
+#: A model's state (decisions-for-review V3, built in versions step 4): `fresh` (nothing it
+#: is made of changed since its last successful run), `edited` (its own SQL did), `upstream`
+#: (a table it reads has a newer snapshot, a view it reads a newer version, or a model it
+#: reads is not fresh), `never` (no successful run in history). `lakelet run --stale` builds
+#: every model that is not fresh.
+STATES = ("fresh", "edited", "upstream", "never")
 
 
 @dataclass
@@ -86,6 +99,18 @@ class PlannedModel:
     path: str = ""
     tests: list[ModelTest] = field(default_factory=list)
     last_run: LastRun | None = None
+    state: str | None = None
+    #: Why it is not fresh, naming what changed ("orders changed", "by_c is out of date",
+    #: "the SQL changed since the last run", "never built", "the last run failed");
+    #: `state_since` is when, ISO 8601, when a time is known.
+    state_reason: str | None = None
+    state_since: str | None = None
+    #: What changed, so the state is shown and not only said: for `edited`, the unified
+    #: diff of the compiled SQL the last run built against the SQL now; for `upstream`
+    #: naming a table or view, its snapshots (or versions) since that run, newest first,
+    #: each ``{name, operation, added_rows, deleted_rows, timestamp}``.
+    state_diff: str | None = None
+    state_changes: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -108,6 +133,9 @@ class RunReport:
     #: the repository could not be written.
     commit: str | None = None
     git: str | None = None
+    #: `--stale`: the models the run chose because they were not fresh (empty when every
+    #: model was, and nothing ran); None for a run that was not `--stale`.
+    selected: list[str] | None = None
 
     @property
     def ok(self) -> bool:
@@ -234,6 +262,45 @@ def _ordered(models: dict[str, PlannedModel]) -> list[PlannedModel]:
     return done
 
 
+def manifest_path(project: Project) -> Path:
+    return project.lakelet_dir / "dbt" / "target" / "manifest.json"
+
+
+def manifest_is_stale(project: Project) -> bool:
+    """No manifest from a compile yet, or a file under `models/` newer than it."""
+    path = manifest_path(project)
+    if not path.exists():
+        return True
+    written = path.stat().st_mtime
+    models = project.root / "models"
+    return any(f.stat().st_mtime > written for f in models.rglob("*") if f.is_file())
+
+
+def manifest(project: Project, compile_if_stale: bool = True) -> tuple[dict[str, Any], bool]:
+    """The last compile's `manifest.json`, compiled first when it is missing or older than
+    the models (versions brief G8, lineage). The second value says whether this call
+    compiled. With ``compile_if_stale`` false a stale manifest is read as it is."""
+    compiled = False
+    if compile_if_stale and manifest_is_stale(project):
+        _invoke(project, "compile", [])
+        compiled = True
+    data = json.loads(manifest_path(project).read_text(encoding="utf-8"))
+    if compile_if_stale and not compiled and _partly_compiled(data):
+        # a `lakelet run <selector>` compiled only what it selected: the other models'
+        # SQL is missing, and what a model names bare in its SQL is lineage too
+        _invoke(project, "compile", [])
+        data = json.loads(manifest_path(project).read_text(encoding="utf-8"))
+        compiled = True
+    return data, compiled
+
+
+def _partly_compiled(manifest: dict[str, Any]) -> bool:
+    return any(
+        node.get("resource_type") == "model" and not node.get("compiled_code")
+        for node in manifest.get("nodes", {}).values()
+    )
+
+
 def plan(project: Project, select: list[str] | None = None) -> list[PlannedModel]:
     """Compile, then estimate every model's compiled SQL in dependency order, giving the
     engine each view model as it goes so the models after it bind."""
@@ -283,7 +350,21 @@ def plan(project: Project, select: list[str] | None = None) -> list[PlannedModel
     finally:
         for name in stand_ins:
             project.engine.drop_view(name)
+    _states(project, ordered)
     return ordered
+
+
+def _states(project: Project, ordered: list[PlannedModel]) -> None:
+    """Each model's state (V3) from lineage's graph (the manifest is the one just
+    compiled, so nothing compiles again; `Graph.states` has the rules), then what
+    changed behind it."""
+    from lakelet.lineage import Graph
+
+    graph = Graph(project, compile_if_stale=False)
+    states = graph.states()
+    for m in ordered:
+        m.state, m.state_reason, m.state_since = states.get(m.name, ("never", "never built", None))
+        m.state_diff, m.state_changes = _what_changed(project, m, graph)
 
 
 def model_tests(manifest: dict[str, Any], model_uid: str) -> list[ModelTest]:
@@ -321,7 +402,70 @@ def _last_run(project: Project, unique_id: str) -> LastRun | None:
         seconds=run.actual_wall,
         verdict=run.verdict,
         error=run.error,
+        sql_hash=run.sql_hash,
+        sql_text=run.sql_text,
     )
+
+
+def _what_changed(project: Project, m: PlannedModel, graph: Any) -> tuple[str | None, list]:
+    """The evidence behind a state that is not fresh: the SQL diff since the last run for
+    `edited`; for `upstream` naming a table or view, what was committed to it since."""
+    import difflib
+
+    r = m.last_run
+    if m.state == "edited" and r is not None and r.sql_text is not None:
+        before, now = r.sql_text.splitlines(), m.compiled_sql.splitlines()
+        # the whole SQL as context, so a reader can see the change where it sits; the
+        # app folds it to the changed lines and shows the whole on request
+        lines = difflib.unified_diff(
+            before, now, "last run", "now", n=max(len(before), len(now)), lineterm=""
+        )
+        return "\n".join(lines), []
+    if m.state == "upstream" and r is not None and r.ts and m.state_reason:
+        name, _, what = m.state_reason.rpartition(" ")
+        if what == "changed":
+            return None, _committed_since(project, graph, name, datetime.fromisoformat(r.ts))
+    return None, []
+
+
+def _committed_since(project: Project, graph: Any, name: str, since: datetime) -> list:
+    node = graph.nodes.get(name)
+    if node is None:
+        return []
+    if node.kind == "view":
+        return [
+            {
+                "name": name,
+                "operation": "new version",
+                "added_rows": None,
+                "deleted_rows": None,
+                "timestamp": node.freshness.isoformat() if node.freshness else None,
+            }
+        ]
+    try:
+        md = project.tables._metadata(name)
+    except Exception:  # noqa: BLE001 - a table that does not resolve (moved, T5) has no list
+        return []
+    out = []
+    for snap in sorted(md.snapshots, key=lambda s: s.timestamp_ms, reverse=True):
+        when = datetime.fromtimestamp(snap.timestamp_ms / 1000, tz=since.tzinfo)
+        if when <= since:
+            break
+        props = snap.summary.additional_properties if snap.summary else {}
+        out.append(
+            {
+                "name": name,
+                "operation": snap.summary.operation.value if snap.summary else None,
+                "added_rows": int(props["added-records"]) if "added-records" in props else None,
+                "deleted_rows": (
+                    int(props["added-position-deletes"])
+                    if "added-position-deletes" in props
+                    else None
+                ),
+                "timestamp": when.isoformat(),
+            }
+        )
+    return out
 
 
 def unqualified(sql: str) -> str:
@@ -346,16 +490,28 @@ def run(
     select: list[str] | None = None,
     burst: str = "never",
     run_anyway: bool = False,
+    stale: bool = False,
 ) -> RunReport:
+    """``stale`` (V3, `lakelet run --stale`, the app's Refresh what changed): plan the
+    whole project and build only the models that are not fresh, in dependency order; when
+    every model is fresh nothing runs and the report says so."""
     if burst != "never":
         raise NoBurstYet(
             "--burst auto is session 8's; there is no burst yet. `--burst never` runs "
             "everything here."
         )
     started = time.perf_counter()
-    planned = plan(project, select)
+    planned = plan(project, None if stale else select)
     report = RunReport(models=planned)
-    red = [m.name for m in planned if m.verdict == "red"]
+    chosen = planned
+    if stale:
+        chosen = [m for m in planned if m.state != "fresh"]
+        select = [m.name for m in chosen]
+        report.selected = list(select)
+        if not chosen:
+            report.seconds = time.perf_counter() - started
+            return report
+    red = [m.name for m in chosen if m.verdict == "red"]
     if red and not run_anyway:
         raise RedRefusedRun(
             f"{len(red)} model(s) need more machine: {', '.join(red)}. `--run-anyway` runs "
@@ -366,19 +522,21 @@ def run(
     result = _invoke(project, "run", _selection(select or []))
     by_name = {m.name: m for m in planned}
     for r in result.result.results if result.result else []:
-        name = r.node.name
         report.results.append(
             ModelResult(
-                name=name,
+                name=r.node.name,
                 status=str(r.status),
                 seconds=float(r.execution_time or 0.0),
                 message=(str(r.message).splitlines()[0] if r.message else None),
             )
         )
-        m = by_name.get(name)
-        if m is not None and m.estimate is not None:
-            _record(project, m, str(r.status), float(r.execution_time or 0.0))
+    # The views first, then the runs: a model's state (V3) compares what it reads against
+    # the time its run was recorded, and a view it reads gets its version here.
     _record_views(project, planned, report, prune=not select)
+    for r in report.results:
+        m = by_name.get(r.name)
+        if m is not None and m.estimate is not None:
+            _record(project, m, r.status, r.seconds)
     report.seconds = time.perf_counter() - started
     return report
 
@@ -470,7 +628,8 @@ def _record_views(
 
 
 def dag_lines(models: list[PlannedModel]) -> list[str]:
-    """One line per model, the CLI's DAG: name, materialisation, verdict, the estimate."""
+    """One line per model, the CLI's DAG: name, materialisation, verdict, the estimate, and
+    the state with its reason (V3)."""
     from lakelet.gauge.verdict import human_seconds
 
     width = max((len(m.name) for m in models), default=4)
@@ -480,5 +639,16 @@ def dag_lines(models: list[PlannedModel]) -> list[str]:
             out.append(f"  {m.name:<{width}}  {m.materialized:<5}  ?      {m.error}")
             continue
         est = human_seconds(m.est_wall_local) if m.est_wall_local is not None else ""
-        out.append(f"  {m.name:<{width}}  {m.materialized:<5}  {m.verdict or '?':<6} {est}")
+        state = state_words(m)
+        out.append(
+            f"  {m.name:<{width}}  {m.materialized:<5}  {m.verdict or '?':<6} {est:<8}  {state}"
+        )
     return out
+
+
+def state_words(m: PlannedModel) -> str:
+    """`fresh`, or the state and why: `upstream: orders changed`, `edited: the SQL changed
+    since the last run`, `never: never built`."""
+    if m.state in (None, "fresh"):
+        return m.state or ""
+    return f"{m.state}: {m.state_reason}" if m.state_reason else str(m.state)

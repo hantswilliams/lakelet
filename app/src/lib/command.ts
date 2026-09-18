@@ -44,8 +44,8 @@ export const discoverCommand = (prefix: string, anonymous = false): string =>
   `lakelet tables discover${anonymous ? ' --anonymous' : ''} ${shellArg(prefix)}`;
 
 /** `lakelet tables attach <name> [--anonymous] <prefix>`: the preview panel's line for a prefix. */
-export const attachCommand = (name: string, prefix: string, anonymous = false): string =>
-  `lakelet tables attach ${shellArg(name)}${anonymous ? ' --anonymous' : ''} ${shellArg(prefix)}`;
+export const attachCommand = (name: string, prefix: string, anonymous = false, replace = false): string =>
+  `lakelet tables attach ${shellArg(name)}${anonymous ? ' --anonymous' : ''}${replace ? ' --replace' : ''} ${shellArg(prefix)}`;
 
 export const refreshCommand = (name: string): string => `lakelet tables refresh ${shellArg(name)}`;
 
@@ -54,7 +54,23 @@ export const describeCommand = (name: string): string => `lakelet tables describ
 export const sampleCommand = (name: string, n = 5): string => `lakelet tables sample ${shellArg(name)}${n === 5 ? '' : ` -n ${n}`}`;
 export const expireCommand = (name: string): string => `lakelet tables expire ${shellArg(name)}`;
 
+/** `lakelet tables publish <name> <prefix> [--dry-run] [--yes]` (decisions W2). */
+export const publishCommand = (name: string, prefix: string, opts: { dryRun?: boolean; yes?: boolean } = {}): string =>
+  `lakelet tables publish ${shellArg(name)} ${shellArg(prefix)}${opts.dryRun ? ' --dry-run' : ''}${opts.yes ? ' --yes' : ''}`;
+
 export const initCommand = (folder: string): string => `lakelet init ${shellArg(folder)}`;
+export const relocateCommand = (): string => 'lakelet relocate';
+/** The lineage lines' command (versions brief G8). */
+export const lineageCommand = (name: string): string => `lakelet lineage ${shellArg(name)}`;
+export const lineageAllCommand = (): string => 'lakelet lineage --all';
+/** `lakelet changes [name] [--since 2d] [--last 50]`: the Changes screen's line (L2). */
+export function changesCommand(opts: { name?: string; since?: string; last?: number } = {}): string {
+  const parts = ['lakelet changes'];
+  if (opts.name) parts.push(shellArg(opts.name));
+  if (opts.since) parts.push('--since', shellArg(opts.since));
+  if (opts.last && opts.last !== 50) parts.push('--last', String(opts.last));
+  return parts.join(' ');
+}
 
 /** `--` comments outside string literals removed, so folding the SQL onto one line for the
  *  terminal cannot comment out what followed them. */
@@ -111,10 +127,11 @@ export const gaugeProbeCommand = (): string => 'lakelet gauge probe';
 /** The Models panel's lines (real-data brief R5, step 6): `lakelet run` builds the whole
  *  DAG, `lakelet run <model>` one model (and, through dbt's selector, only it), `--plan`
  *  estimates without building, `--run-anyway` runs a Red model here regardless. */
-export function runCommand(select: string[] = [], opts: { plan?: boolean; runAnyway?: boolean } = {}): string {
+export function runCommand(select: string[] = [], opts: { plan?: boolean; runAnyway?: boolean; stale?: boolean } = {}): string {
   const parts = ['lakelet run', ...select.map(shellArg)];
   if (opts.plan) parts.push('--plan');
   if (opts.runAnyway) parts.push('--run-anyway');
+  if (opts.stale) parts.push('--stale');
   return parts.join(' ');
 }
 

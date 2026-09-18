@@ -7,8 +7,15 @@ from __future__ import annotations
 
 from typing import Any
 
-WORDS = {"green": "Runs here", "yellow": "Runs here, slowly", "red": "Needs more machine"}
-DOTS = {"green": "●", "yellow": "●", "red": "●"}
+WORDS = {
+    "green": "Runs here",
+    "yellow": "Runs here, slowly",
+    "red": "Needs more machine",
+    # A scan the gauge could not attribute to a catalog table (trust round T3): no figures,
+    # no colour, and never Green. The statement still runs.
+    "none": "Not estimated",
+}
+DOTS = {"green": "●", "yellow": "●", "red": "●", "none": "○"}
 
 
 def human_bytes(n: float) -> str:
@@ -35,6 +42,10 @@ def human_cost(usd: float) -> str:
 
 def reason(numbers: dict[str, Any], remote_source: str | None, bandwidth_mbps: float | None) -> str:
     """Everything after the verdict words."""
+    if numbers["verdict"] == "none":
+        outside = numbers.get("unattributed") or []
+        n = len(outside)
+        return f"{n} scan{'s' if n != 1 else ''} outside the catalog: {', '.join(outside)}"
     parts = [f"scans {human_bytes(numbers['bytes_scanned'])}"]
     if remote_source:
         parts[0] += f" from {remote_source}"

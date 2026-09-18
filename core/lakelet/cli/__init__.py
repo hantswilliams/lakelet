@@ -43,7 +43,7 @@ err = Console(stderr=True)
 PROJECT_ENV = "LAKELET_PROJECT"
 EXIT_RED = 2
 EXIT_CONFLICT = 4
-VERDICT_STYLE = {"green": "green", "yellow": "yellow", "red": "red"}
+VERDICT_STYLE = {"green": "green", "yellow": "yellow", "red": "red", "none": "dim"}
 
 
 def _print_version(value: bool) -> None:
@@ -77,6 +77,7 @@ def _root() -> Path:
 def _open():
     from lakelet import Project
     from lakelet.project import NotAProject
+    from lakelet.schema import SchemaTooNew
 
     try:
         return Project.open(_root())
@@ -84,6 +85,9 @@ def _open():
         err.print(
             f"[red]not a Lakelet project:[/red] no lakelet.toml in {_root()}; run `lakelet init`"
         )
+        raise typer.Exit(1) from None
+    except SchemaTooNew as e:
+        err.print(f"[red]cannot open:[/red] {e}")
         raise typer.Exit(1) from None
 
 
@@ -97,8 +101,11 @@ def _sql_text(sql: str | None, file: Path | None) -> str:
 
 
 def _gauge_line(estimate) -> None:
+    from lakelet.gauge.verdict import DOTS
+
     style = VERDICT_STYLE[estimate.verdict]
-    err.print(f"[{style}]●[/{style}] {estimate.words} · {estimate.reason}", highlight=False)
+    dot = DOTS.get(estimate.verdict, "●")
+    err.print(f"[{style}]{dot}[/{style}] {estimate.words} · {estimate.reason}", highlight=False)
 
 
 def _fail(message: str, code: int = 1) -> None:
@@ -120,15 +127,24 @@ def init(
     probe_mb: Annotated[
         int, typer.Option(help="Size of the disk-throughput probe; 0 skips it.")
     ] = 512,
+    warehouse: Annotated[
+        str | None,
+        typer.Option(
+            "--warehouse",
+            help="An s3://bucket/prefix for the tables' files; warehouse/ by default.",
+        ),
+    ] = None,
 ) -> None:
     """Turn a folder into a lakehouse: catalog, warehouse, lakelet.toml, AGENTS.md, dbt project."""
     from lakelet import Project
     from lakelet.project import ProjectExists
 
     try:
-        report = Project.init(directory, name=name, probe_mb=probe_mb)
+        report = Project.init(directory, name=name, probe_mb=probe_mb, warehouse=warehouse)
     except ProjectExists:
         _fail(f"{Path(directory).resolve()} is already a Lakelet project")
+    except ValueError as e:
+        _fail(str(e))
     for relative in report.created:
         out.print(f"  {relative}", highlight=False)
     if report.repository == "existing":
@@ -163,6 +179,12 @@ def init(
     elif report.throughput_local_mbps:
         out.print(
             f"  local disk reads at {report.throughput_local_mbps:,.0f} MB/s", highlight=False
+        )
+    if warehouse:
+        out.print(
+            f"  every table's files go to {warehouse} (the catalog stays in .lakelet/); "
+            "the AWS credential chain is read from the environment",
+            highlight=False,
         )
     out.print(f"lakehouse ready in {report.root}", highlight=False)
 
@@ -208,7 +230,7 @@ def import_(
     ] = False,
 ) -> None:
     """Import a file or a folder of files into Iceberg tables."""
-    from lakelet.tables import TableExists, UnsupportedFile
+    from lakelet.tables import ReservedName, TableExists, UnsupportedFile
 
     if replace and append:
         _fail("--replace and --append are exclusive")
@@ -231,7 +253,7 @@ def import_(
             )
         except TableExists as e:
             _fail(f"table {e} exists; --replace drops and recreates it, --append adds to it")
-        except (UnsupportedFile, FileNotFoundError) as e:
+        except (UnsupportedFile, FileNotFoundError, ReservedName) as e:
             _fail(str(e))
     for info in infos:
         out.print(
@@ -259,6 +281,41 @@ def tables_list() -> None:
             _where(i),
         )
     out.print(t)
+    moved = [i.name for i in infos if i.needs_relocate]
+    if moved:
+        from lakelet import relocate as relocation
+
+        with _open() as p:
+            old = relocation.moved_from(p)
+        out.print(
+            f"this project was moved from {old}; {len(moved)} table(s) point at it "
+            f"({', '.join(moved)}): `lakelet relocate` updates them",
+            highlight=False,
+            soft_wrap=True,  # a path is copied, so it is never broken across lines
+        )
+    for i in infos:
+        if i.interrupted_replace_of:
+            out.print(
+                f"{i.name}: a replace of {i.interrupted_replace_of} was interrupted; "
+                f"`lakelet tables rename {i.name} {i.interrupted_replace_of}` finishes it",
+                highlight=False,
+            )
+
+
+@tables_app.command("rename")
+def tables_rename(old: str, new: str) -> None:
+    """Rename a table: one catalog commit, the data does not move. Finishes a replace that
+    was interrupted between its drop and its rename."""
+    from lakelet.tables import NoSuchTable, TableExists
+
+    with _open() as p:
+        try:
+            info = p.tables.rename(old, new)
+        except NoSuchTable:
+            _fail(f"no table named {old}")
+        except TableExists:
+            _fail(f"table {new} exists")
+    out.print(f"{old} is now {info.name}: {info.rows:,} rows", highlight=False)
 
 
 def _where(i) -> str:
@@ -292,18 +349,82 @@ def tables_describe(name: str) -> None:
             f"{_human_bytes(d.reclaimable_bytes)} reclaimable: lakelet tables expire {d.name}",
             highlight=False,
         )
+    if d.local_copy_files:
+        out.print(
+            f"local copy: {d.local_copy_files} file(s) still under the warehouse: "
+            f"lakelet tables expire {d.name}",
+            highlight=False,
+        )
     if d.freshness:
         out.print(
             f"freshness: {d.freshness.isoformat(timespec='seconds')}  "
             f"last commit: {d.last_commit.get('operation')} {d.last_commit.get('snapshot_id')}",
             highlight=False,
         )
+    if d.source:
+        if d.verify_error:
+            out.print(f"files: not verified ({d.verify_error})", highlight=False)
+        elif d.changed_files:
+            names = ", ".join(f"{uri} ({why})" for uri, why in d.changed_files[:5])
+            out.print(
+                f"files: {len(d.changed_files)} changed under the same path since the attach: "
+                f"{names}; lakelet tables attach --replace {d.name} {d.source}",
+                highlight=False,
+            )
+        else:
+            out.print(f"files: verified against {d.source} at {d.verified_at}", highlight=False)
     t = Table()
     t.add_column("column")
     t.add_column("type")
     for c, typ in d.columns:
         t.add_row(c, typ)
     out.print(t)
+
+
+@tables_app.command("publish")
+def tables_publish(
+    name: Annotated[str, typer.Argument(help="A table Lakelet wrote, under the local warehouse.")],
+    prefix: Annotated[str, typer.Argument(help="s3://bucket/prefix; the table goes under main/.")],
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Count and weigh the files; move nothing.")
+    ] = False,
+    yes: Annotated[
+        bool, typer.Option("--yes", help="Publish even if the copy would take longer than the cap.")
+    ] = False,
+) -> None:
+    """Move a table built here into a bucket, every snapshot kept: its files are copied
+    under the prefix, its metadata written again there, and the catalog moved to it in one
+    commit. The local files become orphans `tables expire` sweeps. An interrupted publish
+    resumes: files already in the bucket at the same size are not copied twice."""
+    from lakelet.relocate import NotPublishable, publish
+    from lakelet.tables import NoSuchTable
+
+    with _open() as p:
+        cap = None if yes else p.config.gauge.yellow_max_seconds
+        try:
+            r = publish(p, name, prefix, dry_run=dry_run, cap_seconds=cap)
+        except NoSuchTable:
+            _fail(f"no table named {name}")
+        except NotPublishable as e:
+            _fail(str(e))
+        if not dry_run:
+            p.tables.refresh_agents_md()
+    when = f", about {r.seconds:,.0f} s at the measured bandwidth" if r.seconds is not None else ""
+    if r.dry_run:
+        out.print(
+            f"{r.name}: {r.files} file(s), {_human_bytes(r.bytes)} to copy to {r.target}{when}; "
+            "nothing moved (--dry-run)",
+            highlight=False,
+            soft_wrap=True,
+        )
+        return
+    out.print(
+        f"published {r.name} to {r.target}: {r.copied} file(s) copied, {r.skipped} already there, "
+        f"{_human_bytes(r.bytes)}; {r.metadata_files} metadata file(s) and {r.data_files} delete "
+        "file(s) rewritten; the local files are orphans for `lakelet tables expire`",
+        highlight=False,
+        soft_wrap=True,
+    )
 
 
 @tables_app.command("expire")
@@ -377,19 +498,30 @@ def tables_attach(
             help="A public bucket: read it without credentials (metadata stays local).",
         ),
     ] = False,
+    replace: Annotated[
+        bool,
+        typer.Option(
+            "--replace",
+            help="Register the prefix again over an existing table (after files changed).",
+        ),
+    ] = False,
 ) -> None:
     """Register remote data as a read-only Iceberg table without copying it."""
     from lakelet.register import NotRegistrable
-    from lakelet.tables import TableExists
+    from lakelet.tables import ReservedName, TableExists
 
     with _open() as p:
         try:
             info = p.tables.attach(
-                name, source, metadata_in_bucket=metadata_in_bucket, anonymous=anonymous
+                name,
+                source,
+                metadata_in_bucket=metadata_in_bucket,
+                anonymous=anonymous,
+                replace=replace,
             )
         except TableExists:
-            _fail(f"table {name} exists")
-        except NotRegistrable as e:
+            _fail(f"table {name} exists; --replace registers the prefix again over it")
+        except (NotRegistrable, ReservedName) as e:
             _fail(str(e))
     placement = "in the bucket" if metadata_in_bucket else "local"
     public = ", read without credentials" if anonymous else ""
@@ -402,8 +534,9 @@ def tables_attach(
 
 @tables_app.command("refresh")
 def tables_refresh(name: str) -> None:
-    """Add the files new under a registered prefix since it was attached."""
-    from lakelet.register import MissingFiles, NotRegistrable
+    """Add the files new under a registered prefix since it was attached. Refuses if a
+    registered file is gone or was rewritten under the same path since the attach."""
+    from lakelet.register import ChangedFiles, MissingFiles, NotRegistrable
     from lakelet.tables import NoSuchTable
 
     with _open() as p:
@@ -411,7 +544,7 @@ def tables_refresh(name: str) -> None:
             report = p.tables.refresh(name)
         except NoSuchTable:
             _fail(f"no table named {name}")
-        except (NotRegistrable, MissingFiles) as e:
+        except (NotRegistrable, MissingFiles, ChangedFiles) as e:
             _fail(str(e))
     out.print(
         f"{report.name}: {report.added} file(s) added; {report.files} files, {report.rows:,} rows",
@@ -597,8 +730,13 @@ def estimate(
             )
         )
     else:
+        from lakelet.gauge.verdict import DOTS
+
         style = VERDICT_STYLE[e.verdict]
-        out.print(f"[{style}]●[/{style}] {e.words} · {e.reason}", highlight=False)
+        out.print(
+            f"[{style}]{DOTS.get(e.verdict, '●')}[/{style}] {e.words} · {e.reason}",
+            highlight=False,
+        )
 
 
 # -- catalog ----------------------------------------------------------------------
@@ -736,9 +874,17 @@ def run_models(
     plan_only: Annotated[
         bool, typer.Option("--plan", help="Print the DAG with its verdicts and stop.")
     ] = False,
+    stale: Annotated[
+        bool,
+        typer.Option(
+            "--stale",
+            help="Build only what is not fresh: edited, an input changed, or never built.",
+        ),
+    ] = False,
 ) -> None:
     """Build the project's dbt models through the catalog, each with its verdict first.
-    A `view` model becomes a view in the catalog; a `table` model an Iceberg table."""
+    A `view` model becomes a view in the catalog; a `table` model an Iceberg table. The
+    DAG says each model's state: fresh, edited, upstream (an input changed) or never."""
     from lakelet.dbt import runner
 
     with _open() as p:
@@ -747,7 +893,7 @@ def run_models(
                 models = runner.plan(p, select)
                 out.print("\n".join(runner.dag_lines(models)), highlight=False)
                 return
-            report = runner.run(p, select, burst=burst, run_anyway=run_anyway)
+            report = runner.run(p, select, burst=burst, run_anyway=run_anyway, stale=stale)
         except runner.NoBurstYet as e:
             _fail(str(e))
         except runner.RedRefusedRun as e:
@@ -756,6 +902,9 @@ def run_models(
         except (runner.DbtMissing, runner.DbtFailed) as e:
             _fail(str(e))
     out.print("\n".join(runner.dag_lines(report.models)), highlight=False)
+    if report.selected is not None and not report.selected:
+        out.print("every model is fresh; nothing to run", highlight=False)
+        return
     for r in report.results:
         line = f"  {r.name}: {r.status} in {r.seconds:.2f} s"
         if r.message and r.status != "success":
@@ -833,6 +982,141 @@ def restore(
         )
     else:
         out.print("that version is what the file already held; no new version", highlight=False)
+
+
+@app.command()
+def lineage(
+    name: Annotated[
+        str | None, typer.Argument(help="A table, a view or a model; none with --all.")
+    ] = None,
+    depth: Annotated[
+        int, typer.Option("--depth", min=1, help="How many levels each way; 1 is direct.")
+    ] = 1,
+    all_: Annotated[
+        bool, typer.Option("--all", help="The whole project: every node and its state, every edge.")
+    ] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="The same as the API returns.")] = False,
+) -> None:
+    """What a table, view or model reads and what reads it, and how each edge is known:
+    a dbt ref() or source(), a table named in the SQL, or a catalog view's SQL. From the
+    last compile's manifest and the catalog; compiles first when the models are newer.
+    --all prints the whole graph, as the app's Lineage screen draws it."""
+    from lakelet.dbt import runner
+    from lakelet.lineage import NoSuchNode, lineage, whole
+
+    if all_ == (name is not None):
+        _fail("give a name, or --all for the whole project")
+    with _open() as p:
+        try:
+            result = whole(p) if all_ else lineage(p, name, depth)
+        except NoSuchNode as e:
+            _fail(str(e))
+        except runner.DbtFailed as e:
+            _fail(f"dbt could not compile the models: {e}")
+    if as_json:
+        out.print(json.dumps(result if all_ else _lineage_json(result), indent=2), highlight=False)
+        return
+    for line in graph_lines(result) if all_ else lineage_lines(result):
+        out.print(line, highlight=False, soft_wrap=True)
+
+
+@app.command()
+def changes(
+    name: Annotated[
+        str | None, typer.Argument(help="Only what happened to this table, model or question.")
+    ] = None,
+    since: Annotated[
+        str | None, typer.Option("--since", help="2d, 12h, 30m, 1w, or an ISO date.")
+    ] = None,
+    last: Annotated[int, typer.Option("--last", min=1, help="At most this many entries.")] = 50,
+    as_json: Annotated[bool, typer.Option("--json", help="The same as the API returns.")] = False,
+) -> None:
+    """Everything that happened to the project, newest first: every table's snapshots
+    (and the models each made out of date), each model's and question's last run, and the
+    versions git holds for the models. Read from what is there; nothing is recorded."""
+    from lakelet.changes import changes, parse_since
+
+    try:
+        cutoff = parse_since(since) if since else None
+    except ValueError as e:
+        _fail(str(e))
+    with _open() as p:
+        feed = changes(p, since=cutoff, last=last, name=name)
+    if as_json:
+        out.print(json.dumps([c.as_dict() for c in feed], indent=2), highlight=False)
+        return
+    if not feed:
+        out.print("nothing yet" if name is None else f"nothing about {name}", highlight=False)
+        return
+    for c in feed:
+        when = c.when.isoformat(timespec="seconds").replace("+00:00", " UTC").replace("T", " ")
+        out.print(f"{when}  {c.kind:<8} {c.sentence()}", highlight=False, soft_wrap=True)
+
+
+def graph_lines(graph: dict[str, Any]) -> list[str]:
+    """`--all` as text: one line per node (kind, state), then one per edge."""
+    nodes, edges = graph["nodes"], graph["edges"]
+    width = max((len(n["name"]) for n in nodes), default=4)
+    lines = [f"{len(nodes)} node(s), {len(edges)} edge(s)"]
+    for n in nodes:
+        state = f"  {n['state']}" if n.get("state") else ""
+        lines.append(f"  {n['name']:<{width}}  {n['kind']:<5}{state}")
+    for e in edges:
+        lines.append(f"  {e['from']} -> {e['to']}  ({e['via']})")
+    if graph.get("compiled"):
+        lines.append("(the models were compiled first: the manifest was older than they are)")
+    return lines
+
+
+def _lineage_json(result) -> dict[str, Any]:
+    from dataclasses import asdict
+
+    return asdict(result)
+
+
+def lineage_lines(result) -> list[str]:
+    head = f"{result.name}  {result.kind}"
+    if result.built_by in ("imported", None) or result.built_by.startswith("attached from "):
+        head += f", {result.built_by}" if result.built_by else ""
+    else:
+        head += f", built by {result.built_by}"
+    if result.kind == "model":
+        head += ", never built"
+    if result.last_built:
+        head += f", {result.last_built[:19].replace('T', ' ')} UTC"
+    lines = [head]
+    for title, edges in (("reads from", result.upstream), ("feeds", result.downstream)):
+        lines.append(f"  {title}" if edges else f"  {title}: nothing")
+        width = max((len(e.name) for e in edges), default=0)
+        for e in edges:
+            indent = "    " + "  " * (e.depth - 1)
+            lines.append(f"{indent}{e.name:<{width}}  {e.kind:<5}  {e.via}")
+    if result.compiled:
+        lines.append("(the models were compiled first: the manifest was older than they are)")
+    return lines
+
+
+@app.command()
+def relocate() -> None:
+    """After the project folder was moved or copied: rewrite every local table's locations
+    under this folder so the tables resolve again. Every snapshot is kept; the old metadata
+    files become orphans for `tables expire`. Tables attached from a bucket are skipped."""
+    from lakelet import relocate as relocation
+
+    with _open() as p:
+        old = relocation.moved_from(p)
+        if old is None:
+            out.print("nothing to relocate: every table resolves from this folder", highlight=False)
+            return
+        report = relocation.relocate(p)
+        p.tables.refresh_agents_md()
+    out.print(
+        f"relocated {len(report.relocated)} table(s) from {report.old_root} to {report.new_root}: "
+        f"{', '.join(report.relocated)}; {report.metadata_files} metadata file(s) and "
+        f"{report.data_files} delete file(s) rewritten"
+        + (f"; skipped {', '.join(report.skipped)}" if report.skipped else ""),
+        highlight=False,
+    )
 
 
 # -- gauge history and audit -----------------------------------------------------

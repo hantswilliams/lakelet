@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Version } from './api';
-import { authorName, diffSummary, gitLine, parseDiff, versionSentence, versionWhat } from './versions';
+import { authorName, collapseDiff, diffSummary, gitLine, parseDiff, versionSentence, versionWhat } from './versions';
 
 const DIFF = [
   '--- before',
@@ -69,5 +69,16 @@ describe('the git line', () => {
     expect(gitLine({ repository: true, branch: 'main', origin: null })).toBe('git · main · origin not set');
     expect(gitLine({ repository: true, branch: 'main', origin: 'git@github.com:ada/proj.git' })).toBe('git · main · origin git@github.com:ada/proj.git');
     expect(gitLine({ repository: false, branch: null, origin: null })).toBe('git · no repository yet · the first save makes one');
+  });
+
+  it('folds a whole-file diff to the changed lines with three of context, marking what it dropped', () => {
+    const ctx = (n: number) => Array.from({ length: n }, (_, i) => ` line ${i}`);
+    const whole = ['--- last run', '+++ now', '@@ -1,12 +1,12 @@', ...ctx(10), '-old', '+new'].join('\n');
+    const { lines, folded } = collapseDiff(parseDiff(whole));
+    expect(folded).toBe(true);
+    expect(lines.map((l) => l.text)).toEqual(['--- last run', '+++ now', '@@ -1,12 +1,12 @@', '…', 'line 7', 'line 8', 'line 9', 'old', 'new']);
+    const small = collapseDiff(parseDiff(['--- a', '+++ b', '@@ -1,2 +1,2 @@', ' keep', '-old', '+new'].join('\n')));
+    expect(small.folded).toBe(false);
+    expect(small.lines).toHaveLength(6);
   });
 });
