@@ -1,14 +1,14 @@
 # Lakelet
 
-> Open-source, local-first lakehouse in one binary: DuckDB, Apache Iceberg and dbt Core, local by default. Every query and dbt run gets a pre-flight verdict (the gauge); runs that don't fit burst to an ephemeral worker in your own cloud with a hard cost cap shown before they start. Data stays as Iceberg in your own bucket.
+> Open-source, local-first lakehouse, available from source on macOS and Linux. DuckDB executes SQL, Apache Iceberg describes Parquet tables, and the gauge estimates supported catalog queries before execution. Scans without statistics are labeled Not estimated. CLI, desktop app, dbt runner, versions, S3 warehouse writes and table publishing, Lineage, Changes, and recovery guidance are available. Installers, cloud bursts, Team services, the ask box, and MCP are planned, not available.
 
 ## Pages
-- [Home](/): thesis, the gauge, pricing summary, waitlist
+- [Home](/): interactive scan illustration, local workflow, actual app image, current feature status
 - [The app](/app): the desktop app walkthrough
-- [How it runs](/how-it-runs): solo, team and company topologies; what stays on the laptop
+- [How it runs](/how-it-runs): query planning, four verdict states, local execution, and limitations
 - [Medallion](/medallion): bronze / silver / gold on a laptop with a dbt project
-- [For agents](/agents): MCP server, per-agent daily caps, AGENTS.md
-- [Pricing](/pricing): Local free, Team $24/person/month, Burst cost + 15%; comparison vs Snowflake, BigQuery, Databricks, MotherDuck
+- [For agents](/agents): available CLI and local API; planned MCP tools and permissions
+- [Pricing](/pricing): Local free today; proposed Team and Burst pricing, clearly labeled as planned
 
 ## Developer docs (developer preview; describes the code in the repo, install from source)
 - [Overview](/docs): what is built and what is not, versions
@@ -25,3 +25,5 @@
 - [The desktop app](/docs/app): running it from source, projects and windows, the Tables, Models and Gauge screens, Simple and Technical mode, the chart, settings, keys, how it talks to the core, nothing hidden
 - [dbt and views](/docs/dbt): lakelet run, the DAG with verdicts, view models as Iceberg views in the catalog, what the plugin does
 - [A real bucket](/docs/remote): what Lakelet needs from AWS, credentials, the IAM policies, running the S3 tests against a real bucket, what they write and remove
+
+- [Recovery](/docs/recovery): backups, interrupted writes, upgrades, and moving a project

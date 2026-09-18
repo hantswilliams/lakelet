@@ -9,8 +9,8 @@
 
 export const asOf = '2026-09-18';
 
-// Last reconciled against src/content/docs/index.md: 2026-09-17, after the versions round
-// closed (lineage and the per-model state, step 4) and the trust round (T1 to T8) landed. This file also
+// Last reconciled against src/content/docs/index.md: 2026-09-18, after S3 writes,
+// table publishing, and the Lineage and Changes screens landed. This file also
 // feeds README.md's status block (web/scripts/gen-readme-status.py, checked in CI).
 
 export type State = 'built' | 'planned';
@@ -34,7 +34,7 @@ export const surfaces: Surface[] = [
   { id: 'cli', label: 'The CLI', state: 'built',
     detail: 'init, import, sql, estimate, tables, config — from a clone, with uv',
     href: '/docs/cli' },
-  { id: 'gauge', label: 'The gauge', state: 'built',
+  { id: 'gauge', label: 'Lakelet Lookahead', state: 'built',
     detail: 'the verdict and its sentence before anything runs; Red refuses, and every run is recorded',
     href: '/docs/gauge' },
   { id: 'tables', label: 'Files into Iceberg tables', state: 'built',

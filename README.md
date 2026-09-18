@@ -20,7 +20,7 @@ What it is not, yet: burst to your own cloud when the laptop is not enough, ques
 **Built, from source, today**
 
 - **The CLI**: init, import, sql, estimate, tables, config — from a clone, with uv — [docs](https://hantswilliams.github.io/lakelet/docs/cli)
-- **The gauge**: the verdict and its sentence before anything runs; Red refuses, and every run is recorded — [docs](https://hantswilliams.github.io/lakelet/docs/gauge)
+- **Lakelet Lookahead**: the verdict and its sentence before anything runs; Red refuses, and every run is recorded — [docs](https://hantswilliams.github.io/lakelet/docs/gauge)
 - **Files into Iceberg tables**: CSV, TSV, Parquet, JSON, JSONL and Excel, with the type coercions written down — [docs](https://hantswilliams.github.io/lakelet/docs/tables)
 - **Parquet already in S3**: attach, refresh and discover a prefix in place — nothing copied, and public buckets need no credentials — [docs](https://hantswilliams.github.io/lakelet/docs/remote)
 - **The Iceberg REST catalog**: SQLite locally, served over HTTP; DuckDB, pyiceberg, Spark and Trino all read it — [docs](https://hantswilliams.github.io/lakelet/docs/catalog)

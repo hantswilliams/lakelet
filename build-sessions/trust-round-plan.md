@@ -71,7 +71,7 @@ The product's claim is that the laptop can be trusted with the warehouse. Four p
 *Recommend:* Hants creates the Formspree form and sets the repository variable (decided September 11; still open), then one real submission from the live site is confirmed received and the date recorded in `web/TASKS.md`; a GitHub issue template for bugs asks for the versions, the command and the gauge line and says not to paste data; `CONTRIBUTING.md` names Hants as the person who answers within a week during the preview. The three `.tgz` archives are removed in a commit of their own. The old deck's purge from history is decided here one way or the other: *recommend leaving it* — `git filter-repo` plus a force push on a public repository with CI and Pages hooked to `main` is a risk with no reader waiting on it, and the deck's contents were already superseded on the site the same week.
 *Not chosen:* a hosted feedback widget in the app (network from the app is the one thing the product promises not to do without asking).
 *Gates:* a received submission, dated; the issue template in `.github/`; the archives gone; the purge decision recorded in `TASKS.md` as closed.
-- [x] Agree - i already created and you added the formspree URL earlier, and tested it, and it appeared to work - can you confirm that that you added the URL 
+- [x] Agree - i already created and you added the formspree URL earlier, and tested it, and it appeared to work - can you confirm that that you added the URL
 - [ ] Change:
 
 ---

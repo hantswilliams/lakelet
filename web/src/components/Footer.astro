@@ -1,10 +1,8 @@
 ---
-import Fish from './Fish.astro';
-import { site } from '../data/nav';
+// Copyright 2026 Lakelet contributors
+// SPDX-License-Identifier: Apache-2.0
+import Brand from './Brand.astro';
+import { nav, site } from '../data/nav';
+import { url } from '../lib/url';
 ---
-<footer><span><Fish class="fish" />{site.footer.left}</span><span>{site.footer.right}</span></footer>
-
-<style>
-  footer{padding:24px 0 40px;color:var(--muted);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
-  footer :global(.fish){vertical-align:-6px;margin-right:6px}
-</style>
+<footer class="web-footer section-frame"><div class="footer-top"><div><Brand /><p>A little lakehouse.<br />Room for your next question.</p></div><nav aria-label="Footer navigation">{nav.map(item => <a href={url(item.href)}>{item.label}</a>)}</nav><nav aria-label="Project links"><a href={site.github}>GitHub ↗</a><a href={`${site.github}/issues`}>Report an issue ↗</a><a href={`${site.github}/blob/main/PRIVACY.md`}>Privacy ↗</a><a href={`${site.github}/blob/main/SECURITY.md`}>Security ↗</a></nav></div><div class="footer-bottom"><span>Open source · Apache 2.0 · Developer preview</span><span>Built on DuckDB, Apache Iceberg & dbt Core</span></div></footer>

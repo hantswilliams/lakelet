@@ -1,0 +1,209 @@
+---
+// Copyright 2026 Lakelet contributors
+// SPDX-License-Identifier: Apache-2.0
+import { questions, columns, stateFor, words } from '../data/lookahead';
+import { profile } from '../data/lookahead-estimates';
+import { url } from '../lib/url';
+const initial = stateFor('summary', 'local');
+---
+<section id="experiment" class="lookahead section-frame" aria-labelledby="lookahead-title" data-lookahead>
+  <header class="lookahead-heading">
+    <div><p class="eyebrow">02 / A little foresight</p><h2 id="lookahead-title">Meet Lakelet Lookahead.</h2></div>
+    <p>Change the question. Move the data.<br />See what this example laptop would need.</p>
+  </header>
+  <fieldset class="question-picker">
+    <legend><span>01</span> Choose a question</legend>
+    <div class="question-options">
+      {questions.map((question, index) => <div>
+        <input id={`question-${question.id}`} type="radio" name="lookahead-question" value={question.id} checked={index === 0} />
+        <label for={`question-${question.id}`}><span class="choice-number">0{index + 1}</span><strong>{question.title}</strong><small>{question.detail}</small><span class="choice-dot" aria-hidden="true"></span></label>
+      </div>)}
+    </div>
+  </fieldset>
+  <div class="storage-row">
+    <fieldset class="storage-picker"><legend><span>02</span> Where does the data live?</legend><div>
+      <input id="storage-local" type="radio" name="lookahead-storage" value="local" checked /><label for="storage-local">Local files</label>
+      <input id="storage-s3" type="radio" name="lookahead-storage" value="s3" /><label for="storage-s3">S3 bucket</label>
+    </div></fieldset>
+    <p>Same question. Same laptop.<br /><span id="location-note">Read from its local SSD.</span></p>
+  </div>
+  <div class="compact-result" data-verdict={initial.verdict} aria-hidden="true">
+    <div><strong id="compact-verdict">{words[initial.verdict]}</strong><span id="compact-time">{initial.time}</span></div>
+    <p id="compact-metrics">{initial.bytes} to read · {initial.memory} peak memory</p>
+    <small>Estimated for the example laptop</small>
+  </div>
+  <div class="lookahead-workbench">
+    <div class="work-picture">
+      <p class="step-label"><span>03</span> Follow the work</p>
+      <div class="read-flow">
+        <div class="source-node">
+          <svg class="node-icon" id="local-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="7" y="8" width="34" height="32" rx="4"/><path d="M7 29h34M13 34h4M21 34h4"/><circle cx="24" cy="19" r="6"/></svg>
+          <svg class="node-icon" id="s3-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" hidden><ellipse cx="24" cy="10" rx="16" ry="6"/><path d="M8 10l3 27c1 6 25 6 26 0l3-27M10 25c2 6 26 6 28 0"/></svg>
+          <h3 id="source-title">Local files</h3><p>Orders + customers</p><span class="node-meta">26 GB example dataset</span>
+        </div>
+        <div class="flow-path"><strong id="flow-bytes">{initial.bytes}</strong><span>to read</span><div class="flow-line" aria-hidden="true"><i></i></div><small id="flow-speed">1,500 MB/s SSD</small></div>
+        <div class="laptop-node">
+          <svg class="node-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="9" y="7" width="30" height="26" rx="2"/><path d="M9 33L3 40h42l-6-7M18 40l2-3h8l2 3M15 23l5-5 5 5 8-10"/></svg>
+          <h3>Example laptop</h3><p>DuckDB runs here</p><span class="node-meta">16 GB RAM · 8 threads</span>
+        </div>
+      </div>
+      <div class="column-picture">
+        <div class="column-heading"><span>ORDERS / COLUMNS TO READ</span><strong id="column-count">2 of 12</strong></div>
+        <div class="column-grid" aria-hidden="true">{columns.map(column => <span data-column={column} class:list={{ selected: (questions[0].columns as readonly string[]).includes(column) }}>{column}</span>)}</div>
+        <p id="column-note">Two columns from orders; customers stays untouched.</p>
+        <p class="left-behind"><span id="bytes-left">{initial.remaining}</span> stays in storage.</p>
+      </div>
+      <div class="query-preview"><div><span>THE QUESTION IN SQL</span><span id="query-action">{questions[0].action}</span></div><pre tabindex="0" aria-label="Selected example SQL"><code id="lookahead-sql">{questions[0].sql}</code></pre></div>
+    </div>
+    <aside class="lookahead-result" data-verdict={initial.verdict} aria-label="Lookahead estimate for the selected example">
+      <p class="step-label"><span>04</span> Before you run it</p>
+      <div class="verdict-display">
+        <svg class="verdict-dial" viewBox="0 0 220 130" fill="none" aria-hidden="true">
+          <path d="M30 112 A80 80 0 0 1 67 44" stroke="#d6ee83"/><path d="M74 40 A80 80 0 0 1 146 40" stroke="#f7cc7d"/><path d="M153 44 A80 80 0 0 1 190 112" stroke="#ffab98"/>
+          <g id="gauge-needle" transform="rotate(-55 110 112)"><path d="M110 112V53" stroke="currentColor" stroke-width="2"/><circle cx="110" cy="112" r="5" fill="currentColor"/></g>
+        </svg>
+        <h3 id="lookahead-verdict">{words[initial.verdict]}</h3><p>On this example laptop</p>
+      </div>
+      <dl class="estimate-metrics"><div><dt>Data to read</dt><dd id="estimate-bytes">{initial.bytes}</dd></div><div><dt>Peak memory</dt><dd id="estimate-memory">{initial.memory}</dd></div><div><dt>Estimated time</dt><dd id="estimate-time">{initial.time}</dd></div></dl>
+      <div class="memory-picture"><div><span>12 GB query memory limit</span><span id="memory-state">Fits in memory</span></div><div class="memory-track" aria-hidden="true"><i id="memory-fill" style={`width:${initial.memoryPercent}%`}></i></div><p id="spill-note" hidden></p></div>
+      <p id="estimate-reason" class="estimate-reason">{initial.reason}</p>
+      <p id="refusal-note" class="refusal-note" hidden>Lakelet would pause here. Revise the query or explicitly choose to run anyway.</p>
+      <p class="sr-only" id="estimate-announcement" aria-live="polite" aria-atomic="true">Sales by region, local files. {words[initial.verdict]}. {initial.bytes} to read, {initial.memory} peak memory, {initial.time} estimated.</p>
+    </aside>
+  </div>
+  <footer class="lookahead-footnote">
+    <p><strong>Illustrative scenarios.</strong> Calculated with Lakelet’s estimator from example plans and table sizes; not a live query or a benchmark of your machine.</p>
+    <details><summary>Example setup &amp; assumptions <span>+</span></summary><div>
+      <p><strong>The data:</strong> 80 million orders (24 GB, 12 columns) and 5 million customers (2 GB). The selected columns determine the bytes read; these examples do not prune files.</p>
+      <p><strong>The laptop:</strong> {profile.ramGb} GB RAM, {profile.queryMemoryGb} GB query memory limit, {profile.threads} threads, {profile.freeDiskGb} GB free disk. Local reads use {profile.diskMBps.toLocaleString('en-US')} MB/s; S3 reads use {profile.s3Mbps} Mbps. Execution and temporary files stay on the laptop.</p>
+      <p><strong>The estimate:</strong> time includes reads, CPU and temporary disk work. Green, Yellow and Red use the default thresholds. Unsupported scans can return “Not estimated”; these three examples have complete assumed statistics. Timing is approximate.</p>
+      <a href={url('/docs/gauge')}>How Lookahead estimates the work ↗</a>
+    </div></details>
+  </footer>
+  <noscript><p class="lookahead-nojs">Showing the local sales summary example. Enable JavaScript to compare questions and storage locations.</p></noscript>
+</section>
+
+<script>
+  import { questions, columns, stateFor, words, type Question, type Storage } from '../data/lookahead';
+  const root = document.querySelector<HTMLElement>('[data-lookahead]')!;
+  const element = (id: string) => root.querySelector<HTMLElement>(`#${id}`)!;
+  const text = (id: string, value: string) => { element(id).textContent = value; };
+  function update() {
+    const questionId = root.querySelector<HTMLInputElement>('input[name="lookahead-question"]:checked')!.value as Question;
+    const storage = root.querySelector<HTMLInputElement>('input[name="lookahead-storage"]:checked')!.value as Storage;
+    const question = questions.find(q => q.id === questionId)!;
+    const state = stateFor(questionId, storage);
+    const remote = storage === 's3';
+    text('source-title', remote ? 'S3 bucket' : 'Local files');
+    element('local-icon').toggleAttribute('hidden', remote);
+    element('s3-icon').toggleAttribute('hidden', !remote);
+    text('location-note', remote ? 'Read from S3. Run on the laptop.' : 'Read from its local SSD.');
+    text('flow-speed', remote ? '100 Mbps connection' : '1,500 MB/s SSD');
+    text('flow-bytes', state.bytes);
+    text('column-count', `${question.columns.length} of ${columns.length}`);
+    root.querySelectorAll<HTMLElement>('[data-column]').forEach(el => el.classList.toggle('selected', (question.columns as readonly string[]).includes(el.dataset.column!)));
+    text('column-note', questionId === 'join' ? 'Three order columns + customer_id and segment from customers.' : questionId === 'sort' ? 'Every order column is read and sorted; customers stays untouched.' : 'Two columns from orders; customers stays untouched.');
+    text('bytes-left', state.remaining);
+    text('query-action', question.action);
+    text('lookahead-sql', question.sql);
+    text('lookahead-verdict', words[state.verdict]);
+    root.querySelector<HTMLElement>('.lookahead-result')!.dataset.verdict = state.verdict;
+    root.querySelector('#gauge-needle')!.setAttribute('transform', `rotate(${{green:-55,yellow:0,red:55}[state.verdict]} 110 112)`);
+    text('estimate-bytes', state.bytes);
+    text('estimate-memory', state.memory);
+    text('estimate-time', state.time);
+    text('compact-verdict', words[state.verdict]);
+    text('compact-time', state.time);
+    text('compact-metrics', `${state.bytes} to read · ${state.memory} peak memory`);
+    root.querySelector<HTMLElement>('.compact-result')!.dataset.verdict = state.verdict;
+    element('memory-fill').style.width = `${state.memoryPercent}%`;
+    text('memory-state', state.spill_bytes ? 'Spills to disk' : 'Fits in memory');
+    text('spill-note', `${state.spill} of temporary disk space needed.`);
+    element('spill-note').hidden = !state.spill_bytes;
+    text('estimate-reason', state.reason);
+    element('refusal-note').hidden = state.verdict !== 'red';
+    text('estimate-announcement', `${question.title}, ${remote ? 'S3 bucket' : 'local files'}. ${words[state.verdict]}. ${state.bytes} to read, ${state.memory} peak memory, ${state.time} estimated. ${state.reason}`);
+  }
+  root.querySelectorAll('input').forEach(input => input.addEventListener('change', update));
+  update();
+</script>
+
+<style>
+  .lookahead{border:1px solid var(--line);border-radius:6px;padding:38px;background:#14262b}
+  .lookahead-heading{display:flex;align-items:end;justify-content:space-between;gap:30px;margin-bottom:38px}
+  .lookahead-heading .eyebrow{color:var(--accent);margin-bottom:14px}
+  .lookahead-heading h2{font-size:clamp(27px,3vw,40px);letter-spacing:-1.5px}
+  .lookahead-heading>p{font-size:14px;color:var(--muted);line-height:1.7}
+  fieldset{border:0;margin:0;padding:0;min-width:0}
+  legend,.step-label{font:11px/1.5 var(--mono);color:var(--muted);padding:0;margin-bottom:16px}
+  legend>span,.step-label>span{color:var(--accent);margin-right:9px}
+  .question-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .question-options>div{position:relative;min-width:0}
+  input{position:absolute;width:1px;height:1px;opacity:0}
+  .question-options label{position:relative;display:flex;flex-direction:column;padding:23px;border:1px solid var(--line);border-radius:4px;cursor:pointer;min-height:140px;background:#172a2f}
+  label:hover{border-color:#849875}
+  input:checked+label{border-color:var(--accent);background:#25372e}
+  input:focus-visible+label{outline:2px solid var(--accent);outline-offset:4px}
+  .choice-number{font:10px var(--mono);color:var(--muted);margin-bottom:15px}
+  .question-options strong{font-size:17px;font-weight:500;line-height:1.3}
+  .question-options small{font-size:12px;color:var(--muted);margin-top:8px}
+  .choice-dot{position:absolute;right:20px;top:23px;width:10px;height:10px;border:1px solid #72827b;border-radius:50%}
+  input:checked+label .choice-dot{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px #d6ee831a}
+  .storage-row{display:flex;justify-content:space-between;align-items:end;gap:24px;padding:28px 0 30px}
+  .storage-picker>div{position:relative;display:flex;border:1px solid var(--line);padding:4px;border-radius:4px;gap:4px}
+  .storage-picker label{font-size:13px;padding:10px 25px;border:1px solid transparent;border-radius:2px;cursor:pointer}
+  .storage-picker input:checked+label{color:var(--accent)}
+  .storage-row>p{font-size:12px;color:var(--muted);line-height:1.8;text-align:right}
+  .compact-result{display:none;--verdict-color:#d6ee83;border:1px solid var(--verdict-color);border-radius:3px;background:#1a2d31;padding:16px;margin-bottom:20px}
+  .compact-result[data-verdict=yellow]{--verdict-color:#f7cc7d}.compact-result[data-verdict=red]{--verdict-color:#ffab98}
+  .compact-result>div{display:flex;justify-content:space-between;align-items:center;gap:16px;color:var(--verdict-color);font-size:16px;line-height:1.3}
+  .compact-result strong{font-weight:500}.compact-result>div>span{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .compact-result p{font-size:11px;color:var(--ink);margin:10px 0 7px;line-height:1.7}.compact-result small{font:8px var(--mono);color:var(--muted)}
+  .lookahead-workbench{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .work-picture{padding:26px;min-width:0;background:#102126}
+  .read-flow{display:grid;grid-template-columns:minmax(0,1fr) 112px minmax(0,1fr);align-items:center;gap:10px;padding:16px 0 27px}
+  .source-node,.laptop-node{text-align:center;min-width:0}
+  .node-icon{width:48px;height:48px;color:var(--accent);margin:0 auto 15px}
+  .read-flow h3{font-size:17px;font-weight:500;margin-bottom:9px;letter-spacing:-.4px}
+  .read-flow p{font-size:11px;color:var(--muted);margin-bottom:6px}
+  .node-meta{font:9px/1.6 var(--mono);color:var(--muted)}
+  .flow-path{text-align:center;font:10px var(--mono);color:var(--muted)}
+  .flow-path strong{display:block;font-size:20px;color:var(--accent);font-weight:400;margin-bottom:6px;white-space:nowrap}
+  .flow-path small{font-size:8px;line-height:1.7;display:block}
+  .flow-line{height:1px;background:var(--accent);position:relative;margin:19px 0}
+  .flow-line:after{content:'';position:absolute;right:0;top:-3px;width:7px;height:7px;transform:rotate(-45deg);border-right:1px solid var(--accent);border-bottom:1px solid var(--accent)}
+  .flow-line i{position:absolute;left:47%;top:-3px;width:7px;height:7px;background:var(--accent);border-radius:50%}
+  .column-picture{border-top:1px solid var(--line);padding-top:23px}
+  .column-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font:9px var(--mono);color:var(--muted);margin-bottom:15px}
+  .column-heading strong{font-weight:400;color:var(--accent);font-size:11px;white-space:nowrap}
+  .column-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .column-grid span{background:#192c31;border:1px solid #283e44;padding:10px 4px;text-align:center;font:9px var(--mono);color:#829694;border-radius:2px;overflow-wrap:anywhere}
+  .column-grid .selected{background:#d6ee8326;color:var(--accent);border-color:#d6ee8370}
+  .column-picture>p{font-size:11px;color:var(--muted);line-height:1.7;margin-top:14px}
+  .column-picture .left-behind{font-size:12px;color:var(--ink);margin-top:7px}
+  .query-preview{margin-top:25px;border:1px solid var(--line);border-radius:3px;background:#0d1c21;overflow:hidden}
+  .query-preview>div{display:flex;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line);font:8px var(--mono);color:var(--muted)}
+  .query-preview pre{padding:18px 16px;margin:0;overflow-x:auto;font:11px/1.8 var(--mono);color:var(--accent);min-height:108px}
+  .lookahead-result{--verdict-color:#d6ee83;padding:26px;background:#1a2d31;border-left:1px solid var(--line)}
+  .lookahead-result[data-verdict=yellow]{--verdict-color:#f7cc7d}.lookahead-result[data-verdict=red]{--verdict-color:#ffab98}
+  .verdict-display{text-align:center;padding:0 0 24px}
+  .verdict-dial{width:170px;height:101px;display:block;margin:0 auto 8px;color:var(--ink)}
+  .verdict-dial>path{stroke-width:9;stroke-linecap:round;opacity:.8}
+  .verdict-display h3{color:var(--verdict-color);font-size:24px;font-weight:500;letter-spacing:-.8px;margin-bottom:8px;line-height:1.2}
+  .verdict-display>p{font:9px var(--mono);color:var(--muted)}
+  .estimate-metrics{margin:0}.estimate-metrics>div{display:flex;justify-content:space-between;align-items:center;gap:16px;border-top:1px solid var(--line);padding:16px 0}
+  .estimate-metrics dt{font-size:12px;color:var(--muted)}.estimate-metrics dd{font-size:24px;letter-spacing:-1px;font-variant-numeric:tabular-nums;margin:0;white-space:nowrap}
+  .estimate-metrics>div:last-child dd{color:var(--verdict-color)}
+  .memory-picture{margin-top:8px}.memory-picture>div:first-child{display:flex;justify-content:space-between;gap:12px;font-size:9px;line-height:1.5;color:var(--muted)}
+  .memory-track{height:5px;background:#0d1c21;border-radius:3px;overflow:hidden;margin-top:10px}.memory-track i{display:block;height:100%;min-width:3px;background:var(--verdict-color)}
+  #spill-note{font-size:10px;color:var(--verdict-color);margin-top:9px;line-height:1.6}
+  .estimate-reason{font-size:13px;line-height:1.8;color:var(--ink);margin-top:24px;min-height:70px}
+  .refusal-note{font-size:11px;line-height:1.8;color:var(--verdict-color);border-top:1px solid var(--line);padding-top:15px;margin-top:16px}
+  .lookahead-footnote{margin-top:22px;font-size:11px;line-height:1.8;color:var(--muted)}.lookahead-footnote>p{max-width:900px}.lookahead-footnote strong{font-weight:500;color:var(--ink)}
+  .lookahead-footnote details{margin-top:15px}.lookahead-footnote summary{cursor:pointer;display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-top:1px solid var(--line);list-style:none;color:var(--ink)}.lookahead-footnote summary::-webkit-details-marker{display:none}.lookahead-footnote summary>span{color:var(--accent);font-size:17px}.lookahead-footnote details[open] summary>span{transform:rotate(45deg)}.lookahead-footnote details p{max-width:920px;margin:12px 0}.lookahead-footnote a{color:var(--accent)}
+  .lookahead-nojs{font-size:12px;color:var(--muted);padding-top:20px}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  @media(max-width:1100px){.lookahead{padding:28px}.work-picture,.lookahead-result{padding:22px}.read-flow{grid-template-columns:minmax(0,1fr) 80px minmax(0,1fr)}.flow-path strong{font-size:17px}.read-flow h3{font-size:15px}.node-meta{font-size:8px}.question-options label{padding:19px}.question-options strong{font-size:15px}.choice-dot{right:18px;top:19px}}
+  @media(max-width:900px){.compact-result{display:block}.lookahead-workbench{grid-template-columns:1fr}.lookahead-result{border-left:0;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:0 32px}.lookahead-result>.step-label{grid-column:1/-1}.verdict-display{grid-column:1;grid-row:2/4;align-self:center}.estimate-metrics{grid-column:2}.memory-picture{grid-column:2}.estimate-reason,.refusal-note{grid-column:1/-1;min-height:0}.lookahead-heading{align-items:start}.lookahead-heading>p{max-width:230px;font-size:12px}.read-flow{grid-template-columns:1fr 140px 1fr}.node-meta{font-size:10px}.read-flow h3{font-size:20px}.flow-path strong{font-size:22px}}
+  @media(max-width:600px){.lookahead{padding:22px 16px}.lookahead-heading{display:block;margin-bottom:28px}.lookahead-heading h2{font-size:28px}.lookahead-heading>p{max-width:none;margin-top:17px;font-size:13px}.question-options{grid-template-columns:1fr;gap:8px}.question-options label{min-height:0;padding:15px 45px 15px 44px}.choice-number{position:absolute;left:15px;top:18px;margin:0}.question-options strong{font-size:15px}.question-options small{font-size:11px;margin-top:5px}.choice-dot{top:24px}.storage-row{align-items:start;flex-direction:column;gap:14px;padding:25px 0}.storage-row>p{font-size:11px;text-align:left}.storage-row>p br{display:none}.storage-row>p span{margin-left:4px}.storage-picker{width:100%}.storage-picker>div{width:100%}.storage-picker label{flex:1;text-align:center;padding:10px 15px}.work-picture,.lookahead-result{padding:20px 14px}.read-flow{grid-template-columns:1fr 65px 1fr;gap:4px}.read-flow h3{font-size:14px;letter-spacing:-.5px}.read-flow p{font-size:9px}.node-meta{font-size:8px}.node-icon{width:39px;height:39px;margin-bottom:12px}.flow-path strong{font-size:15px}.flow-path small{font-size:7px}.flow-path{font-size:8px}.column-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.column-grid span{font-size:8px;padding:9px 2px}.column-heading{font-size:8px}.query-preview>div{display:block;line-height:1.8}.query-preview>div>span:last-child{display:block;color:var(--accent);margin-top:4px}.query-preview pre{font-size:10px;padding:14px;min-height:98px}.lookahead-result{display:block}.verdict-display{padding:0 0 20px}.estimate-metrics dd{font-size:25px}.estimate-metrics dt{font-size:12px}.memory-picture>div:first-child{font-size:9px}.estimate-reason{font-size:13px;margin-top:20px}.lookahead-footnote{font-size:10px}.step-label{font-size:10px}}
+</style>

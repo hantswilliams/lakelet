@@ -2,6 +2,45 @@
 
 *The one file to open to know where the build is. Updated every session; dates are when a status changed. "Now" names the brief the build is on. The briefs say what each step is and what its gate is (`ship-v0-plan.md` next, the versions round having closed 2026-09-17; `core-v0.5-plan.md` for the core, `app-v0-plan.md` for the desktop shell, both still authoritative for what they cover; a decision belonging to no brief is a dated `decisions-for-review_<MMDDYY>.md`); `lakelet-build-sessions.md` is the map of the sessions; the dated logs (`lakelet-build-sessions_<MMDDYY>.md`) say what happened. This file only says where we are and what comes next.*
 
+## Complete data-story website — 2026-09-16, this branch only
+
+Scope: `build-sessions/website-story-v1-plan.md` (repository root).
+
+- [x] Apply the selected dark/lime direction to all marketing and documentation routes.
+- [x] Move the diagram before Lookahead and introduce provider-neutral “Open storage & compute” wording (2026-09-17). Build and 65 checks pass; desktop/mobile reviewed.
+- [x] Prototype the question/local-or-S3 Lookahead flow on the homepage: six model-backed illustrative scenarios, responsive diagram and gauge, keyboard controls, assumptions. Build and 65 checks pass.
+- [x] Apply the approved local/S3 headline and Lakelet Lookahead name. Production build and 61 checks pass; desktop/mobile copy and demo reviewed.
+- [x] Restore the homepage laptop / S3 / worker / catalog diagram in dark/lime, with responsive labels and explicit planned publishing/worker paths. Build and 61 checks pass.
+- [x] Responsive site navigation, native mobile menu, documentation navigation, footer, and source-installation calls to action.
+- [x] Reuse the interactive scan visualization on the homepage and how-it-runs page.
+- [x] Actual app image, current feature status, fourth verdict, and recovery documentation.
+- [x] Import committed website documentation/status from trust round `3c60296`.
+- [x] Clearly label proposed Team/Burst pricing and other unavailable features.
+- [x] Show a usable GitHub fallback when no signup endpoint is configured.
+- [x] Production build: 25 pages; 60 pytest checks pass at `/lakelet/` and `/`, including configured signup markup. All 25 preview routes return HTTP 200.
+- [x] Browser review: desktop, 390px and 360px phones; menus, docs navigation, experiment, and disclosures verified.
+- [x] User authorized committing and publishing this separate website branch to GitHub (2026-09-17).
+- [x] User approved merging committed remote main into this website branch (2026-09-18); resolve design/docs/log conflicts and reconcile newly shipped features.
+- [x] Combined website verified: 25-page build, 66 website checks, README status check, desktop/mobile review; core/app exactly match remote main `d0f1324`. Merge ready for the existing website branch; publication remains authorized.
+- [x] Opened [PR #1: Redesign the website around Lakelet Lookahead](https://github.com/hantswilliams/lakelet/pull/1) from this branch to main (2026-09-18).
+- [ ] User review before merging this website into main or deploying it.
+
+
+## Website exploration — parallel branch, 2026-09-16
+
+Scope: `website-exploration-plan.md` in `build-sessions/`; isolated branch
+`codex/website-exploration` at base `97ee6aa`. This is independent of the core steps.
+
+- [x] Separate worktree and dedicated local preview.
+- [x] Comparison page plus product, interactive data story, and editorial concepts.
+- [x] Actual app screenshot using generated data, with provenance.
+- [x] Production build and 14 persistent pytest checks pass.
+- [x] Desktop/mobile browser checks; radio, keyboard slider and details controls work.
+- [x] Exploration routes carry noindex and are excluded from the sitemap.
+- [x] User selected 02 / Data story; complete-site implementation stays in this worktree.
+
+Results: `build-sessions/lakelet-build-sessions_091626.md` (from repository root).
+
 ## Now
 
 **The lineage screens and S3 writes** (`decisions-for-review_091726.md`, W1, W2, L1, L2, L3 all agreed by Hants 2026-09-18), built in the order L3, L1, W1, W2, L2 — **all five built 2026-09-18**, awaiting Hants' Mac run and commit; the log is `lakelet-build-sessions_091826.md`. **Ship** (`ship-v0-plan.md`) is next and stays **held** (Hants, 2026-09-17). The versions round closed 2026-09-17 and is on `main` (`984d834`).

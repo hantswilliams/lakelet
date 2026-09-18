@@ -1,0 +1,13 @@
+---
+// Copyright 2026 Lakelet contributors
+// SPDX-License-Identifier: Apache-2.0
+import { pick } from '../../data/status';
+import { url } from '../../lib/url';
+const built = pick(['app', 'tables', 'gauge', 'dbtrun', 'catalog']);
+const planned = pick(['burst', 'ask', 'mcp', 'installers']);
+---
+<section class="availability section-frame" aria-labelledby="availability-title">
+  <div><p class="eyebrow">A clear starting point</p><h2 id="availability-title">Here’s where we are.</h2><p>Open source. Developer preview.<br />Available from source on macOS and Linux.</p><a class="text-link" href={url('/docs')}>Read the current documentation ↗</a></div>
+  <div><h3><span class="status-dot"></span> Available today</h3><ul>{built.map(s => <li><a href={url(s.href!)}>{s.label}</a></li>)}</ul></div>
+  <div><h3><span class="status-dot planned"></span> Planned</h3><ul>{planned.map(s => <li>{s.label}</li>)}</ul><p class="small-note">These features are not available yet.</p></div>
+</section>

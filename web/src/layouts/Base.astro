@@ -1,5 +1,8 @@
 ---
-import '../styles/tokens.css';
+// Copyright 2026 Lakelet contributors
+// SPDX-License-Identifier: Apache-2.0
+import '../styles/exploration.css';
+import '../styles/website.css';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import { site } from '../data/nav';
@@ -24,17 +27,14 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
   <meta name="twitter:card" content="summary">
   <link rel="icon" type="image/svg+xml" href={url("/favicon.svg")}>
   <meta name="lakelet:repo" content={site.github}>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#101f24">
   <slot name="head" />
 </head>
-<body>
-  <div class="wrap">
-    <Nav />
-    <slot />
-    <Footer />
-  </div>
+<body class="story website">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <Nav />
+  <main id="main"><slot /></main>
+  <Footer />
 
   <script>
     // ---- Waitlist -----------------------------------------------------------

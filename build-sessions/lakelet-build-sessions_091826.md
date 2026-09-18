@@ -55,3 +55,61 @@ Core **258** passed, 10 skipped; Vitest **96**; Playwright **31** on ten sidecar
 ## 8. Where this leaves the batch
 
 All five of `decisions-for-review_091726.md` are built: L3, L1, W1, W2, L2. Open, in `TASKS.md`: the welcome screen's warehouse field (Rust, on the Mac); history keeping one run per model (a decision, if every run should show in the feed). Ship (`ship-v0-plan.md`) is next and stays held until Hants says.
+
+
+---
+
+## Separate website worktree: merge committed remote main
+
+Hants approved bringing GitHub's committed `main` into `codex/website-exploration`.
+Fetched and merged `origin/main` at `d0f1324` into the separate sibling worktree,
+starting from website commit `f5a3134`. No local main-checkout files were copied or
+edited. The website branch's existing publication authorization covers pushing
+this integration; merging the website into main and deploying it remain separate.
+
+### Resolution
+
+- Kept the selected dark/lime website and the Lookahead interaction.
+- Used main's complete CLI/API reference and current feature status, retaining the
+  approved Lakelet Lookahead name. Other product docs merged; the only docs change
+  relative to main is the already-approved gauge-guide branding.
+- Preserved both branches' September 16 and 17 session logs in their dated files.
+- Updated the storage diagram: reading and publishing to S3 are available, including
+  a solid publishing arrow and a link to the publishing guide. Remote compute and a
+  shared catalog remain planned. Explained where bucket data, metadata, and the
+  local catalog live; clarified that a folder backup excludes S3's table files.
+- Updated the app/workflow copy, feature list, and `llms.txt` for S3 writes, Lineage,
+  and Changes. Regenerated the README status block from the shared status source.
+- Added a website regression check for the newly built surfaces and their CLI/API
+  documentation; updated the existing diagram availability gate.
+
+### Verification performed here
+
+- Astro production build: **25 pages**, successful. Initial duplicate-content
+  warnings disappeared after clearing only the ignored Astro content data cache and
+  rebuilding. The isolated preview still has no signup endpoint configured; its
+  expected warning and GitHub fallback remain. Production configuration is unchanged.
+- Website pytest: **66 passed**. Includes all six generated Lookahead estimates
+  checked against the merged core model, local routes/fragments/assets, and the new
+  availability assertions. README status generator `--check`: current.
+- Browser: desktop 1440px and phone 390px reviewed; no horizontal page/node overflow
+  in the homepage diagram, all six Lookahead selections yielded the expected verdicts,
+  and the publishing link reached the new guide. No browser console messages.
+- The staged whitespace check caught one pre-existing trailing space in the imported
+  trust-round plan; removed it. `git diff --cached --check` then passed. Core and
+  desktop-app trees exactly match `origin/main`
+  (`git diff origin/main -- core app` is empty); these imported suites were not rerun.
+- The verified merge is prepared for a DCO-signed commit and a normal push to the
+  existing website branch. Preview remains http://127.0.0.1:4328/lakelet/.
+
+
+### Website PR opened
+
+Hants requested a PR from `codex/website-exploration` to `main`. Confirmed both
+GitHub heads still matched the verified integration (`cfe5970`, main `d0f1324`)
+and that no open PR existed for the branch. Opened
+[PR #1 — Redesign the website around Lakelet Lookahead](https://github.com/hantswilliams/lakelet/pull/1)
+as ready for review, with the changes, local validation results, scope, and Pages
+rollout described. No product files changed and no tests were rerun for these
+PR-record updates. Main is not merged; its existing Pages workflow will deploy
+when the PR is merged. Review and merge remain open in both task lists.
