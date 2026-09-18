@@ -101,3 +101,15 @@ this integration; merging the website into main and deploying it remain separate
   (`git diff origin/main -- core app` is empty); these imported suites were not rerun.
 - The verified merge is prepared for a DCO-signed commit and a normal push to the
   existing website branch. Preview remains http://127.0.0.1:4328/lakelet/.
+
+
+### Website PR opened
+
+Hants requested a PR from `codex/website-exploration` to `main`. Confirmed both
+GitHub heads still matched the verified integration (`cfe5970`, main `d0f1324`)
+and that no open PR existed for the branch. Opened
+[PR #1 — Redesign the website around Lakelet Lookahead](https://github.com/hantswilliams/lakelet/pull/1)
+as ready for review, with the changes, local validation results, scope, and Pages
+rollout described. No product files changed and no tests were rerun for these
+PR-record updates. Main is not merged; its existing Pages workflow will deploy
+when the PR is merged. Review and merge remain open in both task lists.

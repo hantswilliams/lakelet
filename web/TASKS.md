@@ -33,6 +33,7 @@ Scope: `build-sessions/website-story-v1-plan.md` (repository root).
 - [x] User authorized committing and publishing this separate website branch to GitHub (2026-09-17).
 - [x] User approved merging committed remote main into this website branch (2026-09-18); resolve design/docs/log conflicts and reconcile newly shipped features.
 - [x] Combined website verified: 25-page build, 66 website checks, README status check, desktop/mobile review; core/app exactly match remote main `d0f1324`. Merge ready for the existing website branch; publication remains authorized.
+- [x] Opened [PR #1: Redesign the website around Lakelet Lookahead](https://github.com/hantswilliams/lakelet/pull/1) from this branch to main (2026-09-18).
 - [ ] User review before merging this website into main or deploying it.
 
 
