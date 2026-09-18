@@ -64,6 +64,12 @@ class _Node:
     source: str | None = None  # an attached table's prefix
     freshness: datetime | None = None
     upstream: list[Edge] = field(default_factory=list)
+    #: A model's compiled SQL from the manifest; empty when the last compile skipped it.
+    compiled: str = ""
+
+
+#: A model's state (decisions V3): the state, why, and when — see ``Graph.states``.
+ModelState = tuple[str, str | None, str | None]
 
 
 class Graph:
@@ -94,6 +100,7 @@ class Graph:
             if ours is None:
                 ours = self.nodes[name] = _Node(name, "model")
             ours.model_uid = uid
+            ours.compiled = (node.get("compiled_code") or "").strip()
         # edges: the manifest's first, then what the SQL names that the manifest did not
         for node in models.values():
             ours = self.nodes[node["name"]]
@@ -113,8 +120,8 @@ class Graph:
 
         try:
             manifest, self.compiled = runner.manifest(self.project, compile_if_stale)
-        except runner.DbtMissing:
-            return {}  # the catalog's half of the graph is still true
+        except (runner.DbtMissing, FileNotFoundError):
+            return {}  # no dbt, or never compiled and not asked to: the catalog's half stands
         return {
             uid: node
             for uid, node in manifest.get("nodes", {}).items()
@@ -178,6 +185,92 @@ class Graph:
         result.built_by, result.last_built = self._built(node)
         return result
 
+    def states(self) -> dict[str, ModelState]:
+        """Every model's state (decisions V3), in dependency order so a model sees the
+        state of what it reads: `never` (no successful run in history), `edited` (the
+        compiled SQL's hash differs from the one that run recorded), `upstream` (a model
+        it reads is not fresh, or a table or view it reads changed after the run), else
+        `fresh`. The reason names the nearest thing that changed; the time is when."""
+        out: dict[str, ModelState] = {}
+
+        def visit(name: str) -> None:
+            if name in out:
+                return
+            node = self.nodes[name]
+            out[name] = ("fresh", None, None)  # provisional, so a cycle ends here
+            for e in node.upstream:
+                if e.name in self.nodes and self.nodes[e.name].model_uid is not None:
+                    visit(e.name)
+            out[name] = self._model_state(node, out)
+
+        for name, node in self.nodes.items():
+            if node.model_uid is not None:
+                visit(name)
+        return out
+
+    def _model_state(self, node: _Node, states: dict[str, ModelState]) -> ModelState:
+        from lakelet.query import sql_hash
+
+        run = self.project.history.model_last_run(node.model_uid or "")
+        if run is None:
+            return "never", "never built", None
+        if not run.ran or run.error:
+            return "never", "the last run failed", run.ts.isoformat() if run.ts else None
+        if node.compiled and run.sql_hash and sql_hash(node.compiled) != run.sql_hash:
+            return "edited", "the SQL changed since the last run", None
+        for e in node.upstream:
+            before = states.get(e.name)
+            if before is not None and before[0] != "fresh":
+                return "upstream", f"{e.name} is out of date", before[2]
+            up = self.nodes.get(e.name)
+            if up is not None and up.freshness is not None and run.ts and up.freshness > run.ts:
+                return "upstream", f"{e.name} changed", up.freshness.isoformat()
+        return "fresh", None, None
+
+    def whole(self) -> dict[str, Any]:
+        """The graph as the Lineage screen draws it (decisions L1): every node with its
+        kind and, for a model, its state; every edge with how it is known. An edge to a
+        name that is not a node (a `source()` the catalog lacks) is left out."""
+        states = self.states()
+        nodes = [
+            {
+                "name": n.name,
+                "kind": n.kind,
+                "model": n.model_uid is not None,
+                "state": states[n.name][0] if n.name in states else None,
+                "state_reason": states[n.name][1] if n.name in states else None,
+                "source": n.source,
+                "freshness": n.freshness.isoformat() if n.freshness else None,
+            }
+            for n in self.nodes.values()
+        ]
+        edges = [
+            {"from": e.name, "to": n.name, "via": e.via}
+            for n in self.nodes.values()
+            for e in n.upstream
+            if e.name in self.nodes
+        ]
+        return {"nodes": nodes, "edges": edges, "compiled": self.compiled}
+
+    def downstream_runs(self, name: str) -> list[tuple[int, str, datetime]]:
+        """Every model downstream of ``name`` (any depth) that has a successful run, with
+        its depth and that run's time; one history read per model."""
+        out: list[tuple[int, str, datetime]] = []
+        for e in self._walk(name, len(self.nodes) + 1, self.downstream_of):
+            node = self.nodes.get(e.name)
+            if node is None or node.model_uid is None:
+                continue
+            run = self.project.history.model_last_run(node.model_uid)
+            if run is not None and run.ran and not run.error and run.ts:
+                out.append((e.depth, e.name, run.ts))
+        return sorted(out, key=lambda t: (t[0], t[1]))
+
+    def affected_models(self, name: str, since: datetime) -> list[str]:
+        """The models downstream of ``name`` whose last successful run is older than
+        ``since`` — what a commit to the table at that time made out of date (decisions
+        L3). Dependency order: by depth, then name."""
+        return [n for _, n, ts in self.downstream_runs(name) if ts < since]
+
     def _built(self, node: _Node) -> tuple[str | None, str | None]:
         when = node.freshness.isoformat() if node.freshness else None
         if node.kind == "model":
@@ -200,4 +293,9 @@ def lineage(project: Project, name: str, depth: int = 1) -> Lineage:
     return Graph(project).lineage(name, depth)
 
 
-__all__ = ["KINDS", "VIAS", "Edge", "Graph", "Lineage", "NoSuchNode", "lineage"]
+def whole(project: Project) -> dict[str, Any]:
+    """`lakelet lineage --all --json` and `GET /api/lineage`: the whole graph."""
+    return Graph(project).whole()
+
+
+__all__ = ["KINDS", "VIAS", "Edge", "Graph", "Lineage", "NoSuchNode", "lineage", "whole"]

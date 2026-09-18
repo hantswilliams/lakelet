@@ -4,7 +4,17 @@
 
 ## Now
 
-**The versions round is closed** (2026-09-17): `versions-plan.md` steps 0 to 5 built, step 4 verified on the Mac 2026-09-17 (its commit is Hants'), session 9 done. **Next is session 10, ship** (`ship-v0-plan.md`, S1 to S14 accepted 2026-09-11) — see "Next, in order". The trust round (`trust-round-plan.md`, T1 to T8) is on `main` since `3c60296`. The detail of the last two days is in `lakelet-build-sessions_091626.md` (step 4, V3) and `lakelet-build-sessions_091726.md` (step 5, the close).
+**The lineage screens and S3 writes** (`decisions-for-review_091726.md`, W1, W2, L1, L2, L3 all agreed by Hants 2026-09-18), built in the order L3, L1, W1, W2, L2 — **all five built 2026-09-18**, awaiting Hants' Mac run and commit; the log is `lakelet-build-sessions_091826.md`. **Ship** (`ship-v0-plan.md`) is next and stays **held** (Hants, 2026-09-17). The versions round closed 2026-09-17 and is on `main` (`984d834`).
+
+| Item | What | Status |
+|---|---|---|
+| L3 | `affects` on every snapshot in `describe` (the models whose last run predates it, in dependency order); the table detail's rows with the names as links, the line under the list and **Run what changed** | **built** 2026-09-18; 1 pytest, 1 Vitest, `models.spec` |
+| L1 | `Graph.states()` and `Graph.whole()`, `GET /api/lineage`, `lakelet lineage --all`; the **Lineage** screen (`lib/graph.ts` layering, `screens/Lineage.tsx` SVG), nodes by state, a node a link | **built** 2026-09-18; 1 pytest, 5 Vitest, `models.spec` |
+| W1 | An `s3://` warehouse first-class: `init --warehouse`, every verb against it, Where in the app, the docs | **built** 2026-09-18; 2 pytest, `bucket.spec` (tenth sidecar) |
+| W2 | `lakelet tables publish <name> s3://…` through `relocate`'s rewriter; the route and the button | **built** 2026-09-18; 2 pytest, 1 Vitest, `attach.spec` |
+| L2 | `lakelet changes` / `GET /api/changes` and the Changes screen, the Recent strip | **built** 2026-09-18; 4 pytest, 6 Vitest, `versions.spec` |
+
+**The trust round** (`trust-round-plan.md`, T1 to T8) is on `main` since `3c60296`; the versions round's detail is in `lakelet-build-sessions_091626.md` (step 4, V3) and `lakelet-build-sessions_091726.md` (step 5, the close).
 
 | Step | What | Status |
 |---|---|---|
@@ -101,6 +111,8 @@ Open:
 
 - [x] The first Arrow batch reaching the app carries several thousand rows: it did not; the screen's stopwatch read the count late (2026-09-11, real-data step 3). The first batch is one 1,000-row batch, asserted.
 - [ ] Re-export `deck/lakelet-executive-summary.pdf` from the edited docx (no LibreOffice on the Mac).
+- [ ] **History keeps one run per model and per question** (L2, 2026-09-18): `model_runs` and `question_runs` hold the latest run only, so `lakelet changes` shows each model's last run beside every one of its snapshots. Showing every run means keeping every row (a numbered history migration, T4) and is a decision, not a reading; the feed says what it lists.
+- [ ] **The app's welcome screen cannot make a bucket-warehouse project** (W1, 2026-09-18): `init --warehouse s3://…` is CLI-only, because the field belongs in the Tauri side's project box (`src-tauri/src/projects.rs` runs `init`) and Rust does not compile in the container. A small change on the Mac: an optional `warehouse` argument through `create_project`, an Advanced field in `Welcome.tsx`; `/docs/remote` says the CLI is the way until then.
 - [x] `old/deck-before-090826/` stays in history: decided 2026-09-15 (T8, agreed) — a force push on a public repository with CI and Pages on `main` is a risk with no reader waiting on it.
 - [ ] `docs/lakelet-financial-plan.docx` is gitignored but still says Burrow inside; `docs/lakelet-product-spec.md` mentions Burrow once.
 - [ ] Plan filename versus internal revision number; cosmetic.
@@ -108,6 +120,7 @@ Open:
 - [x] Three transfer archives at the repo root removed (2026-09-15, T8).
 - [ ] `deploy-pages.yml` still has the older action majors; bump when next touched.
 - [ ] From the first screenshot session (2026-09-16): the grid's column widths follow the longest cell of the first column, so a two-column result puts the number far right of its header; the "Copy as command" line's `'\''month'\''` is correct shell quoting but unreadable, `lakelet sql --file` would read better when the SQL contains quotes.
+- [x] `test_step7_cli.py`'s export test forbade the literal `990`, which a hash or a float in the export can contain by chance; `987654` now (2026-09-18).
 - [ ] `lakelet run <selector>` (and `--plan`) echoes the first selected model's compiled SQL on stdout before the DAG: dbt's `compile` prints it when a selection is given. Found 2026-09-16 while looking at lineage output; harmless, but it is in the way of `lakelet run --plan | …`. A `--output json` on the compile, or dropping the selection from the compile step, would stop it.
 - [ ] Known unknowns still open in the core brief's §7: the 150 ms gauge budget on a never-read table (PRD allows 800 ms uncached); how much of DuckDB's filter rendering the predicate parser needs for real workloads; partner prefixes with drift or path-only partitions (fixtures pass; intake decides); the lease carrying a metadata tree. The sidecar memory split closed with A8.
 
@@ -138,6 +151,8 @@ Closed:
 ## Decisions waiting on Hants
 
 **`trust-round-plan.md` T1 to T8**: decided 2026-09-15, all agreed, built the same day (above).
+
+**`decisions-for-review_091726.md` W1, W2, L1, L2, L3** (2026-09-17, from Hants' two questions after the round closed: is writing to S3 handled — partly, at the catalog layer, not as a product path — and how to show the lineage of file and Iceberg changes): W1 an `s3://` warehouse first-class at `init`; W2 `lakelet tables publish` (the PRD's `publish`, pulled forward from session 8 through `relocate`'s rewriter); L1 a Lineage screen (the graph, drawn by the app); L2 a Changes feed across tables, models and versions; L3 each snapshot naming the models it made out of date. Ship (`ship-v0-plan.md`) is held behind whatever is chosen (Hants, 2026-09-17: not publishing yet).
 
 **`decisions-for-review_091526.md` V1, V2, V4** (2026-09-15, from the four articles in `research/`; `research/README.md` has the links): V1 format-version 3 for new tables after a spike; V2 `lakelet tables compact`; V4 the durability sentence, Renart and Duckle as comparables, the unsourced figures kept out. V1 first: V2 depends on its result. **V3 decided 2026-09-16** (a per-model state and `lakelet run --stale`): built inside step 4 of the versions round.
 

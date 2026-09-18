@@ -4,7 +4,8 @@
 carries a state — `never`, `fresh`, `edited`, `upstream` — computed from lineage's graph
 and history at plan time, each provoked here; `lakelet run --stale` builds only the models
 that are not fresh, in dependency order, and nothing when every model is fresh; the CLI's
-DAG and the routes carry it."""
+DAG and the routes carry it. Decisions L3 (2026-09-17): a table's snapshots say which
+models each one made out of date."""
 
 from __future__ import annotations
 
@@ -179,4 +180,36 @@ def test_the_cli_and_the_routes(project) -> None:
     body = client.post("/api/run", json={"stale": True}).json()
     assert body["selected"] == [] and body["results"] == []
     assert json.dumps(body)  # JSON-clean
+    client.close()
+
+
+def test_a_snapshot_names_the_models_it_made_out_of_date(project) -> None:
+    p = project
+    # before any run: nothing downstream has a run, so no snapshot affects anything
+    assert p.tables.describe("src").snapshot_list[0]["affects"] == []
+    runner.run(p)
+    time.sleep(0.01)
+    p.engine.execute("insert into lakelet.main.src select 1000, 'c9', 9.0")
+    snapshots = p.tables.describe("src").snapshot_list
+    # the new snapshot made every model downstream out of date, in dependency order; the
+    # one before it (the create) predates every run and affects nothing
+    assert snapshots[0]["affects"] == ["stg_orders", "total", "by_c", "top"]
+    assert snapshots[1]["affects"] == []
+    # a table nothing reads: its snapshot affects nothing
+    p.engine.execute("insert into lakelet.main.other select 99")
+    assert p.tables.describe("other").snapshot_list[0]["affects"] == ["from_other"]
+    # after a stale run every snapshot's list is empty again
+    runner.run(p, stale=True)
+    assert all(s["affects"] == [] for s in p.tables.describe("src").snapshot_list)
+    assert p.tables.describe("other").snapshot_list[0]["affects"] == []
+    # the route carries it
+    import httpx
+
+    client = httpx.Client(
+        base_url=p.catalog_url, headers={"Authorization": f"Bearer {p.token}"}, timeout=60
+    )
+    time.sleep(0.01)
+    p.engine.execute("delete from lakelet.main.src where id = 1000")
+    body = client.get("/api/tables/src").json()
+    assert body["snapshot_list"][0]["affects"] == ["stg_orders", "total", "by_c", "top"]
     client.close()

@@ -78,6 +78,13 @@ class ExpireBody(BaseModel):
     keep_days: int | None = None
 
 
+class PublishBody(BaseModel):
+    prefix: str
+    dry_run: bool = False
+    #: Publish even when the copy would take longer than the gauge's yellow threshold (W2).
+    yes: bool = False
+
+
 class SettingBody(BaseModel):
     key: str
     value: str
@@ -411,6 +418,24 @@ def create_router(project: Project, token: str) -> APIRouter:
             except NotExpirable as e:
                 return error(409, "not_expirable", str(e))
 
+    @router.post("/tables/{name}/publish", dependencies=guarded)
+    def publish_table(name: str, body: PublishBody):
+        """`lakelet tables publish` (decisions W2): the table moved into a bucket, every
+        snapshot kept; `dry_run` counts and weighs first."""
+        from lakelet.relocate import NotPublishable, publish
+
+        with lock:
+            try:
+                cap = None if body.yes else project.config.gauge.yellow_max_seconds
+                report = publish(project, name, body.prefix, dry_run=body.dry_run, cap_seconds=cap)
+            except NoSuchTable:
+                return error(404, "no_such_table", f"no table named {name}")
+            except NotPublishable as e:
+                return error(409, "not_publishable", str(e))
+            if not body.dry_run:
+                project.tables.refresh_agents_md()
+        return _plain(report)
+
     # -- settings (the panel is `lakelet config set`) ---------------------------------
 
     def _settings() -> dict[str, Any]:
@@ -568,6 +593,32 @@ def create_router(project: Project, token: str) -> APIRouter:
             return {"name": name, "commit": result.id, "git": result.reason}
 
     # -- lineage (versions brief G8) ---------------------------------------------------
+
+    @router.get("/lineage", dependencies=guarded)
+    def lineage_all():
+        """The whole graph for the Lineage screen (decisions L1): every table, view and
+        model with its kind and state, every edge with how it is known."""
+        from lakelet.dbt import runner
+        from lakelet.lineage import whole
+
+        with lock:
+            try:
+                return whole(project)
+            except runner.DbtFailed as e:
+                return error(400, "dbt", str(e))
+
+    @router.get("/changes", dependencies=guarded)
+    def changes_feed(since: str | None = None, last: int = 50, name: str | None = None):
+        """`lakelet changes` (decisions L2): snapshots, runs and versions merged by time,
+        newest first; `since` as the CLI takes it, `name` for one table, model or question."""
+        from lakelet.changes import changes, parse_since
+
+        try:
+            cutoff = parse_since(since) if since else None
+        except ValueError as e:
+            return error(400, "bad_since", str(e))
+        with lock:
+            return [c.as_dict() for c in changes(project, since=cutoff, last=last, name=name)]
 
     @router.get("/lineage/{name}", dependencies=guarded)
     def lineage(name: str, depth: int = 1):

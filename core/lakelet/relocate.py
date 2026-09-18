@@ -6,7 +6,12 @@ file — so a folder moved from ``~/acme`` to ``~/Documents/acme`` has tables wh
 points at where it used to be. ``moved_from`` notices; ``relocate`` rewrites every location
 under the project's own warehouse with pyiceberg's own writers and commits the result to
 the catalog, so it is a normal metadata commit and the old metadata files become orphans
-for ``expire``. Tables attached from a bucket need nothing and are skipped."""
+for ``expire``. Tables attached from a bucket need nothing and are skipped.
+
+``publish`` (decisions W2) is the same rewriter with a copy first and a bucket as the
+target: a table built locally is copied under ``s3://bucket/prefix/main/<name>/`` with the
+same relative names, its metadata tree rewritten there, and the catalog moved to it in one
+commit, every snapshot kept; the local files become orphans ``expire`` sweeps."""
 
 from __future__ import annotations
 
@@ -103,9 +108,6 @@ def relocate(project: Project) -> RelocateReport:
     Every snapshot is kept: each manifest is read from where the file now is, written again
     beside it with its data-file paths under the new root, then the manifest list, then the
     metadata file as a new version, and the catalog entry is moved to it in one commit."""
-    from pyiceberg.manifest import DataFileContent, write_manifest, write_manifest_list
-    from pyiceberg.table.snapshots import MetadataLogEntry
-
     old_root = moved_from(project)
     report = RelocateReport(old_root=old_root, new_root=str(project.root))
     if old_root is None:
@@ -120,82 +122,203 @@ def relocate(project: Project) -> RelocateReport:
             else location
         )
 
-    io = project.metadata_io.io
     for name in sorted(project.store.list_tables(NAMESPACE)):
         old_location = project.store.get_table(NAMESPACE, name)
         if not old_location.startswith(old_prefix):
             report.skipped.append(name)  # a bucket, or already under this folder
             continue
-        md = project.metadata_io.read(translate(old_location))
-        metadata_dir = f"{translate(md.location)}/metadata"
-        snapshots = []
-        for snapshot in md.snapshots:
-            moved = snapshot.model_copy(update={"manifest_list": translate(snapshot.manifest_list)})
-            new_manifests = []
-            for manifest in moved.manifests(io):
-                # pyiceberg's Records are positional: the manifest's path is field 0 and a
-                # data file's is field 1 (`ManifestFile.manifest_path`, `DataFile.file_path`).
-                readable = copy.copy(manifest)
-                readable[0] = translate(manifest.manifest_path)
-                entries = list(readable.fetch_manifest_entry(io, discard_deleted=False))
-                spec = md.specs()[manifest.partition_spec_id]
-                target = f"{metadata_dir}/{Path(manifest.manifest_path).name}"
-                if target == readable.manifest_path:
-                    target = target.replace(".avro", "-relocated.avro")
-                for entry in entries:
-                    if entry.data_file.content == DataFileContent.POSITION_DELETES:
-                        _rewrite_position_deletes(io, entry.data_file, translate)
-                        report.data_files += 1
-                    else:
-                        entry.data_file[1] = translate(entry.data_file.file_path)
-                with write_manifest(
-                    md.format_version,
-                    spec,
-                    md.schema(),
-                    io.new_output(target),
-                    manifest.added_snapshot_id,
-                    "gzip",
-                ) as writer:
-                    for entry in entries:
-                        writer.add_entry(entry)
-                rewritten = writer.to_manifest_file()
-                # the writer leaves the sequence numbers unassigned, as for a manifest of a
-                # new commit; these are the old manifests, so theirs are kept (fields 4, 5)
-                rewritten[3] = manifest.content  # a delete manifest stays a delete manifest
-                rewritten[4] = manifest.sequence_number
-                rewritten[5] = manifest.min_sequence_number
-                new_manifests.append(rewritten)
-                report.metadata_files += 1
-            list_target = f"{metadata_dir}/{Path(snapshot.manifest_list).name}"
-            if list_target == moved.manifest_list:
-                list_target = list_target.replace(".avro", "-relocated.avro")
-            with write_manifest_list(
-                md.format_version,
-                io.new_output(list_target),
-                snapshot.snapshot_id,
-                snapshot.parent_snapshot_id,
-                snapshot.sequence_number,
-                "gzip",
-            ) as list_writer:
-                list_writer.add_manifests(new_manifests)
-            report.metadata_files += 1
-            snapshots.append(snapshot.model_copy(update={"manifest_list": list_target}))
-        updates: dict[str, Any] = {
-            "location": translate(md.location),
-            "snapshots": snapshots,
-            "metadata_log": [
-                MetadataLogEntry(
-                    metadata_file=translate(e.metadata_file), timestamp_ms=e.timestamp_ms
-                )
-                for e in md.metadata_log
-            ],
-        }
-        new_md = md.model_copy(update=updates)
-        from lakelet.catalog.commit import metadata_location, parse_version
-
-        new_location = metadata_location(updates["location"], parse_version(old_location) + 1)
-        project.metadata_io.write(new_md, new_location)
-        project.store.update_table(NAMESPACE, name, old_location, new_location)
+        counts = _rewrite(project, name, old_location, translate)
         report.relocated.append(name)
-        report.metadata_files += 1
+        report.metadata_files += counts[0]
+        report.data_files += counts[1]
+    return report
+
+
+def _rewrite(project: Project, name: str, old_location: str, translate) -> tuple[int, int]:
+    """Read the table's metadata from ``translate(old_location)`` (where the files now are),
+    write every manifest, manifest list and the metadata file again with every location
+    translated, and move the catalog to the new metadata file in one commit. Returns the
+    metadata files written and the position-delete files rewritten."""
+    from pyiceberg.manifest import DataFileContent, write_manifest, write_manifest_list
+    from pyiceberg.table.snapshots import MetadataLogEntry
+
+    from lakelet.catalog.commit import metadata_location, parse_version
+
+    io = project.metadata_io.io
+    metadata_files = data_files = 0
+    md = project.metadata_io.read(translate(old_location))
+    metadata_dir = f"{translate(md.location)}/metadata"
+    snapshots = []
+    for snapshot in md.snapshots:
+        moved = snapshot.model_copy(update={"manifest_list": translate(snapshot.manifest_list)})
+        new_manifests = []
+        for manifest in moved.manifests(io):
+            # pyiceberg's Records are positional: the manifest's path is field 0 and a
+            # data file's is field 1 (`ManifestFile.manifest_path`, `DataFile.file_path`).
+            readable = copy.copy(manifest)
+            readable[0] = translate(manifest.manifest_path)
+            entries = list(readable.fetch_manifest_entry(io, discard_deleted=False))
+            spec = md.specs()[manifest.partition_spec_id]
+            target = f"{metadata_dir}/{Path(manifest.manifest_path).name}"
+            if target == readable.manifest_path:
+                target = target.replace(".avro", "-relocated.avro")
+            for entry in entries:
+                if entry.data_file.content == DataFileContent.POSITION_DELETES:
+                    _rewrite_position_deletes(io, entry.data_file, translate)
+                    data_files += 1
+                else:
+                    entry.data_file[1] = translate(entry.data_file.file_path)
+            with write_manifest(
+                md.format_version,
+                spec,
+                md.schema(),
+                io.new_output(target),
+                manifest.added_snapshot_id,
+                "gzip",
+            ) as writer:
+                for entry in entries:
+                    writer.add_entry(entry)
+            rewritten = writer.to_manifest_file()
+            # the writer leaves the sequence numbers unassigned, as for a manifest of a
+            # new commit; these are the old manifests, so theirs are kept (fields 4, 5)
+            rewritten[3] = manifest.content  # a delete manifest stays a delete manifest
+            rewritten[4] = manifest.sequence_number
+            rewritten[5] = manifest.min_sequence_number
+            new_manifests.append(rewritten)
+            metadata_files += 1
+        list_target = f"{metadata_dir}/{Path(snapshot.manifest_list).name}"
+        if list_target == moved.manifest_list:
+            list_target = list_target.replace(".avro", "-relocated.avro")
+        with write_manifest_list(
+            md.format_version,
+            io.new_output(list_target),
+            snapshot.snapshot_id,
+            snapshot.parent_snapshot_id,
+            snapshot.sequence_number,
+            "gzip",
+        ) as list_writer:
+            list_writer.add_manifests(new_manifests)
+        metadata_files += 1
+        snapshots.append(snapshot.model_copy(update={"manifest_list": list_target}))
+    updates: dict[str, Any] = {
+        "location": translate(md.location),
+        "snapshots": snapshots,
+        "metadata_log": [
+            MetadataLogEntry(metadata_file=translate(e.metadata_file), timestamp_ms=e.timestamp_ms)
+            for e in md.metadata_log
+        ],
+    }
+    new_md = md.model_copy(update=updates)
+    new_location = metadata_location(updates["location"], parse_version(old_location) + 1)
+    project.metadata_io.write(new_md, new_location)
+    project.store.update_table(NAMESPACE, name, old_location, new_location)
+    return metadata_files + 1, data_files
+
+
+class NotPublishable(Exception):
+    """An attached table (its files are not Lakelet's), a table already in a bucket, or a
+    target that is not an `s3://` prefix."""
+
+
+@dataclass
+class PublishReport:
+    name: str
+    source: str
+    target: str
+    #: Every data, delete and metadata file under the table: how many, how heavy.
+    files: int = 0
+    bytes: int = 0
+    #: Copied this time, and already in the bucket at the same size (a publish resumed).
+    copied: int = 0
+    skipped: int = 0
+    metadata_files: int = 0
+    data_files: int = 0
+    #: The bandwidth figure's estimate for the copy, when the cache has one.
+    seconds: float | None = None
+    dry_run: bool = False
+
+
+def _table_files(location: str) -> list[tuple[Path, int]]:
+    root = _local_path(location)
+    if root is None:
+        return []
+    out = []
+    for sub in ("data", "metadata"):
+        folder = root / sub
+        if folder.is_dir():
+            out += [(f, f.stat().st_size) for f in sorted(folder.rglob("*")) if f.is_file()]
+    return out
+
+
+def publish(
+    project: Project,
+    name: str,
+    prefix: str,
+    dry_run: bool = False,
+    cap_seconds: float | None = None,
+) -> PublishReport:
+    """`lakelet tables publish <name> <s3://bucket/prefix>`: the table's files copied under
+    ``<prefix>/main/<name>/`` with the same relative names (a file already there at the same
+    size is not copied again, so an interrupted publish resumes), the metadata tree written
+    again with every location in the bucket, and the catalog moved to it in one commit —
+    the last step, so a crash before it leaves the local table in place. ``dry_run``
+    counts and weighs; ``cap_seconds`` refuses a copy the bandwidth figure says would take
+    longer, the way Red refuses (`--yes` lifts it)."""
+    from lakelet.catalog.store import NotFound
+    from lakelet.gauge import inputs
+    from lakelet.register import SOURCE_PROPERTY
+    from lakelet.tables import NoSuchTable
+
+    if not prefix.startswith("s3://"):
+        raise NotPublishable(f"the target is an s3://bucket/prefix, not {prefix}")
+    try:
+        old_location = project.store.get_table(NAMESPACE, name)
+    except NotFound:
+        raise NoSuchTable(name) from None
+    md = project.metadata_io.read(old_location)
+    if SOURCE_PROPERTY in md.properties:
+        raise NotPublishable(
+            f"{name} is registered from {md.properties[SOURCE_PROPERTY]}; its files are not "
+            "Lakelet's to move"
+        )
+    if _local_path(md.location) is None:
+        raise NotPublishable(f"{name} is already in a bucket: {md.location}")
+    source_root = md.location.rstrip("/")
+    target_root = f"{prefix.rstrip('/')}/{NAMESPACE}/{name}"
+    report = PublishReport(name=name, source=source_root, target=target_root, dry_run=dry_run)
+    files = _table_files(source_root)
+    report.files, report.bytes = len(files), sum(size for _, size in files)
+    bandwidth = inputs.load_machine_cache(project.cache_dir).get("bandwidth_mbps")
+    if bandwidth:
+        report.seconds = report.bytes * 8 / (bandwidth * 1_000_000)
+    if dry_run:
+        return report
+    if cap_seconds is not None and report.seconds is not None and report.seconds > cap_seconds:
+        raise NotPublishable(
+            f"{name} weighs {report.bytes:,} bytes and would take about {report.seconds:,.0f} s "
+            f"at {bandwidth:,.0f} Mbps, over the cap of {cap_seconds:,.0f} s; `--yes` publishes "
+            "anyway"
+        )
+
+    def translate(location: str) -> str:
+        return (
+            target_root + location[len(source_root) :]
+            if location.startswith(source_root)
+            else location
+        )
+
+    io = project.metadata_io.io
+    for path, size in files:
+        target = translate(f"file://{path}")
+        try:
+            if len(io.new_input(target)) == size:
+                report.skipped += 1
+                continue
+        except (FileNotFoundError, OSError):
+            pass
+        with path.open("rb") as src, io.new_output(target).create(overwrite=True) as out:
+            for chunk in iter(lambda: src.read(8 * 1024 * 1024), b""):
+                out.write(chunk)
+        report.copied += 1
+    report.metadata_files, report.data_files = _rewrite(project, name, old_location, translate)
     return report

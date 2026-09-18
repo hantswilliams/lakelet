@@ -65,6 +65,70 @@ export interface Lineage {
   compiled: boolean;
 }
 
+/** One node of the whole graph (`GET /lineage`, decisions L1): a table or view in the
+ *  catalog or a model not built yet; `model` says a dbt model builds it, and then `state`
+ *  is its state as the Models screen shows it. */
+export interface LineageNode {
+  name: string;
+  kind: 'table' | 'view' | 'model';
+  model: boolean;
+  state: ModelState | null;
+  state_reason: string | null;
+  /** The prefix an attached table was registered from. */
+  source: string | null;
+  freshness: string | null;
+}
+
+/** `lakelet changes` (decisions L2): one entry of the feed. `kind` says the source — a
+ *  table's `snapshot`, a model's or question's last `run`, a git `version` — and `target`
+ *  what `name` is, for the link; a version names everything it touched in `names`. */
+export interface Change {
+  when: string;
+  kind: 'snapshot' | 'run' | 'version';
+  name: string | null;
+  target: 'table' | 'model' | 'question' | 'project';
+  operation: string | null;
+  snapshot_id: number | null;
+  added_rows: number | null;
+  deleted_rows: number | null;
+  /** The models the snapshot made out of date (L3). */
+  affects: string[];
+  ok: boolean | null;
+  seconds: number | null;
+  verdict: string | null;
+  error: string | null;
+  /** The version's short id, author and message. */
+  id: string | null;
+  author: string | null;
+  message: string | null;
+  names: string[];
+}
+
+export interface ChangesQuery { since?: string; last?: number; name?: string }
+
+/** `lakelet lineage --all`: the whole project as the Lineage screen draws it. */
+export interface LineageGraph {
+  nodes: LineageNode[];
+  edges: { from: string; to: string; via: LineageEdge['via'] }[];
+  compiled: boolean;
+}
+
+/** `POST /tables/{name}/publish` (`lakelet tables publish`, decisions W2): a table moved into a bucket. */
+export interface PublishReport {
+  name: string;
+  source: string;
+  target: string;
+  files: number;
+  bytes: number;
+  copied: number;
+  skipped: number;
+  metadata_files: number;
+  data_files: number;
+  /** The bandwidth figure's estimate for the copy, when the cache has one. */
+  seconds: number | null;
+  dry_run: boolean;
+}
+
 /** `POST /relocate` (`lakelet relocate`, trust round T5). */
 export interface RelocateReport {
   old_root: string | null;
@@ -86,6 +150,8 @@ export interface Snapshot {
   total_rows: number | null;
   current: boolean;
   expirable: boolean;
+  /** The models this snapshot made out of date — their last run predates it — in dependency order (decisions L3). */
+  affects?: string[];
 }
 
 /** `lakelet tables describe`: the list's fields plus partitioning, the snapshots, and what `expire` would take. */
@@ -106,6 +172,8 @@ export interface TableDescription extends TableInfo {
   verified_at?: string | null;
   changed_files?: [string, string][];
   verify_error?: string | null;
+  /** A table published to a bucket (W2) whose files are still under the local warehouse, until `expire`. */
+  local_copy_files?: number;
 }
 
 export interface ExpireReport {
@@ -467,9 +535,29 @@ export class Api {
     return this.get<GitStatus>('/git');
   }
 
+  /** `lakelet lineage --all`: the whole graph (L1). */
+  lineageAll(): Promise<LineageGraph> {
+    return this.get<LineageGraph>('/lineage');
+  }
+
+  /** `lakelet changes [name] [--since] [--last]`: the feed (L2). */
+  changes(q: ChangesQuery = {}): Promise<Change[]> {
+    const params = new URLSearchParams();
+    if (q.since) params.set('since', q.since);
+    if (q.last) params.set('last', String(q.last));
+    if (q.name) params.set('name', q.name);
+    const qs = params.toString();
+    return this.get<Change[]>(`/changes${qs ? `?${qs}` : ''}`);
+  }
+
   /** `lakelet lineage <name> --depth N`: reads from and feeds, one level by default (G8). */
   lineage(name: string, depth = 1): Promise<Lineage> {
     return this.get<Lineage>(`/lineage/${encodeURIComponent(name)}?depth=${depth}`);
+  }
+
+  /** `lakelet tables publish <name> <prefix> [--dry-run] [--yes]` (W2). 409 `not_publishable` with the reason. */
+  publish(name: string, prefix: string, dryRun = false, yes = false): Promise<PublishReport> {
+    return this.post<PublishReport>(`/tables/${encodeURIComponent(name)}/publish`, { prefix, dry_run: dryRun, yes });
   }
 
   /** `lakelet relocate`: after the folder moved, the tables' locations rewritten under it. */

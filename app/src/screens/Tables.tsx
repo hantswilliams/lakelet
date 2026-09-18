@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { Api, ApiError, humanBytes, type Health, type ImportMode, type Preview, type TableDescription, type TableInfo } from '../lib/api';
-import { attachCommand, expireCommand, importCommand, defaultName, isRemote, refreshCommand, relocateCommand } from '../lib/command';
+import { attachCommand, expireCommand, importCommand, defaultName, isRemote, publishCommand, refreshCommand, relocateCommand, runCommand } from '../lib/command';
 import { inTauri, onDrop, pickFiles, type Session } from '../lib/session';
 import type { Mode } from '../lib/vocabulary';
 import { Command } from '../components/Command';
@@ -55,9 +55,11 @@ export interface TablesProps {
   onOpened?: () => void;
   /** A lineage link named a model that is not in the catalog yet: the Models screen opens it. */
   onOpenModel?: (name: string) => void;
+  /** A detail's Recent strip (L2): the Changes screen, filtered to that name. */
+  onOpenChanges?: (name: string) => void;
 }
 
-export function Tables({ session, tables, aws, movedFrom, onRelocated, mode = 'technical', onChanged, openName, onOpened, onOpenModel }: TablesProps) {
+export function Tables({ session, tables, aws, movedFrom, onRelocated, mode = 'technical', onChanged, openName, onOpened, onOpenModel, onOpenChanges }: TablesProps) {
   const api = new Api(session);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState<string>();
@@ -154,6 +156,43 @@ export function Tables({ session, tables, aws, movedFrom, onRelocated, mode = 't
     } finally {
       setBusy(undefined);
     }
+  }
+
+  /** `lakelet run --stale` from a table's detail (L3): its commits made models out of date. */
+  async function runStale() {
+    if (!detail) return;
+    const name = detail.table.name;
+    setDropError(undefined);
+    setBusy('building what changed…');
+    try {
+      const r = await api.run([], false, true);
+      const built = r.selected ?? r.results.map((x) => x.name);
+      setDone({
+        line: runCommand([], { stale: true }),
+        text: built.length === 0 ? `Every ${mode === 'simple' ? 'question' : 'model'} is up to date; nothing ran.` : r.ok ? `Built ${built.join(', ')} in ${r.seconds.toFixed(1)} s.` : `${r.results.filter((x) => x.status !== 'success').length} of ${r.results.length} failed.`,
+      });
+      await onChanged();
+      setDetail({ table: await api.describe(name) });
+    } catch (e: unknown) {
+      setDetail((d) => (d ? { ...d, error: message(e) } : d));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  /** `lakelet tables publish` (W2): the detail's box; a dry run only reports, a real one
+   *  refreshes the list and the detail and says what moved. */
+  async function publish(name: string, prefix: string, dryRun: boolean, yes: boolean) {
+    const r = await api.publish(name, prefix, dryRun, yes);
+    if (!dryRun) {
+      setDone({
+        line: publishCommand(name, prefix, { yes }),
+        text: `Published ${r.name} to ${r.target}: ${r.copied} ${r.copied === 1 ? 'file' : 'files'} copied${r.skipped ? `, ${r.skipped} already there` : ''}, ${humanBytes(r.bytes)}; the local files are orphans for expire.`,
+      });
+      await onChanged();
+      setDetail({ table: await api.describe(name) });
+    }
+    return r;
   }
 
   /** `lakelet relocate` (T5): the folder moved; the tables' locations are rewritten under it. */
@@ -317,6 +356,9 @@ export function Tables({ session, tables, aws, movedFrom, onRelocated, mode = 't
           onClose={() => setDetail(undefined)}
           session={session}
           onOpen={follow}
+          onRunStale={() => void runStale()}
+          onPublish={(prefix, dryRun, yes) => publish(detail.table.name, prefix, dryRun, yes)}
+          onChanges={onOpenChanges}
         />
       ) : pending ? (
         <PreviewPanel

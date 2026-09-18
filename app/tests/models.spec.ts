@@ -8,8 +8,9 @@
 // catalog with its own detail shape, and the Gauge screen has the two runs; Simple mode
 // says question and check and the switch is remembered.
 
+import { spawnSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
-import { pageUrl, readStates } from './sidecar';
+import { pageUrl, readStates, sidecarExecutable } from './sidecar';
 
 const sidecar = () => readStates()[6];
 
@@ -105,10 +106,57 @@ test('the plan, a model, Run all, the view detail, the runs, and Simple mode', a
   await expect(view.getByTestId('sample')).toContainText('c1');
   await expect(view.getByTestId('sample')).not.toContainText('-1');
 
-  // the Gauge screen has the two runs, with the estimate and the actual
+  // L1: the Lineage screen draws the project — three nodes in three layers, two edges — and
+  // a node is a link: a model to the Models screen with it selected, a table to its detail
+  await page.getByTestId('screen-lineage').click();
+  const lineage = page.getByTestId('lineage-screen');
+  await expect(lineage.getByTestId('graph')).toBeVisible({ timeout: 60_000 });
+  await expect(lineage).toContainText('3 nodes, 2 edges');
+  await expect(lineage.getByTestId('edge-orders-stg')).toHaveClass('edge source');
+  await expect(lineage.getByTestId('edge-stg-by_customer')).toHaveClass('edge ref');
+  await expect(lineage.getByTestId('node-stg')).toHaveAttribute('data-state', 'fresh');
+  await expect(lineage.getByTestId('node-by_customer')).toHaveAttribute('data-state', 'fresh');
+  await expect(lineage.getByTestId('command')).toContainText('lakelet lineage --all');
+  await lineage.getByTestId('node-by_customer').click();
+  await expect(screen.getByTestId('dag')).toBeVisible({ timeout: 90_000 });
+  await expect(rows.nth(1)).toHaveClass('on');
+  await page.getByTestId('screen-lineage').click();
+  await expect(lineage.getByTestId('graph')).toBeVisible({ timeout: 60_000 });
+  await lineage.getByTestId('node-orders').click();
+  await expect(page.getByTestId('detail')).toContainText('orders · 4 rows');
+  await page.getByTestId('detail').getByRole('button', { name: 'Close' }).click();
+
+  // L3: a commit to orders names the models it made out of date, and one button builds them
+  const written = spawnSync(sidecarExecutable(), ['-C', s.project, 'sql', "insert into orders values (99, 'c9', 9.0)"], { encoding: 'utf8' });
+  expect(written.status, written.stdout + written.stderr).toBe(0);
+  await page.reload(); // the write came from another process; the panel reads the list on open
+  await expect(page.getByRole('status')).toHaveText('core ready');
+  await expect(page.getByTestId('table-orders')).toContainText('5');
+  await page.getByTestId('table-orders').click();
+  const ordersDetail = page.getByTestId('detail');
+  await expect(ordersDetail).toContainText('orders · 5 rows');
+  const newest = ordersDetail.getByTestId('snapshots').locator('tbody tr').first();
+  await expect(newest.getByTestId('affects')).toHaveText('made out of date: stg, by_customer');
+  await expect(ordersDetail.getByTestId('affected')).toContainText('2 models are out of date because of these commits.');
+  await expect(ordersDetail.getByTestId('affected').getByTestId('command')).toContainText('lakelet run --stale');
+  await page.getByTestId('screen-lineage').click();
+  await expect(lineage.getByTestId('graph')).toBeVisible({ timeout: 60_000 });
+  await expect(lineage.getByTestId('node-stg')).toHaveAttribute('data-state', 'upstream');
+  await expect(lineage.getByTestId('node-by_customer')).toHaveAttribute('data-state', 'upstream');
+  await expect(lineage).toContainText('2 models out of date');
+  await page.getByTestId('screen-tables').click();
+  await page.getByTestId('table-orders').click();
+  await expect(ordersDetail).toContainText('orders · 5 rows');
+  await ordersDetail.getByTestId('run-stale').click();
+  await expect(page.getByTestId('imported')).toContainText('Built stg, by_customer', { timeout: 90_000 });
+  await expect(ordersDetail.getByTestId('affected')).toHaveCount(0);
+  await expect(ordersDetail.getByTestId('affects')).toHaveCount(0);
+  await ordersDetail.getByRole('button', { name: 'Close' }).click();
+
+  // the Gauge screen has every run: the two builds, the insert, and the two the stale run built
   await page.getByTestId('screen-gauge').click();
-  await expect(page.getByTestId('tile-runs')).toHaveText('2');
-  await expect(page.getByTestId('runs').locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByTestId('tile-runs')).toHaveText('5');
+  await expect(page.getByTestId('runs').locator('tbody tr')).toHaveCount(5);
   await expect(page.getByTestId('runs')).toContainText('Green');
 
   // Simple mode: questions, checks, the wait as a sentence, Refresh all; remembered across a reload

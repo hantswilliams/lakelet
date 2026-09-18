@@ -355,40 +355,16 @@ def plan(project: Project, select: list[str] | None = None) -> list[PlannedModel
 
 
 def _states(project: Project, ordered: list[PlannedModel]) -> None:
-    """Each model's state (V3), in dependency order so a model after another sees its
-    state. What a model reads comes from lineage's graph (the manifest is the one just
-    compiled, so nothing compiles again); when each input last changed is the table's
-    current snapshot or the view's current version."""
+    """Each model's state (V3) from lineage's graph (the manifest is the one just
+    compiled, so nothing compiles again; `Graph.states` has the rules), then what
+    changed behind it."""
     from lakelet.lineage import Graph
 
     graph = Graph(project, compile_if_stale=False)
-    states: dict[str, PlannedModel] = {}
+    states = graph.states()
     for m in ordered:
-        m.state, m.state_reason, m.state_since = _state(m, graph, states)
+        m.state, m.state_reason, m.state_since = states.get(m.name, ("never", "never built", None))
         m.state_diff, m.state_changes = _what_changed(project, m, graph)
-        states[m.name] = m
-
-
-def _state(
-    m: PlannedModel, graph: Any, states: dict[str, PlannedModel]
-) -> tuple[str, str | None, str | None]:
-    r = m.last_run
-    if r is None:
-        return "never", "never built", None
-    if not r.ok:
-        return "never", "the last run failed", r.ts or None
-    if r.sql_hash and sql_hash(m.compiled_sql) != r.sql_hash:
-        return "edited", "the SQL changed since the last run", None
-    ran = datetime.fromisoformat(r.ts) if r.ts else None
-    node = graph.nodes.get(m.name)
-    for edge in node.upstream if node is not None else []:
-        before = states.get(edge.name)
-        if before is not None and before.state != "fresh":
-            return "upstream", f"{edge.name} is out of date", before.state_since
-        up = graph.nodes.get(edge.name)
-        if up is not None and up.freshness is not None and ran is not None and up.freshness > ran:
-            return "upstream", f"{edge.name} changed", up.freshness.isoformat()
-    return "fresh", None, None
 
 
 def model_tests(manifest: dict[str, Any], model_uid: str) -> list[ModelTest]:

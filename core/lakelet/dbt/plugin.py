@@ -16,6 +16,7 @@ from dbt.adapters.duckdb.plugins import BasePlugin
 from duckdb import DuckDBPyConnection
 
 SEARCH_PATH = "lakelet.main,memory.main"
+DEFAULT_CHAIN_SECRET = "CREATE OR REPLACE SECRET lakelet_s3 (TYPE s3, PROVIDER credential_chain)"
 
 
 def _quote(name: str) -> str:
@@ -45,6 +46,18 @@ class Plugin(BasePlugin):
 
     def configure_connection(self, conn: DuckDBPyConnection) -> None:
         conn.execute("LOAD iceberg; LOAD httpfs")
+        # A table in a bucket (decisions W1: an `s3://` warehouse, or a table attached
+        # from one) needs the same credentials the engine has: explicit keys from the
+        # environment, else the AWS default chain, which is tried and left alone when it
+        # resolves nothing — a local project never needs it.
+        from lakelet.remote import S3Settings
+
+        secret = S3Settings.from_env().duckdb_secret()
+        try:
+            conn.execute(secret or DEFAULT_CHAIN_SECRET)
+        except Exception:  # noqa: BLE001 - no credentials anywhere: local tables still build
+            if secret:
+                raise
         conn.execute(
             f"ATTACH 'lakelet' AS lakelet (TYPE ICEBERG, ENDPOINT '{self.catalog_url}', "
             "AUTHORIZATION_TYPE 'none', DEFAULT_SCHEMA 'main')"

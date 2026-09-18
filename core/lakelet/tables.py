@@ -145,6 +145,9 @@ class TableDescription(TableInfo):
     verified_at: str | None = None
     changed_files: list[tuple[str, str]] = field(default_factory=list)
     verify_error: str | None = None
+    #: A table published to a bucket (decisions W2) whose files are still under the local
+    #: warehouse too: how many, until `expire` sweeps them after its grace.
+    local_copy_files: int = 0
 
 
 def _rows_after(total: int | None, position_deletes: int | None) -> int | None:
@@ -427,6 +430,7 @@ class Tables:
             value = snap.summary.additional_properties.get(key) if snap.summary else None
             return int(value) if value is not None else None
 
+        affects = self._affects(name)
         snapshot_list = [
             {
                 "id": snap.snapshot_id,
@@ -441,6 +445,7 @@ class Tables:
                 ),
                 "current": snapshot is not None and snap.snapshot_id == snapshot.snapshot_id,
                 "expirable": snap.snapshot_id in expirable_ids,
+                "affects": affects(datetime.fromtimestamp(snap.timestamp_ms / 1000, tz=UTC)),
             }
             for snap in sorted(md.snapshots, key=lambda s: s.timestamp_ms, reverse=True)
         ]
@@ -462,6 +467,7 @@ class Tables:
             verified_at=verified_at,
             changed_files=changed,
             verify_error=verify_error,
+            local_copy_files=len(self._local_copy(name, md.location, 0)),
             expirable_snapshots=len(expirable),
             reclaimable_bytes=reclaimable,
             keep_days=self.project.config.catalog.keep_snapshots_days,
@@ -574,6 +580,16 @@ class Tables:
 
     # -- expiry (decision 4, September 11, 2026) ---------------------------------------
 
+    def _affects(self, name: str):
+        """For the snapshot list (decisions L3): a function of a snapshot's time giving the
+        models downstream of this table that the commit made out of date — their last
+        successful run is older than it. One graph per describe, from the manifest as it
+        is (nothing compiles here; the lineage lines compile when they open)."""
+        from lakelet.lineage import Graph
+
+        runs = Graph(self.project, compile_if_stale=False).downstream_runs(name)
+        return lambda when: [n for _, n, ts in runs if ts < when]
+
     @staticmethod
     def _expirable(md, keep_days: int) -> list:
         """Snapshots older than the retention, other than the current one and any a branch
@@ -628,7 +644,11 @@ class Tables:
         if SOURCE_PROPERTY in md.properties:
             source = md.properties[SOURCE_PROPERTY]
             raise NotExpirable(f"{name} is registered from {source}; its files are not Lakelet's")
-        if not md.location.startswith(self.project.warehouse_url):
+        # a table Lakelet wrote is under the warehouse, or in the bucket `tables publish`
+        # moved it to (W2); an attached table was refused above
+        if not (
+            md.location.startswith(self.project.warehouse_url) or md.location.startswith("s3://")
+        ):
             raise NotExpirable(f"{name} lives outside the warehouse ({md.location})")
         if self._exists(replace_name(name)):
             raise NotExpirable(
@@ -652,6 +672,7 @@ class Tables:
         kept = self._referenced_files(md_after)
         doomed: dict[str, int] = {p: s for p, s in was.items() if p not in kept}
         doomed.update(self._orphans(md_after.location, kept, grace))
+        doomed.update(self._local_copy(name, md_after.location, grace))
         io = self.project.metadata_io.io
         removed = 0
         reclaimed = 0
@@ -666,6 +687,22 @@ class Tables:
         return ExpireReport(
             name, keep_days, before, before - len(md_after.snapshots), removed, reclaimed
         )
+
+    def _local_copy(self, name: str, location: str, grace_seconds: int) -> dict[str, int]:
+        """The files a table published to a bucket (W2) left under the local warehouse,
+        older than the grace: nothing in the bucket references them, so `expire` sweeps
+        them all; `describe` counts them."""
+        if location.startswith("file://") or "://" in self.project.config.project.warehouse:
+            return {}
+        folder = Path(self.project.warehouse_url.removeprefix("file://")) / NAMESPACE / name
+        if not folder.is_dir():
+            return {}
+        cutoff = time.time() - grace_seconds
+        return {
+            f"file://{f}": f.stat().st_size
+            for f in folder.rglob("*")
+            if f.is_file() and f.stat().st_mtime <= cutoff
+        }
 
     @staticmethod
     def _orphans(location: str, kept: dict[str, int], grace_seconds: int) -> dict[str, int]:

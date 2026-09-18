@@ -35,6 +35,7 @@ Commands:
   versions  The versions of one question or model: every commit that changed its...
   restore   Put an earlier version of a question or model back.
   lineage   What a table, view or model reads and what reads it, and how each edge...
+  changes   Everything that happened to the project, newest first: every table's...
   relocate  After the project folder was moved or copied: rewrite every local...
   serve     Run the core as the app's sidecar: catalog and API on one loopback...
   tables    List, describe and sample tables.
@@ -57,9 +58,10 @@ Arguments:
   directory  The folder to turn into a lakehouse.  [default: .]
 
 Options:
-  --name <str>      Project name; the folder's name by default.
-  --probe-mb <int>  Size of the disk-throughput probe; 0 skips it.  [default: 512]
-  --help            Show this message and exit.
+  --name <str>       Project name; the folder's name by default.
+  --probe-mb <int>   Size of the disk-throughput probe; 0 skips it.  [default: 512]
+  --warehouse <str>  An s3://bucket/prefix for the tables' files; warehouse/ by default.
+  --help             Show this message and exit.
 ```
 
 ### `lakelet import`
@@ -170,19 +172,40 @@ Options:
 ### `lakelet lineage`
 
 ```text
-Usage: lakelet lineage [OPTIONS] {name}
+Usage: lakelet lineage [OPTIONS] [name]
 
   What a table, view or model reads and what reads it, and how each edge is known: a dbt
   ref() or source(), a table named in the SQL, or a catalog view's SQL. From the last
-  compile's manifest and the catalog; compiles first when the models are newer.
+  compile's manifest and the catalog; compiles first when the models are newer. --all
+  prints the whole graph, as the app's Lineage screen draws it.
 
 Arguments:
-  name  A table, a view or a model.  [required]
+  name  A table, a view or a model; none with --all.
 
 Options:
   --depth <int range>  How many levels each way; 1 is direct.  [default: 1; x>=1]
+  --all                The whole project: every node and its state, every edge.
   --json               The same as the API returns.
   --help               Show this message and exit.
+```
+
+### `lakelet changes`
+
+```text
+Usage: lakelet changes [OPTIONS] [name]
+
+  Everything that happened to the project, newest first: every table's snapshots (and
+  the models each made out of date), each model's and question's last run, and the
+  versions git holds for the models. Read from what is there; nothing is recorded.
+
+Arguments:
+  name  Only what happened to this table, model or question.
+
+Options:
+  --since <str>       2d, 12h, 30m, 1w, or an ISO date.
+  --last <int range>  At most this many entries.  [default: 50; x>=1]
+  --json              The same as the API returns.
+  --help              Show this message and exit.
 ```
 
 ### `lakelet relocate`
@@ -229,6 +252,7 @@ Commands:
   list      Tables in the catalog with rows, size, when they were last written, and...
   rename    Rename a table: one catalog commit, the data does not move.
   describe  Columns, types, partitioning, freshness and the last commit of a table.
+  publish   Move a table built here into a bucket, every snapshot kept: its files...
   expire    Drop snapshots older than the retention and delete the files only they...
   sample    The first rows of a table.
   attach    Register remote data as a read-only Iceberg table without copying it.
@@ -275,6 +299,26 @@ Arguments:
 
 Options:
   --help  Show this message and exit.
+```
+
+#### `lakelet tables publish`
+
+```text
+Usage: lakelet tables publish [OPTIONS] {name} {prefix}
+
+  Move a table built here into a bucket, every snapshot kept: its files are copied under
+  the prefix, its metadata written again there, and the catalog moved to it in one
+  commit. The local files become orphans `tables expire` sweeps. An interrupted publish
+  resumes: files already in the bucket at the same size are not copied twice.
+
+Arguments:
+  name    A table Lakelet wrote, under the local warehouse.  [required]
+  prefix  s3://bucket/prefix; the table goes under main/.  [required]
+
+Options:
+  --dry-run  Count and weigh the files; move nothing.
+  --yes      Publish even if the copy would take longer than the cap.
+  --help     Show this message and exit.
 ```
 
 #### `lakelet tables expire`

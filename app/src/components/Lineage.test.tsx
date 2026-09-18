@@ -31,6 +31,7 @@ const orders: Lineage = {
 function stub(answer: (name: string) => Response) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const m = /\/lineage\/([^/?]+)/.exec(url);
+    if (/\/changes\?/.test(url)) return new Response('[]', { status: 200 }); // the Recent strip (L2) beside the rows
     return m ? answer(decodeURIComponent(m[1])) : new Response('{}', { status: 404 });
   }));
 }
@@ -79,7 +80,7 @@ describe('the lineage rows', () => {
     render(<TableDetail table={table} onSample={noop} onExpire={noop} onRefresh={noop} onClose={noop} session={session} onOpen={onOpen} />);
     await waitFor(() => expect(screen.getByTestId('feeds').textContent).toContain('stg_orders'));
     const terms = Array.from(screen.getByTestId('detail').querySelectorAll('dl.facts dt')).map((d) => d.textContent);
-    expect(terms).toEqual(['Where', 'Partitioning', 'Last written', 'Format', 'Reads from', 'Feeds']);
+    expect(terms).toEqual(['Where', 'Partitioning', 'Last written', 'Format', 'Reads from', 'Feeds', 'Recent']);
     fireEvent.click(screen.getByTestId('lineage-stg_orders'));
     expect(onOpen).toHaveBeenCalledWith('stg_orders', 'view');
     // without a session (the preview panel's tests, an older caller) there are no rows and no fetch

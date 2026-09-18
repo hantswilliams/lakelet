@@ -232,3 +232,48 @@ pre.diff .hunk,pre.diff .meta{color:var(--muted)}
 .models-screen .review h4{font-size:13.5px;margin:0 0 4px;font-weight:600}
 .models-screen .review article{padding-top:8px;border-top:1px solid var(--line)}
 .models-screen .what-changed p button.link{margin-left:8px;font-size:12px}
+/* a table's commits made models out of date (L3): the line under the snapshots */
+.preview .affected{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0;font-size:13.5px}
+.preview .snapshots td [data-testid=affects]{font-size:12px;white-space:normal}
+/* the Lineage screen (L1): the graph the app draws */
+.lineage-screen{display:grid;gap:12px}
+.lineage-screen header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.lineage-screen h2{font-size:18px}
+.lineage-screen .graph-wrap{overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px}
+.lineage-screen svg.graph{display:block;font-family:var(--sans)}
+.lineage-screen .edge{fill:none;stroke:var(--line);stroke-width:1.5}
+.lineage-screen .edge.ref{stroke:var(--lake)} .lineage-screen .edge.source,.lineage-screen .edge.sql{stroke:var(--muted)} .lineage-screen .edge.view{stroke:var(--muted);stroke-dasharray:4 3}
+.lineage-screen .node{cursor:pointer}
+.lineage-screen .node rect{fill:var(--bg);stroke:var(--line);stroke-width:1.2}
+.lineage-screen .node.model rect{stroke:var(--lake)}
+.lineage-screen .node.fresh rect{stroke:var(--local)}
+.lineage-screen .node.edited rect,.lineage-screen .node.upstream rect{fill:color-mix(in srgb,var(--slow) 16%,var(--bg));stroke:var(--slow)}
+.lineage-screen .node.never rect{stroke:var(--muted);stroke-dasharray:3 3}
+.lineage-screen .node:hover rect,.lineage-screen .node:focus rect{stroke-width:2.2;outline:none}
+.lineage-screen .node text.name{font:600 12.5px var(--mono);fill:var(--ink)}
+.lineage-screen .node text.caption{font:11px var(--sans);fill:var(--muted)}
+.lineage-screen .node.edited text.caption,.lineage-screen .node.upstream text.caption{fill:var(--slow)}
+.lineage-screen .legend{font-size:12.5px}
+/* the Changes screen (L2): the feed, and the Recent strip on a detail */
+.changes-screen{display:grid;gap:12px}
+.changes-screen header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.changes-screen h2{font-size:18px}
+.changes-screen .filter{display:flex;align-items:center;gap:8px;font-size:13px}
+.changes-screen .filter input{font:inherit;font-family:var(--mono);padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);min-width:220px}
+.changes-screen .feed{list-style:none;margin:0;padding:0;display:grid;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.changes-screen .entry{display:grid;grid-template-columns:76px 64px 1fr;gap:10px;align-items:baseline;padding:8px 14px;border-top:1px solid var(--line);font-size:13.5px}
+.changes-screen .entry:first-child{border-top:0}
+.changes-screen .entry .when{font-size:12px;white-space:nowrap}
+.changes-screen .entry .kind{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.changes-screen .entry .kind.snapshot{color:var(--local)} .changes-screen .entry .kind.run{color:var(--lake)} .changes-screen .entry .kind.version{color:var(--muted)}
+.changes-screen .entry.failed .line{color:var(--slow)}
+.changes-screen .entry .line button.link{margin-left:8px;font-size:12.5px}
+.changes-screen .legend{font-size:12.5px}
+ul.recent{list-style:none;margin:0;padding:0;display:grid;gap:3px;font-size:13px}
+ul.recent li .muted{font-size:12px;margin-right:4px}
+dd button.link{font-size:12.5px}
+/* the publish box (W2) on a local table's detail */
+.preview .publish{display:grid;gap:8px;width:100%;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;background:var(--bg)}
+.preview .publish p{margin:0;font-size:13px}
+.preview .publish .path{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.preview .publish .path input{flex:1;min-width:240px;font:13px var(--mono);padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}

@@ -15,7 +15,7 @@ What it is not, yet: burst to your own cloud when the laptop is not enough, ques
 ## What is built and what is planned
 
 <!-- status:start -->
-*Generated from `web/src/data/status.ts` (as of 2026-09-17); `python3 web/scripts/gen-readme-status.py` rewrites it, CI checks it.*
+*Generated from `web/src/data/status.ts` (as of 2026-09-18); `python3 web/scripts/gen-readme-status.py` rewrites it, CI checks it.*
 
 **Built, from source, today**
 
@@ -30,7 +30,9 @@ What it is not, yet: burst to your own cloud when the laptop is not enough, ques
 - **The desktop app**: from source, no installer: projects, drop-to-import with a preview, the SQL screen with the verdict before the rows, the streaming grid, the auto-chart, the table detail, the Gauge screen with estimate-versus-actual, settings — [docs](https://hantswilliams.github.io/lakelet/docs/app)
 - **Proof it stays put**: lakelet audit network measures zero outbound attempts on the quickstart; PRIVACY.md says exactly what is stored where — [docs](https://hantswilliams.github.io/lakelet/docs/install)
 - **Every save is a version**: the project is a git repository, a save or a run is a commit, lakelet versions and restore, the Versions section on the model detail — [docs](https://hantswilliams.github.io/lakelet/docs/questions)
+- **A warehouse in a bucket**: lakelet init --warehouse s3://bucket/prefix puts every table\'s data and metadata in the bucket; import, run, expire and every reader work against it, tested on Moto and a real bucket; lakelet tables publish moves one local table into a bucket later, every snapshot kept — [docs](https://hantswilliams.github.io/lakelet/docs/remote)
 - **Lineage, and whether a model is out of date**: lakelet lineage says what a table, view or model reads and what reads it, and how each edge is known; every model carries a state — fresh, edited, upstream, never — with what changed, and lakelet run --stale builds only what is not — [docs](https://hantswilliams.github.io/lakelet/docs/tables#lineage)
+- **What happened: the changes feed**: lakelet changes merges every table\'s snapshots, each model\'s and question\'s last run and the versions git holds into one list, newest first; the app\'s Changes screen and a Recent strip on every detail read the same route — [docs](https://hantswilliams.github.io/lakelet/docs/tables#what-happened-the-changes-feed)
 - **Backups, crashes, upgrades and moves**: a copy of the folder is the backup, a failed replace keeps the old table, a moved folder is relocated, a newer schema is refused — every sentence tested — [docs](https://hantswilliams.github.io/lakelet/docs/recovery)
 
 **Planned, not built** (the site marks these the same way)

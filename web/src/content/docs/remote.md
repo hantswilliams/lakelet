@@ -5,7 +5,19 @@ section: Develop
 order: 3
 ---
 
-Lakelet reads Parquet in S3 in place (`tables attach`, see [Tables](/docs/tables)) and, by default, writes nothing to the bucket: the Iceberg metadata for an attached table lives under the project's own `warehouse/` on your machine, and the data files are read where they are. A read-only user is enough for that. Writing into a bucket happens only when you ask for it (`--metadata-in-bucket`), and in the test suite.
+Lakelet reads Parquet in S3 in place (`tables attach`, see [Tables](/docs/tables)) and, by default, writes nothing to the bucket: the Iceberg metadata for an attached table lives under the project's own `warehouse/` on your machine, and the data files are read where they are. A read-only user is enough for that. Writing into a bucket happens only when you ask for it: a project whose warehouse *is* a bucket (below), `--metadata-in-bucket` on an attach, and the test suite.
+
+## A warehouse in a bucket
+
+```bash
+lakelet init ~/acme --warehouse s3://your-bucket/acme
+```
+
+Every table this project writes — an import, a `CREATE TABLE`, a `table` model built by `lakelet run` — puts its data files and its Iceberg metadata under `s3://your-bucket/acme/main/<table>/`; nothing goes under the project folder but the catalog (`.lakelet/catalog.db`), history and the dbt files. The warehouse is fixed at `init`: tables carry absolute locations, so it is not a setting (`config set project.warehouse` is refused) and there is no `warehouse/` folder to move, so `lakelet relocate` has nothing to do for such a project. Everything else works as on a local warehouse, and the suite runs the whole path against the same store the attach tests use: import, writes through SQL, `lakelet run` with a table and a view model, `describe`, `expire` (the expired snapshots' files are deleted in the bucket; the orphan sweep of unreferenced files is local-only, and a bucket keeps what no snapshot references until you remove it), versions, and pyiceberg reading every table from another process. The gauge treats the tables as remote and estimates by the bandwidth figure, as it does an attached table, so a scan that would be Green on a local disk may be Yellow here; that is the honest answer. The app's tables panel says **bucket** for such a table and the detail names the location; the app opens such a project like any other, but making one is `lakelet init --warehouse` for now — the welcome screen has no field for it yet.
+
+The credentials are the ones below; `lakelet run` hands the same ones to dbt's connections, so a model over a bucket table builds without any profile of its own. A read-only user is not enough for a bucket warehouse: the policy needs `PutObject` and `DeleteObject` under the prefix as well as `GetObject` and `ListBucket`.
+
+A project on a local warehouse can still put one table in a bucket: `lakelet tables publish <name> s3://bucket/prefix` copies its files there, rewrites its metadata and moves the catalog to it in one commit, every snapshot kept, and the table is read from the bucket from then on; see [Tables](/docs/tables#publishing-a-table-into-a-bucket). It needs the same write policy under that prefix.
 
 ## Credentials
 

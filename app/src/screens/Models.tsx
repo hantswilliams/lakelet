@@ -19,6 +19,7 @@ import { changeSentence, humanSeconds, outOfDateName, planSummary, staleCount, s
 import { collapseDiff, diffSummary, parseDiff } from '../lib/versions';
 import { Command } from '../components/Command';
 import { LineageRows } from '../components/Lineage';
+import { Recent } from '../components/Recent';
 import { Versions } from '../components/Versions';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -37,6 +38,8 @@ export interface ModelsProps {
   onSelected?: () => void;
   /** A lineage link named a table or view: the Tables screen opens its detail. */
   onOpenTable?: (name: string) => void;
+  /** The detail's Recent strip (L2): the Changes screen, filtered to the model. */
+  onOpenChanges?: (name: string) => void;
 }
 
 function Verdict({ m }: { m: PlannedModel }) {
@@ -121,7 +124,7 @@ function Review({ models, mode, onSelect }: { models: PlannedModel[]; mode: Mode
   );
 }
 
-export function Models({ session, mode, tables, onChanged, select, onSelected, onOpenTable }: ModelsProps) {
+export function Models({ session, mode, tables, onChanged, select, onSelected, onOpenTable, onOpenChanges }: ModelsProps) {
   const api = new Api(session);
   const w = words(mode);
   const [models, setModels] = useState<PlannedModel[]>();
@@ -324,6 +327,7 @@ export function Models({ session, mode, tables, onChanged, select, onSelected, o
                 <dt>Verdict</dt>
                 <dd><Verdict m={current} /> <span data-testid="sentence">{verdictSentence(current, mode)}</span>{current.reason && !current.error ? <span className="muted"> · {current.reason}</span> : null}</dd>
                 <LineageRows session={session} name={current.name} mode={mode} onOpen={follow} refreshKey={current.last_run?.ts ?? null} />
+                <Recent session={session} name={current.name} mode={mode} onMore={onOpenChanges} refreshKey={`${current.last_run?.ts ?? ''}|${current.state_since ?? ''}`} />
                 <dt>Tests</dt>
                 <dd data-testid="tests">
                   {current.tests.length === 0 ? <span className="muted">none in schema.yml</span> : (

@@ -19,7 +19,7 @@ from typer.testing import CliRunner
 from lakelet import Project
 from lakelet.cli import app
 from lakelet.dbt import runner
-from lakelet.lineage import VIAS, NoSuchNode, lineage
+from lakelet.lineage import VIAS, NoSuchNode, lineage, whole
 
 pytest.importorskip("dbt.cli.main")
 
@@ -175,3 +175,63 @@ def test_the_cli_and_the_route(project) -> None:
     assert {e["name"]: e["depth"] for e in deep["downstream"]}["top"] == 3
     assert client.get("/api/lineage/nowhere").status_code == 404
     client.close()
+
+
+def test_the_whole_graph_with_states_the_route_and_the_cli(project) -> None:
+    """Decisions L1: the Lineage screen's graph — every node once with its kind and, for a
+    model, its state; every edge with how it is known; and the route and `--all`."""
+    p = project
+    graph = whole(p)
+    names = {n["name"]: n for n in graph["nodes"]}
+    assert set(names) == {"src", "src_v", "stg_orders", "by_c", "top", "from_source", "total"}
+    assert names["src"] == {
+        "name": "src",
+        "kind": "table",
+        "model": False,
+        "state": None,
+        "state_reason": None,
+        "source": None,
+        "freshness": names["src"]["freshness"],
+    }
+    assert names["src_v"]["kind"] == "view" and names["src_v"]["state"] is None
+    assert all(names[m]["state"] == "never" for m in ("stg_orders", "by_c", "top", "total"))
+    edges = {(e["from"], e["to"]): e["via"] for e in graph["edges"]}
+    assert edges == {
+        ("src", "stg_orders"): "sql",
+        ("stg_orders", "by_c"): "ref",
+        ("by_c", "top"): "ref",
+        ("src", "from_source"): "source",
+        ("src", "total"): "sql",
+        ("src", "src_v"): "view",
+    }
+    assert graph["compiled"] is True
+
+    # after a run every model is fresh; after an edit the states follow the chain
+    runner.run(p)
+    (p.root / "models" / "by_c.sql").write_text(
+        "{{ config(materialized='table') }}\n"
+        "select c, count(*) as n from {{ ref('stg_orders') }} group by 1\n"
+    )
+    names = {n["name"]: n for n in whole(p)["nodes"]}
+    assert names["by_c"]["state"] == "edited" and names["top"]["state"] == "upstream"
+    assert names["top"]["state_reason"] == "by_c is out of date"
+    assert names["stg_orders"]["state"] == "fresh" and names["by_c"]["kind"] == "table"
+
+    import httpx
+
+    client = httpx.Client(
+        base_url=p.catalog_url, headers={"Authorization": f"Bearer {p.token}"}, timeout=60
+    )
+    body = client.get("/api/lineage").json()
+    assert {n["name"] for n in body["nodes"]} == set(names) and len(body["edges"]) == 6
+    client.close()
+    r = CliRunner().invoke(app, ["-C", str(p.root), "lineage", "--all", "--json"])
+    assert r.exit_code == 0, r.output
+    assert json.loads(r.output)["edges"] == body["edges"]
+    r = CliRunner().invoke(app, ["-C", str(p.root), "lineage", "--all"])
+    assert r.exit_code == 0, r.output
+    text = "".join(r.output.split())
+    assert text.startswith("7node(s),6edge(s)") and "by_ctableedited" in text
+    assert "src->stg_orders(sql)" in text
+    r = CliRunner().invoke(app, ["-C", str(p.root), "lineage"])
+    assert r.exit_code == 1 and "give a name, or --all" in r.output

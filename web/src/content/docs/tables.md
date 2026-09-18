@@ -84,7 +84,28 @@ by_customer  table, built by by_customer, 2026-09-16 11:16:34 UTC
 
 Every edge says how it is known: `ref` and `source` come from the dbt manifest of the last compile (compiled first when it is missing or older than the models, and the command says so); `sql` is a table a model names bare in its SQL, which every saved question does; `view` is a table a catalog view that did not come from dbt binds to. A name is a table or a view in the catalog, or a `model` not built yet; a table model and the table it built are one thing. The head line says who built it — a model, `imported`, or `attached from <prefix>` — and when, from history's record of the model's last run or the table's current snapshot. `--depth N` walks further, each name once at the level it was first reached. Nothing here parses SQL: the manifest and DuckDB's own parse of the statement already know. Column-level lineage is a later day.
 
-The app shows the same two lines, **Reads from** and **Feeds**, on every table, view and model detail, each name a link to that detail; see [the app](/docs/app).
+`lakelet lineage --all` prints the whole project — every node with its kind and, for a model, its state; every edge with how it is known — and `--all --json` is what the app's **Lineage** screen draws.
+
+The app shows the same two lines, **Reads from** and **Feeds**, on every table, view and model detail, each name a link to that detail, and the whole graph on its Lineage screen; see [the app](/docs/app).
+
+## What happened: the changes feed
+
+```bash
+lakelet changes                      # everything, newest first, the last 50
+lakelet changes orders               # only what happened to one table, model or question
+lakelet changes --since 2d --last 20
+lakelet changes --json               # the same as GET /api/changes
+```
+
+`changes` is one list from three sources the project already keeps, merged by time: every table's snapshots (the operation and rows, and — through [lineage](#lineage) — the models each commit made out of date), each model's and question's last run from history (how long it took, its verdict, or that it failed), and the versions git holds for the models (a save, an update, a restore, the version `lakelet run` records before it builds, each with its author). Nothing is recorded for the list; it reads what is there, so it costs nothing to keep and cannot drift from the sources. History keeps one run per model and per question — the latest — so a model built three times is one run entry, the last one, beside its three snapshots. `--since` takes `2d`, `12h`, `30m`, `1w` or an ISO date; a name is an exact table, view, model or question name, and a version counts for every file it touched.
+
+```
+2026-09-18 10:41:03 UTC  snapshot orders: 1,200 rows added; made out of date: stg, by_customer
+2026-09-18 10:40:12 UTC  version  update question: Revenue by customer · by Ada Lovelace (3f2a1c9)
+2026-09-18 10:39:58 UTC  run      by_customer built in 1.2 s, Green
+```
+
+The app's **Changes** screen is the same list with a name filter, each entry a link to its detail, and every table, view and model detail carries a **Recent** strip of its own last five entries; see [the app](/docs/app#the-changes-screen).
 
 ## Snapshots, history and expiry
 
@@ -99,7 +120,21 @@ lakelet tables expire --all
 
 `expire` drops every snapshot older than the retention other than the current one and any a branch or tag points at, committing that through the catalog (pyiceberg's `expire_snapshots`), then deletes the data and manifest files those snapshots referenced and no remaining snapshot does, plus any data or manifest file under the table's own folder that no snapshot references and that is over an hour old (the grace period leaves a write in flight alone). Old `metadata.json` files stay; they are small. It reports snapshots expired, files removed and bytes reclaimed. A table registered with `tables attach` is refused: its files are not Lakelet's to delete. The app's settings panel has the retention; `/api/tables/{name}/expire` is the same verb.
 
+Every snapshot in `describe`'s list also says what it did downstream: `affects` names the models whose last successful run predates the commit — in dependency order, through [lineage](#lineage) — so "this append to `orders` is why `stg`, `by_c` and `top` are out of date" is one line on the table rather than a search on the Models screen. The app's table detail shows it on each snapshot row, each name a link, with **Run what changed** (`lakelet run --stale`) beside the list when any are; after the run the list is empty again.
+
 `import` and `tables attach` also rewrite the tables block in the project's `AGENTS.md`, between `<!-- lakelet:tables:start -->` and `<!-- lakelet:tables:end -->`, so a coding agent opening the folder sees what is there.
+
+## Publishing a table into a bucket
+
+A table built here can be moved into a bucket later, with its whole history, without the project's warehouse being one:
+
+```bash
+lakelet tables publish orders s3://acme-lake/shared --dry-run   # "orders: 14 file(s), 3.1 GB to copy to s3://acme-lake/shared/main/orders, about 40 s at the measured bandwidth; nothing moved"
+lakelet tables publish orders s3://acme-lake/shared             # copy, rewrite, one commit
+lakelet tables publish orders s3://acme-lake/shared --yes       # even when the copy would take longer than the Yellow cap
+```
+
+`publish` copies every file under the table's folder — data, manifests, every `metadata.json` — to `<prefix>/main/<name>/` with the same relative names, writes the metadata tree again with every location in the bucket (the way `relocate` rewrites it after a move), and moves the catalog entry to the new metadata in one commit, as the last step, so a crash before it leaves the local table in place and untouched. Every snapshot survives: time travel works in the bucket as it did here. A file already in the bucket at the same size is not copied again, so an interrupted publish is run again and resumes. The local files stay where they are as orphans, named on `describe` (`local copy: 14 file(s) still under the warehouse: lakelet tables expire orders`) until `lakelet tables expire` sweeps them after the grace period. `--dry-run` counts and weighs the copy against the bandwidth figure; a copy the figure says would take longer than `gauge.yellow_max_seconds` is refused the way a Red query is, and `--yes` lifts that. A table registered with `tables attach` is refused (its files are not Lakelet's to move), as is one already in a bucket. The credentials are the ones [A real bucket](/docs/remote) describes; the app's table detail has the same three steps as **Publish to a bucket…** (Weigh it, Publish, Publish anyway), and `/api/tables/{name}/publish` is the route.
 
 ## Attaching Parquet that is already in a bucket
 

@@ -16,6 +16,10 @@ export interface TablesPanelProps {
 
 function Where({ t }: { t: TableInfo }) {
   if (t.kind === 'view') return <span title={t.view_sql ?? ''} data-testid={`where-${t.name}`}>view</span>;
+  if (!t.source && t.location.startsWith('s3://')) {
+    // a bucket warehouse (decisions W1): Lakelet's own table, its files in the bucket
+    return <span title={t.location} className="where" data-testid={`where-${t.name}`}>bucket <span className="mono muted">{t.location.replace(/^s3:\/\//, '').split('/')[0]}/…</span></span>;
+  }
   if (!t.source) return <span>local</span>;
   return (
     <span title={t.source} className="where" data-testid={`where-${t.name}`}>

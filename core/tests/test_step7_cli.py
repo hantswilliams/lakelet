@@ -192,14 +192,14 @@ def test_gauge_export_carries_no_names_and_reset_forgets(project_dir, tmp_path) 
     import json
 
     assert invoke(project_dir, "import", str(tmp_path / "orders.csv")).exit_code == 0
-    invoke(project_dir, "sql", "select customer, sum(amt) from orders where id > 990 group by 1")
+    invoke(project_dir, "sql", "select customer, sum(amt) from orders where id > 987654 group by 1")
     invoke(project_dir, "sql", "select * from nope")  # a failure is recorded, without its text
     exported = invoke(project_dir, "gauge", "export", "--out", "-")
     assert exported.exit_code == 0, exported.output
     lines = [json.loads(line) for line in exported.output.splitlines() if line.startswith("{")]
     assert len(lines) >= 2
     text = exported.output.lower()
-    for forbidden in ("orders", "customer", "amt", "select", "nope", "sql", "990", "reason"):
+    for forbidden in ("orders", "customer", "amt", "select", "nope", "sql", "987654", "reason"):
         assert forbidden not in text, forbidden
     record = next(r for r in lines if r["verdict"] == "green" and r["ran"])
     assert record["machine"]["ram_gb"] is not None and record["machine"]["threads"]
