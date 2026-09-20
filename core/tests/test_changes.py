@@ -102,6 +102,13 @@ def test_an_import_a_run_a_save_and_a_restore_in_order(project) -> None:
     assert _kinds(changes(p, since=cutoff)) == kinds[:2]
     assert len(changes(p, last=2)) == 2 and _kinds(changes(p, last=2)) == kinds[:2]
 
+    # a second run is a second entry: history keeps every run (schema 2); this run also
+    # builds the question saved above, so total has its first
+    runner.run(p)
+    assert sorted(c.name for c in changes(p) if c.kind == "run") == ["by_c", "by_c", "total"]
+    assert [c.name for c in changes(p, name="by_c") if c.kind == "run"] == ["by_c", "by_c"]
+    assert len([c for c in changes(p, name="total") if c.kind == "run"]) == 1
+
 
 def test_since_parsing() -> None:
     from datetime import UTC, datetime, timedelta
@@ -163,3 +170,71 @@ def test_a_project_without_git_or_models_still_answers(tmp_path) -> None:
         assert Path(root / ".git").exists() is False
     finally:
         p.close()
+
+
+def test_a_schema_one_history_migrates_and_keeps_its_last_runs(tmp_path) -> None:
+    """Schema 2 (2026-09-20): `model_runs` and `question_runs` keyed by the run. A file
+    from before it — one row per model and per question, the latest run — is rewritten in
+    place on open, its rows kept, and runs accumulate from then on."""
+    import sqlalchemy as sa
+
+    from lakelet import history as history_module
+    from lakelet.history import History
+
+    path = tmp_path / "history.db"
+    h = History(path)
+    run_a = h.record(_run())
+    run_b = h.record(_run())
+    h.close()
+    # back to the schema-1 shape by hand: the old tables and the old version
+    engine = sa.create_engine(f"sqlite:///{path}")
+    with engine.begin() as c:
+        for table, key in (("model_runs", "unique_id"), ("question_runs", "slug")):
+            c.execute(sa.text(f"DROP TABLE {table}"))
+            c.execute(
+                sa.text(
+                    f"CREATE TABLE {table} ({key} VARCHAR(255) PRIMARY KEY, ts DATETIME NOT NULL, "
+                    "run_id INTEGER NOT NULL REFERENCES runs (id))"
+                )
+            )
+        c.execute(
+            sa.text("INSERT INTO model_runs VALUES ('model.proj.by_c', '2026-09-19 10:00:00', :r)"),
+            {"r": run_a},
+        )
+        c.execute(
+            sa.text("INSERT INTO question_runs VALUES ('total', '2026-09-19 10:00:01', :r)"),
+            {"r": run_b},
+        )
+        c.execute(sa.text("UPDATE meta SET value = '1' WHERE key = 'schema_version'"))
+    engine.dispose()
+
+    h = History(path)
+    with h.engine.connect() as c:
+        version = c.execute(sa.text("SELECT value FROM meta WHERE key = 'schema_version'")).scalar()
+    assert version == str(history_module.SCHEMA_VERSION) == "2"
+    assert h.model_last_run("model.proj.by_c").id == run_a
+    assert h.question_last_run("total") is not None
+    assert sorted(k for _, k, _ in h.model_and_question_runs()) == ["model.proj.by_c", "total"]
+    # runs accumulate now, and the last is the newest
+    run_c = h.record(_run())
+    h.record_model_run("model.proj.by_c", run_c)
+    assert h.model_last_run("model.proj.by_c").id == run_c
+    assert [k for t, k, _ in h.model_and_question_runs() if t == "model"] == ["model.proj.by_c"] * 2
+    h.close()
+
+
+def _run():
+    from lakelet.history import Run
+
+    return Run(
+        fingerprint="f",
+        sql_hash="h",
+        sql_text="select 1",
+        lakelet_version="0",
+        duckdb_version="0",
+        machine_hash="m",
+        machine={},
+        ran=True,
+        actual_wall=0.1,
+        verdict="green",
+    )

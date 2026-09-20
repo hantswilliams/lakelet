@@ -37,6 +37,11 @@ button.link.mono{font-family:var(--mono)}
 .welcome h1{font-size:26px;letter-spacing:-.02em}
 .welcome .actions{display:flex;align-items:center;gap:14px}
 .welcome .hint{font-size:13px}
+.welcome .advanced{display:grid;gap:8px;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;background:var(--panel)}
+.welcome .advanced label{display:grid;gap:6px;font-size:13px}
+.welcome .advanced input{font:inherit;font-family:var(--mono);padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.welcome .advanced p{margin:0;font-size:12.5px}
+.welcome .advanced .error-line{color:var(--slow)}
 .welcome .hint code,.welcome p code{font:500 13px var(--mono);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 .recent h2{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 6px}
 .recent ul{list-style:none;padding:0;margin:0;display:grid;gap:6px}
@@ -78,6 +83,10 @@ button.link.mono{font-family:var(--mono)}
 .open-menu li button{width:100%;text-align:left;display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:0;border-radius:6px;background:none;font:inherit;color:inherit;cursor:pointer}
 .open-menu li button:hover{background:var(--bg)}
 .open-menu li button span{color:var(--muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:380px}
+.open-menu .bucket-row{display:grid;gap:6px;padding:8px 10px}
+.open-menu .bucket-row input{font:inherit;font-family:var(--mono);font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.open-menu .bucket-row button.primary{width:auto;justify-self:start;padding:5px 10px;font-size:12.5px}
+.open-menu .bucket-row span{color:var(--muted);font-size:11.5px;white-space:normal}
 @media (max-width:900px){.drop{grid-template-columns:minmax(0,1fr)}}
 /* screen 2: the SQL box, the gauge line, the grid */
 .query{display:grid;gap:12px}

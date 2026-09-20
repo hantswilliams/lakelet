@@ -6,8 +6,17 @@
 
 import type { ImportMode } from './api';
 
-/** Quote for a POSIX shell only when the argument needs it. */
-export const shellArg = (s: string): string => (/^[A-Za-z0-9_./~:@+=,-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
+/** Quote for a POSIX shell only when the argument needs it. An argument with a single
+ *  quote in it — SQL with a string literal, mostly — goes in double quotes when it holds
+ *  nothing a double-quoted string would interpret (`$`, a backtick, `\`, `"`, a `!` other
+ *  than `!=`, which bash leaves alone), so the line reads as the SQL does: `lakelet sql
+ *  "select … where m = 'jan'"` rather than the correct but unreadable
+ *  `'select … where m = '\''jan'\'''`. */
+export const shellArg = (s: string): string => {
+  if (/^[A-Za-z0-9_./~:@+=,-]+$/.test(s)) return s;
+  if (s.includes("'") && !/["$`\\]|!(?![=\s]|$)/.test(s)) return `"${s}"`;
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+};
 
 /** The file's stem as the CLI would turn it into a table name (core `identifier`). */
 export const defaultName = (path: string): string => {

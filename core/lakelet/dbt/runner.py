@@ -232,6 +232,14 @@ def _invoke(project: Project, verb: str, args: list[str]) -> Any:
             str(logs),
             "--no-use-colors",
             "--quiet",
+            # `compile --select <model>` prints that model's compiled SQL on stdout even
+            # under --quiet, ahead of Lakelet's own DAG; the stdout log level off keeps
+            # stdout Lakelet's, and the file log under .lakelet/dbt/logs keeps dbt's
+            # default. Failures still arrive as the result's exception below.
+            "--log-level",
+            "none",
+            "--log-level-file",
+            "debug",
             *args,
         ]
     )

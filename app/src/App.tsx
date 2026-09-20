@@ -125,13 +125,13 @@ export default function App() {
   }, [project]);
 
   // A10: the dialog, then the shell opens the folder here (no project yet) or in a new window.
-  async function open(path?: string) {
+  async function open(path?: string, warehouse?: string) {
     setOpenError(undefined);
     try {
       const folder = path ?? (await pickFolder());
       if (!folder) return;
       setBusy(`opening ${baseName(folder)}…`);
-      await openProject(folder);
+      await openProject(folder, warehouse);
       await refreshProject();
     } catch (e: unknown) {
       setOpenError(message(e));
@@ -176,7 +176,7 @@ export default function App() {
         <span className="project" data-testid="project">{health?.project ?? (project ? baseName(project) : '')}</span>
         {project !== null && <StatusDot status={status} detail={detail} />}
         {inTauri() && project !== null && (
-          <OpenMenu recent={recent} current={project} disabled={!!busy} onOpen={(p) => open(p)} onPick={() => open()} />
+          <OpenMenu recent={recent} current={project} disabled={!!busy} onOpen={(p) => open(p)} onPick={(warehouse) => open(undefined, warehouse)} />
         )}
         {api && (
           <nav className="screens" aria-label="Screens" data-testid="screens">
@@ -204,7 +204,7 @@ export default function App() {
       </header>
       <main>
         {project === null ? (
-          <Welcome recent={recent} canPick={inTauri()} busy={busy} error={openError} onPick={() => open()} onOpen={(p) => open(p)} />
+          <Welcome recent={recent} canPick={inTauri()} busy={busy} error={openError} onPick={(warehouse) => open(undefined, warehouse)} onOpen={(p) => open(p)} />
         ) : (
           <>
             {openError && <section className="error" data-testid="open-error"><b>That folder could not be opened.</b><pre>{openError}</pre></section>}

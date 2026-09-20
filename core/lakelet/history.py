@@ -15,9 +15,7 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy import event
 
-SCHEMA_VERSION = 1
-#: Numbered migrations from an older schema (trust round T4). None yet.
-MIGRATIONS: list = []
+SCHEMA_VERSION = 2
 
 metadata = sa.MetaData()
 
@@ -58,22 +56,25 @@ runs = sa.Table(
     sa.Column("error", sa.Text),
 )
 
+# Which question a run answered: one row per run, so every run of a question is kept
+# (schema 2, 2026-09-20: the Changes feed lists them all; before it, one row per question,
+# the latest). The question's last run is the newest row.
 question_runs = sa.Table(
     "question_runs",
     metadata,
-    sa.Column("slug", sa.String(255), primary_key=True),
+    sa.Column("run_id", sa.Integer, sa.ForeignKey("runs.id"), primary_key=True),
+    sa.Column("slug", sa.String(255), nullable=False, index=True),
     sa.Column("ts", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("run_id", sa.Integer, sa.ForeignKey("runs.id"), nullable=False),
 )
 
-# A dbt model's last `lakelet run` (real-data brief R5, the app's Models panel): the
-# model's unique id to the run that recorded it, the way a question's last run is kept.
+# Which dbt model a `lakelet run` built (real-data brief R5, the app's Models panel): the
+# model's unique id per run, kept the way a question's runs are; its last run is the newest.
 model_runs = sa.Table(
     "model_runs",
     metadata,
-    sa.Column("unique_id", sa.String(255), primary_key=True),
+    sa.Column("run_id", sa.Integer, sa.ForeignKey("runs.id"), primary_key=True),
+    sa.Column("unique_id", sa.String(255), nullable=False, index=True),
     sa.Column("ts", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("run_id", sa.Integer, sa.ForeignKey("runs.id"), nullable=False),
 )
 
 corrections = sa.Table(
@@ -94,6 +95,26 @@ meta = sa.Table(
 )
 
 JSON_COLUMNS = ("tables", "operator_counts", "machine")
+
+
+def _keep_every_run(c: sa.Connection) -> None:
+    """Schema 1 → 2: `model_runs` and `question_runs` keyed by the run rather than by the
+    model or question, so runs accumulate instead of replacing. The rows a schema-1 file
+    holds (one per model and per question, the latest) are carried over."""
+    for table, key in ((model_runs, "unique_id"), (question_runs, "slug")):
+        name = table.name
+        c.execute(sa.text(f"ALTER TABLE {name} RENAME TO {name}_v1"))
+        table.create(c)
+        c.execute(
+            sa.text(
+                f"INSERT INTO {name} (run_id, {key}, ts) SELECT run_id, {key}, ts FROM {name}_v1"
+            )
+        )
+        c.execute(sa.text(f"DROP TABLE {name}_v1"))
+
+
+#: Numbered migrations from an older schema (trust round T4), each run once, in order.
+MIGRATIONS: list = [(2, _keep_every_run)]
 
 
 @dataclass
@@ -230,10 +251,10 @@ class History:
         return removed
 
     def record_model_run(self, unique_id: str, run_id: int) -> None:
-        now = datetime.now(UTC)
         with self.engine.begin() as c:
-            c.execute(model_runs.delete().where(model_runs.c.unique_id == unique_id))
-            c.execute(model_runs.insert().values(unique_id=unique_id, ts=now, run_id=run_id))
+            c.execute(
+                model_runs.insert().values(unique_id=unique_id, ts=datetime.now(UTC), run_id=run_id)
+            )
 
     def model_last_run(self, unique_id: str) -> Run | None:
         with self.engine.connect() as c:
@@ -242,16 +263,17 @@ class History:
                     runs.select()
                     .join(model_runs, model_runs.c.run_id == runs.c.id)
                     .where(model_runs.c.unique_id == unique_id)
+                    .order_by(model_runs.c.run_id.desc())
+                    .limit(1)
                 )
                 .mappings()
                 .first()
             )
         return None if row is None else _run(row)
 
-    def last_runs(self) -> list[tuple[str, str, Run]]:
-        """Every model's and every question's last run (decisions L2, the Changes feed):
-        ``("model", unique_id, run)`` and ``("question", slug, run)``. History keeps one run
-        per model and per question, so this is what there is to list."""
+    def model_and_question_runs(self) -> list[tuple[str, str, Run]]:
+        """Every run a model or a question has (decisions L2, the Changes feed):
+        ``("model", unique_id, run)`` and ``("question", slug, run)``, in no order."""
         out: list[tuple[str, str, Run]] = []
         with self.engine.connect() as c:
             for row in (
@@ -277,14 +299,12 @@ class History:
         return out
 
     def record_question_run(self, slug: str, run_id: int) -> None:
-        now = datetime.now(UTC)
         with self.engine.begin() as c:
-            c.execute(question_runs.delete().where(question_runs.c.slug == slug))
-            c.execute(question_runs.insert().values(slug=slug, ts=now, run_id=run_id))
+            c.execute(question_runs.insert().values(slug=slug, ts=datetime.now(UTC), run_id=run_id))
 
     def question_last_run(self, slug: str) -> datetime | None:
         with self.engine.connect() as c:
             ts = c.execute(
-                sa.select(question_runs.c.ts).where(question_runs.c.slug == slug)
+                sa.select(sa.func.max(question_runs.c.ts)).where(question_runs.c.slug == slug)
             ).scalar()
         return _utc(ts)

@@ -71,7 +71,7 @@ export const surfaces: Surface[] = [
     detail: 'lakelet lineage says what a table, view or model reads and what reads it, and how each edge is known; every model carries a state — fresh, edited, upstream, never — with what changed, and lakelet run --stale builds only what is not',
     href: '/docs/tables#lineage' },
   { id: 'changes', label: 'What happened: the changes feed', state: 'built',
-    detail: 'lakelet changes merges every table\'s snapshots, each model\'s and question\'s last run and the versions git holds into one list, newest first; the app\'s Changes screen and a Recent strip on every detail read the same route',
+    detail: 'lakelet changes merges every table\'s snapshots, every run of each model and question and the versions git holds into one list, newest first; the app\'s Changes screen and a Recent strip on every detail read the same route',
     href: '/docs/tables#what-happened-the-changes-feed' },
   { id: 'recovery', label: 'Backups, crashes, upgrades and moves', state: 'built',
     detail: 'a copy of the folder is the backup, a failed replace keeps the old table, a moved folder is relocated, a newer schema is refused — every sentence tested',

@@ -20,12 +20,12 @@ describe('Copy as command', () => {
   it('builds the lakelet sql line on one line, with --run-anyway when Red was overridden', () => {
     expect(sqlCommand('select *\n  from orders')).toBe("lakelet sql 'select * from orders'");
     expect(sqlCommand('select count(*) from orders', true)).toBe("lakelet sql 'select count(*) from orders' --run-anyway");
-    expect(sqlCommand("select 'a' as s")).toBe("lakelet sql 'select '\\''a'\\'' as s'");
+    expect(sqlCommand("select 'a' as s")).toBe('lakelet sql "select \'a\' as s"');
   });
 
   it('drops -- comments before folding the SQL onto one line, but not inside a literal', () => {
     expect(sqlCommand('select 1 -- one\nfrom t')).toBe("lakelet sql 'select 1 from t'");
-    expect(sqlCommand("select '--' as dash -- a comment")).toBe("lakelet sql 'select '\\''--'\\'' as dash'");
+    expect(sqlCommand("select '--' as dash -- a comment")).toBe('lakelet sql "select \'--\' as dash"');
     expect(stripComments('a\n-- whole line\nb')).toBe('a\n\nb');
   });
 
@@ -37,7 +37,14 @@ describe('Copy as command', () => {
 
   it('quotes only when the shell needs it', () => {
     expect(shellArg('~/a-b_c.1')).toBe('~/a-b_c.1');
-    expect(shellArg("it's here")).toBe("'it'\\''s here'");
+    // a single quote alone: double quotes, so the SQL reads as written
+    expect(shellArg("it's here")).toBe('"it\'s here"');
+    expect(shellArg("where m = 'jan' and n != 2")).toBe('"where m = \'jan\' and n != 2"');
+    // a single quote beside something double quotes would interpret: the safe form
+    expect(shellArg("it's $HOME")).toBe("'it'\\''s $HOME'");
+    expect(shellArg("it's !~ x")).toBe("'it'\\''s !~ x'");
+    expect(shellArg('say "hi" it\'s')).toBe("'say \"hi\" it'\\''s'");
+    expect(shellArg('a "b"')).toBe("'a \"b\"'");
   });
 
   it('builds the attach, discover and refresh lines for an s3:// prefix (real-data R4)', () => {

@@ -69,13 +69,13 @@ fn new_window(app: &AppHandle, shell: &Shell, project: Option<&PathBuf>) -> Resu
 /// Give the window its project and, on a thread, `lakelet init` when the folder needs it
 /// and then the sidecar; the webview's `get_session` waits, and the ready (or down) event
 /// reaches the window either way.
-fn start_in_window(app: AppHandle, shell: Arc<Shell>, label: String, folder: PathBuf) {
+fn start_in_window(app: AppHandle, shell: Arc<Shell>, label: String, folder: PathBuf, warehouse: Option<String>) {
     shell.open.starting(&label, folder.clone());
     thread::spawn(move || {
         if let Some(w) = app.get_webview_window(&label) {
             let _ = w.set_title(&window_title(Some(&folder)));
         }
-        let prepared = match prepare(&shell.open.executable, &folder) {
+        let prepared = match prepare(&shell.open.executable, &folder, warehouse.as_deref()) {
             Ok(prepared) => prepared,
             Err(error) => {
                 shell.open.fail(&label, folder, error.clone());
@@ -96,8 +96,9 @@ fn start_in_window(app: AppHandle, shell: Arc<Shell>, label: String, folder: Pat
 }
 
 /// Open a folder: in this window when it has no project yet, in a new window otherwise;
-/// when a window already shows it, bring that one forward.
-fn open_folder(app: &AppHandle, shell: &Arc<Shell>, from_label: &str, folder: PathBuf) -> Result<(), String> {
+/// when a window already shows it, bring that one forward. `warehouse` is for a folder
+/// that is not a project yet (decisions W1): `lakelet init --warehouse s3://…`.
+fn open_folder(app: &AppHandle, shell: &Arc<Shell>, from_label: &str, folder: PathBuf, warehouse: Option<String>) -> Result<(), String> {
     let project = canonical(&folder)?;
     if let Some(existing) = shell.open.window_for(&project) {
         if let Some(w) = app.get_webview_window(&existing) {
@@ -110,7 +111,7 @@ fn open_folder(app: &AppHandle, shell: &Arc<Shell>, from_label: &str, folder: Pa
     } else {
         new_window(app, shell, Some(&project))?
     };
-    start_in_window(app.clone(), shell.clone(), label, project);
+    start_in_window(app.clone(), shell.clone(), label, project, warehouse);
     Ok(())
 }
 
@@ -165,16 +166,17 @@ async fn pick_files(app: AppHandle) -> Vec<String> {
 fn restart_sidecar(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>) -> Result<(), String> {
     let label = window.label().to_string();
     let project = shell.open.project_of(&label).ok_or_else(|| "this window has no project".to_string())?;
-    start_in_window(app, shell.inner().clone(), label, project);
+    start_in_window(app, shell.inner().clone(), label, project, None);
     Ok(())
 }
 
 /// A10: open a folder as a project, running `lakelet init` first when it needs it.
 #[tauri::command]
-async fn open_project(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>, path: String) -> Result<(), String> {
+async fn open_project(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>, path: String, warehouse: Option<String>) -> Result<(), String> {
     let shell = shell.inner().clone();
     let label = window.label().to_string();
-    tauri::async_runtime::spawn_blocking(move || open_folder(&app, &shell, &label, PathBuf::from(path)))
+    let warehouse = warehouse.map(|w| w.trim().to_string()).filter(|w| !w.is_empty());
+    tauri::async_runtime::spawn_blocking(move || open_folder(&app, &shell, &label, PathBuf::from(path), warehouse))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -207,7 +209,7 @@ pub fn run() {
             shell.open.add_empty(&label);
             if let Some(folder) = project {
                 match canonical(&folder) {
-                    Ok(project) => start_in_window(handle.clone(), shell.clone(), label, project),
+                    Ok(project) => start_in_window(handle.clone(), shell.clone(), label, project, None),
                     // The window shows the reason and the welcome screen's buttons.
                     Err(error) => shell.open.fail(&label, folder, error),
                 }

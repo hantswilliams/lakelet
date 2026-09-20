@@ -51,17 +51,27 @@ pub fn canonical(folder: &Path) -> Result<PathBuf, String> {
     folder.canonicalize().map_err(|e| format!("{}: {e}", folder.display()))
 }
 
-/// Check the folder and run `lakelet init <folder>` when it has no `lakelet.toml`.
-pub fn prepare(executable: &OsString, folder: &Path) -> Result<Prepared, String> {
+/// Check the folder and run `lakelet init <folder>` when it has no `lakelet.toml`. A
+/// `warehouse` (decisions W1: an `s3://bucket/prefix` for the tables' files) goes to `init`
+/// as `--warehouse`; it is fixed at init, so a folder that is a project already refuses it
+/// rather than opening with a warehouse other than the one asked for.
+pub fn prepare(executable: &OsString, folder: &Path, warehouse: Option<&str>) -> Result<Prepared, String> {
     let project = canonical(folder)?;
     if is_project(&project) {
+        if let Some(w) = warehouse {
+            return Err(format!(
+                "{} is a Lakelet project already; its warehouse was fixed when it was set up, so {w} cannot be applied to it. Open a new folder for a project whose tables live in a bucket.",
+                project.display()
+            ));
+        }
         return Ok(Prepared { project, initialised: None });
     }
-    let output = Command::new(executable)
-        .arg("init")
-        .arg(&project)
-        .output()
-        .map_err(|e| format!("could not run lakelet init: {e}"))?;
+    let mut init = Command::new(executable);
+    init.arg("init").arg(&project);
+    if let Some(w) = warehouse {
+        init.arg("--warehouse").arg(w);
+    }
+    let output = init.output().map_err(|e| format!("could not run lakelet init: {e}"))?;
     let text = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     if !output.status.success() {
         return Err(format!("lakelet init {} failed:\n{}", project.display(), text.trim()));
@@ -329,12 +339,35 @@ mod tests {
         let exe = fake_executable(&dir, 60);
         let folder = dir.join("fresh");
         std::fs::create_dir_all(&folder).unwrap();
-        let prepared = prepare(&exe, &folder).expect("init runs");
+        let prepared = prepare(&exe, &folder, None).expect("init runs");
         assert!(is_project(&prepared.project));
         assert!(prepared.initialised.as_deref().unwrap_or("").contains("lakelet.toml"), "{prepared:?}");
-        let again = prepare(&exe, &folder).unwrap();
+        let again = prepare(&exe, &folder, None).unwrap();
         assert_eq!(again.initialised, None, "an existing project is left alone");
-        assert!(prepare(&exe, &dir.join("missing")).unwrap_err().contains("not a folder"));
+        assert!(prepare(&exe, &dir.join("missing"), None).unwrap_err().contains("not a folder"));
+    }
+
+    #[test]
+    fn a_warehouse_goes_to_init_and_is_refused_for_a_project_that_exists() {
+        let dir = temp_dir("prepare-warehouse");
+        let exe = fake_executable(&dir, 60);
+        let folder = dir.join("bucketed");
+        std::fs::create_dir_all(&folder).unwrap();
+        let prepared = prepare(&exe, &folder, Some("s3://lakelet-test/acme")).expect("init runs with --warehouse");
+        assert!(is_project(&prepared.project));
+        let toml = std::fs::read_to_string(prepared.project.join("lakelet.toml")).unwrap();
+        assert!(toml.contains("warehouse = \"s3://lakelet-test/acme\""), "{toml}");
+        assert!(prepared.initialised.as_deref().unwrap_or("").contains("s3://lakelet-test/acme"), "{prepared:?}");
+        // a folder that is a project already: the warehouse cannot apply, so it is refused
+        let refused = prepare(&exe, &folder, Some("s3://other/prefix")).unwrap_err();
+        assert!(refused.contains("fixed when it was set up"), "{refused}");
+        assert_eq!(prepare(&exe, &folder, None).unwrap().initialised, None);
+        // the core refuses anything but s3://, and the refusal reaches the caller
+        let bad = dir.join("bad");
+        std::fs::create_dir_all(&bad).unwrap();
+        let err = prepare(&exe, &bad, Some("/tmp/elsewhere")).unwrap_err();
+        assert!(err.contains("s3://bucket/prefix"), "{err}");
+        assert!(!is_project(&bad));
     }
 
     #[test]
@@ -343,8 +376,8 @@ mod tests {
         let exe = fake_executable(&dir, 60);
         let ram = 10 * 1024 * 1024 * 1024u64;
         let open = OpenProjects::new(exe.clone(), ram, Some("http://localhost:5173".into()));
-        let a = prepare(&exe, &{ let p = dir.join("a"); std::fs::create_dir_all(&p).unwrap(); p }).unwrap();
-        let b = prepare(&exe, &{ let p = dir.join("b"); std::fs::create_dir_all(&p).unwrap(); p }).unwrap();
+        let a = prepare(&exe, &{ let p = dir.join("a"); std::fs::create_dir_all(&p).unwrap(); p }, None).unwrap();
+        let b = prepare(&exe, &{ let p = dir.join("b"); std::fs::create_dir_all(&p).unwrap(); p }, None).unwrap();
 
         let sa = open.open("project-1", a.clone()).expect("first sidecar starts");
         assert!(sa.ready_ms > 0 && sa.ready_ms < 10_000, "spawn to ready is measured: {}", sa.ready_ms);

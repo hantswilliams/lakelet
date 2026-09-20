@@ -63,10 +63,12 @@ export async function pickFolder(): Promise<string | null> {
   return invoke<string | null>('pick_folder');
 }
 
-/** Open a folder as a project: this window when it has none, else a new one (A10). */
-export async function openProject(path: string): Promise<void> {
+/** Open a folder as a project: this window when it has none, else a new one (A10). A
+ *  `warehouse` (an `s3://bucket/prefix`, decisions W1) goes to `lakelet init --warehouse`
+ *  when the folder is not a project yet; a folder that is one already refuses it. */
+export async function openProject(path: string, warehouse?: string): Promise<void> {
   if (!inTauri()) throw new Error('opening a project is only in the app');
-  return invoke<void>('open_project', { path });
+  return invoke<void>('open_project', { path, warehouse: warehouse?.trim() || null });
 }
 
 /** A11: after two exits in a minute the shell stops restarting; this asks it to try again. */

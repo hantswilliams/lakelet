@@ -19,10 +19,17 @@ if args and args[0] == "init":
     if os.path.exists(os.path.join(folder, "lakelet.toml")):
         print(f"{folder} is already a Lakelet project", file=sys.stderr)
         sys.exit(1)
+    # `--warehouse s3://bucket/prefix` (decisions W1), refused for anything else, as the core does
+    warehouse = args[args.index("--warehouse") + 1] if "--warehouse" in args else "./warehouse"
+    if warehouse != "./warehouse" and not warehouse.startswith("s3://"):
+        print(f"the warehouse is ./warehouse or an s3://bucket/prefix, not {warehouse}", file=sys.stderr)
+        sys.exit(1)
     os.makedirs(os.path.join(folder, ".lakelet"), exist_ok=True)
     with open(os.path.join(folder, "lakelet.toml"), "w", encoding="utf-8") as f:
-        f.write(f'[project]\nname = "{os.path.basename(folder.rstrip(os.sep))}"\n')
+        f.write(f'[project]\nname = "{os.path.basename(folder.rstrip(os.sep))}"\nwarehouse = "{warehouse}"\n')
     print("  lakelet.toml\n  .lakelet/")
+    if warehouse != "./warehouse":
+        print(f"  every table's files go to {warehouse} (the catalog stays in .lakelet/)")
     sys.exit(0)
 
 project = args[args.index("-C") + 1]

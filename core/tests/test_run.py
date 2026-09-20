@@ -311,6 +311,12 @@ def test_the_cli_and_the_routes(project) -> None:
     plan = runner_cli.invoke(app, ["-C", root, "run", "--plan"])
     assert plan.exit_code == 0, plan.output
     assert "stg_orders" in plan.output and "green" in plan.output
+    # a selection compiles only that model, and dbt would echo its compiled SQL first:
+    # stdout is the DAG alone, so `lakelet run --plan | …` sees nothing else
+    one = runner_cli.invoke(app, ["-C", root, "run", "by_c", "--plan"])
+    assert one.exit_code == 0, one.output
+    assert not one.output.lstrip().lower().startswith("select"), one.output
+    assert "by_c" in one.output and "sum(" not in one.output
     ran = runner_cli.invoke(app, ["-C", root, "run"])
     assert ran.exit_code == 0, ran.output
     assert "views in the catalog: stg_orders, top" in ran.output

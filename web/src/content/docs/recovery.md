@@ -29,7 +29,7 @@ A copy restored to a *different* path is a moved project: see the last section.
 
 ## Upgrades and downgrades
 
-Both databases record the schema version that wrote them and which Lakelet did. On open, **a newer schema is refused** with the sentence that says so — *this project's catalog was written by a newer Lakelet (0.2.0, schema 2); this is 0.1.0, which reads schema 1 — upgrade Lakelet, or open the project with the version that wrote it* — and the file is left untouched. **An older schema is migrated forward**, each numbered migration once, in order, and the version recorded. There are no migrations yet; the mechanism exists so that the first schema change cannot silently misread anyone's project.
+Both databases record the schema version that wrote them and which Lakelet did. On open, **a newer schema is refused** with the sentence that says so — *this project's catalog was written by a newer Lakelet (0.2.0, schema 2); this is 0.1.0, which reads schema 1 — upgrade Lakelet, or open the project with the version that wrote it* — and the file is left untouched. **An older schema is migrated forward**, each numbered migration once, in order, and the version recorded. The first one is history's schema 2 (September 20, 2026): the tables that say which model or question a run belongs to are keyed by the run, so every run is kept for [the changes feed](/docs/tables#what-happened-the-changes-feed); a schema-1 `history.db` is rewritten on open with its rows carried over. The catalog has none yet.
 
 ## A moved or copied folder
 

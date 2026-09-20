@@ -56,6 +56,18 @@ Core **258** passed, 10 skipped; Vitest **96**; Playwright **31** on ten sidecar
 
 All five of `decisions-for-review_091726.md` are built: L3, L1, W1, W2, L2. Open, in `TASKS.md`: the welcome screen's warehouse field (Rust, on the Mac); history keeping one run per model (a decision, if every run should show in the feed). Ship (`ship-v0-plan.md`) is next and stays held until Hants says.
 
+## 9. Later the same day: three polish items from `TASKS.md`
+
+After the website branch was merged (`8e9faca`, PR #1: `web/` and the logs only; `core/` and `app/` untouched) Hants chose the small open items over lifting the ship hold.
+
+**`lakelet run <model>` no longer echoes the compiled SQL.** dbt's `compile --select <name>` prints that node's compiled code on stdout even under `--quiet`, ahead of Lakelet's DAG. `_invoke` now passes `--log-level none` for stdout and `--log-level-file debug` so `.lakelet/dbt/logs/dbt.log` keeps dbt's default (the first attempt turned both off, and `test_run`'s bare-run test, which reads that log, caught it). Failures still arrive as the result's exception. `test_run.test_the_cli_and_the_routes`: `lakelet run by_c --plan` prints the DAG and nothing before it.
+
+**The Copy line reads as the SQL does.** `shellArg` puts an argument with a single quote in double quotes when it holds nothing a double-quoted string would interpret (`$`, a backtick, `\`, `"`, or a `!` other than `!=`, which bash leaves alone), so the query screen's line is `lakelet sql "select … where m = 'jan'"` rather than `'select … where m = '\''jan'\'''`; anything else keeps the safe single-quoted form. `command.test.tsx` has both ways and the edge cases.
+
+**The grid's columns are sized to what they hold.** Every column was an equal share of the width (`repeat(n, minmax(120px, 1fr))`), so a two-column result put its number half a screen from its header. `Grid.columnWidths` takes the longest of the header and the first two hundred rows' cells in characters of the mono face, between 96 px and 480 px, and the last column takes what is left; `Grid.test.tsx` pins the widths and the template.
+
+Gates: core **258** passed, 10 skipped; Vitest **98**; Playwright **31**; `ruff`, `tsc` clean. No docs changed: none described the old behaviour.
+
 
 ---
 

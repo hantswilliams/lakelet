@@ -26,8 +26,8 @@ TARGETS = ("table", "model", "question", "project")
 class Change:
     """One entry. ``kind`` says which source: a table's ``snapshot`` (with its operation and
     rows, and ``affects``, the models it made out of date — decisions L3), a model's or a
-    question's last ``run`` (history keeps one per model and per question), or a
-    ``version`` (a git commit touching the models: a save, a restore, a run-time commit).
+    question's ``run`` (every one history holds, since schema 2), or a ``version`` (a git
+    commit touching the models: a save, a restore, a run-time commit).
     ``name`` is what the entry is about and ``target`` what kind of thing that is, for the
     link; a version names every model and question it touched in ``names``."""
 
@@ -163,7 +163,7 @@ def _count(props: dict[str, str], key: str) -> int | None:
 
 def _runs(project: Project) -> list[Change]:
     out: list[Change] = []
-    for target, key, run in project.history.last_runs():
+    for target, key, run in project.history.model_and_question_runs():
         if run.ts is None:
             continue
         out.append(

@@ -1,0 +1,25 @@
+# Lakelet — build session log, September 20, 2026: the two decisions left from the W/L batch
+
+*Hants and Claude. After the website branch merged (`8e9faca`) and the polish items of the 18th, the two open decisions from `lakelet-build-sessions_091826.md` §8, both taken by Hants today: the welcome screen makes a bucket-warehouse project, and history keeps every run. Ship (`ship-v0-plan.md`) is still held.*
+
+## 1. The welcome screen's warehouse field (`src-tauri/src/projects.rs`, `lib.rs`, `Welcome.tsx`)
+
+The container can compile the shell now — the GTK 3 and WebKitGTK 4.1 development packages were the missing piece — so the Rust side was built and tested here rather than left for the Mac. `prepare(executable, folder, warehouse)` passes `--warehouse <s3://…>` to `lakelet init` for a folder that is not a project yet, and refuses a warehouse for a folder that is one already ("its warehouse was fixed when it was set up"), rather than opening the project with a warehouse other than the one asked for. The `open_project` command takes an optional `warehouse` (trimmed; empty is none) through `open_folder` and `start_in_window`; the shell's own opens (the first window, a restart) pass none. The fake sidecar the shell's tests use takes `--warehouse` the way the core does: it refuses anything but `s3://` and writes the value into `lakelet.toml`.
+
+The welcome screen gained **Advanced** beside the button: **Keep the tables in a bucket**, an `s3://bucket/prefix` that goes with the next **Open a folder…** (the recent projects are projects already and never carry it), with the terminal line beside it — `lakelet init <folder> --warehouse s3://…` — and a note that the credentials come from the environment the app was started in. Anything that is not an `s3://bucket/prefix` disables the button and says why, so the core's refusal is never the first thing seen; the core's own error (a project already, no credentials) arrives in the window as any open error does. `openProject(path, warehouse?)` in `lib/session.ts`; `App.open(path?, warehouse?)`. Hants then asked where the box was: the welcome screen is only seen by a window with no project, which a machine with a recent project never shows — so **Open…** in the bar gained **New folder, tables in a bucket…**, a prefix row that then opens the dialog (`OpenMenu.test.tsx`), and the docs name both ways.
+
+Gates: `cargo test` — `a_warehouse_goes_to_init_and_is_refused_for_a_project_that_exists`: the value reaches `lakelet.toml` and the init output, a second `prepare` with a warehouse on the same folder is refused with the sentence, a non-bucket value is refused by the core and no project is made; 9 Rust tests pass. `Welcome.test.tsx`: the box opens, the line follows the value, a bad value disables the button, a good one reaches `onPick` trimmed, an empty one passes nothing. `/docs/app` and `/docs/remote` say the box exists.
+
+## 2. History keeps every run (`history.py` schema 2, the first migration)
+
+`model_runs` and `question_runs` held one row per model and per question — the latest run — so the Changes feed (L2) showed each model's last run beside every one of its snapshots. Hants decided every run should show. Both tables are keyed by the run now (`run_id` the primary key, the model's unique id or the question's slug an indexed column), `record_model_run` and `record_question_run` insert without deleting, `model_last_run` and `question_last_run` take the newest row, and `model_and_question_runs()` (was `last_runs()`) returns every row for the feed. `SCHEMA_VERSION` is 2 and `MIGRATIONS` has its first entry, `_keep_every_run`: each table renamed aside, created in its new shape, its rows copied, the old one dropped — a schema-1 `history.db` is rewritten on open with the last runs it held carried over, through the T4 mechanism that had waited for its first use. `gauge reset` still clears everything.
+
+Gates: `test_changes` — after a second `lakelet run`, `by_c` has two run entries and the question its first, with the name filter agreeing; and a new test builds a schema-1 `history.db` by hand (the old tables, one row each, the version set to 1), opens it, and finds the version at 2, the rows kept, the last runs right, and runs accumulating from then on. `test_recovery`'s "current schema" test now compares each store to its own version (history is 2, the catalog 1); `test_step4_query`'s bookkeeping tests pass unchanged. `/docs/tables`, `/docs/api`, `/docs/recovery` (the sentence saying there were no migrations yet), `status.ts` and the README block, and the Changes screen's legend now say every run.
+
+## 3. Gates
+
+Core **259** passed, 10 skipped; Vitest **99**; Playwright **31**; `cargo test` **9**; `ruff`, `tsc` clean; the CLI reference and README regenerated; the site builds. One container note: the e2e suite filled the disk once (three hundred leftover temp projects plus the new Rust target directory); cleared, and passing.
+
+## 4. Open
+
+A retention or a switch for history's per-run rows, if they ever weigh (Hants: "we can modify the rules later") — in `TASKS.md`. Ship stays held.

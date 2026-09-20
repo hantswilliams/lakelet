@@ -189,8 +189,13 @@ def test_an_older_schema_runs_the_migration_once_and_records_the_version(
 
 
 def test_the_current_schema_opens_silently_and_records_who_wrote_it(project) -> None:
-    for engine in (project.store.engine, project.history.engine):
+    from lakelet import history as history_module
+
+    for engine, current in (
+        (project.store.engine, catalog_store.SCHEMA_VERSION),
+        (project.history.engine, history_module.SCHEMA_VERSION),
+    ):
         with engine.connect() as c:
             rows = dict(c.execute(sa.text("SELECT key, value FROM meta")).all())
-        assert rows["schema_version"] == str(catalog_store.SCHEMA_VERSION)
+        assert rows["schema_version"] == str(current)
         assert rows["written_by"] == __version__

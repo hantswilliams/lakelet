@@ -99,10 +99,11 @@ test('the Recent strip on the detail, and the Changes screen: the saves, the res
   await screen.getByTestId('dag').locator('tbody tr', { hasText: name }).click();
   const detail = screen.getByTestId('model-detail');
   const recent = detail.getByTestId('recent');
-  // the versions the CLI and the test before made, newest first
-  await expect(recent.getByTestId('recent-version').first()).toContainText(`restore question: ${SEEDED_QUESTION.title}`);
-  await expect(recent).toContainText(`update question: ${SEEDED_QUESTION.title}`);
-  // (the first save can be past the strip's five when the save spec, on the same sidecar, ran the DAG first)
+  // the strip is the last five entries about this question; which five depends on whether
+  // the save spec (same sidecar, another worker) ran the DAG first, so only presence is
+  // asserted here and the versions are checked on the Changes screen, which lists them all
+  await expect(recent.locator('li').first()).toContainText('just now');
+  await expect(recent.getByTestId('recent-more')).toBeVisible();
   // a run of the question: a run entry on the strip
   await detail.getByTestId('run-this').click();
   await expect(screen.getByTestId('run-report')).toBeVisible({ timeout: 90_000 });
@@ -117,6 +118,9 @@ test('the Recent strip on the detail, and the Changes screen: the saves, the res
   await expect(changes.getByTestId('feed')).toBeVisible();
   await expect(changes.getByTestId('command')).toContainText(`lakelet changes ${name} --last 100`);
   await expect(changes.getByTestId('entry-run').first()).toContainText(`${name} built in`);
+  // the versions the CLI and the test before made: the restore, the update, the first save
+  await expect(changes.getByTestId('entry-version').first()).toContainText(`restore question: ${SEEDED_QUESTION.title}`);
+  await expect(changes.getByTestId('entry-version').nth(1)).toContainText(`update question: ${SEEDED_QUESTION.title}`);
   await expect(changes.getByTestId('entry-version').last()).toContainText(`save question: ${SEEDED_QUESTION.title}`);
   await expect(changes.getByTestId('entry-snapshot').first()).toContainText(`${name}:`); // the run wrote the question's table
 

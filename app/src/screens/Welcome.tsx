@@ -4,6 +4,7 @@
 // ten. A folder that is not a project yet is initialised by the shell; the terminal
 // equivalent is shown beside the button, as every action in the app is.
 
+import { useState } from 'react';
 import type { RecentProject } from '../lib/session';
 
 export interface WelcomeProps {
@@ -12,11 +13,20 @@ export interface WelcomeProps {
   canPick: boolean;
   busy?: string;
   error?: string;
-  onPick: () => void;
+  /** The dialog, then `lakelet init` for a folder that is not a project yet — with
+   *  `--warehouse` when the Advanced box names a bucket (decisions W1). */
+  onPick: (warehouse?: string) => void;
   onOpen: (path: string) => void;
 }
 
+/** An `s3://bucket/prefix`, the only warehouse `init` takes besides its own folder. */
+export const isBucketPrefix = (s: string): boolean => /^s3:\/\/[^/\s]+\/\S+$/.test(s.trim());
+
 export function Welcome({ recent, canPick, busy, error, onPick, onOpen }: WelcomeProps) {
+  const [advanced, setAdvanced] = useState(false);
+  const [warehouse, setWarehouse] = useState('');
+  const bucket = warehouse.trim();
+  const bucketOk = bucket === '' || isBucketPrefix(bucket);
   return (
     <section className="welcome" data-testid="welcome">
       <h1>Open a folder</h1>
@@ -25,11 +35,27 @@ export function Welcome({ recent, canPick, busy, error, onPick, onOpen }: Welcom
         A folder that is not one yet is set up first, which is <code>lakelet init &lt;folder&gt;</code> in a terminal.
       </p>
       <div className="actions">
-        <button type="button" className="primary" onClick={onPick} disabled={!canPick || !!busy} data-testid="open-folder">
+        <button type="button" className="primary" onClick={() => onPick(bucket || undefined)} disabled={!canPick || !!busy || !bucketOk} data-testid="open-folder">
           Open a folder…
         </button>
         {busy && <span className="muted" data-testid="busy">{busy}</span>}
+        <button type="button" className="link" onClick={() => setAdvanced((a) => !a)} aria-expanded={advanced} data-testid="advanced">Advanced</button>
       </div>
+      {advanced && (
+        <div className="advanced" data-testid="advanced-box">
+          <label>
+            <span>Keep the tables in a bucket</span>
+            <input type="text" value={warehouse} placeholder="s3://bucket/prefix" spellCheck={false} data-testid="warehouse" onChange={(e) => setWarehouse(e.target.value)} />
+          </label>
+          <p className="muted">
+            For a folder that is not a project yet: every table's data and metadata go to the bucket from the first import, and the catalog stays
+            in the folder. Fixed when the project is set up; a folder that is one already is opened as it is.
+            In a terminal it is <code>lakelet init &lt;folder&gt; --warehouse {bucket || 's3://bucket/prefix'}</code>, with your AWS
+            credentials in the environment the app was started from.
+          </p>
+          {!bucketOk && <p className="error-line" data-testid="warehouse-error">A warehouse is an <code>s3://bucket/prefix</code>; anything else stays in the folder.</p>}
+        </div>
+      )}
       {!canPick && (
         <p className="muted hint" data-testid="hint">
           In a browser there is no folder dialog. In development, export <code>LAKELET_SIDECAR</code> (the <code>lakelet</code> executable,

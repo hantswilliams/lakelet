@@ -1,7 +1,7 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
 // The Changes screen (decisions L2): everything that happened to the project, newest
-// first — every table's snapshots, each model's and question's last run, the versions git
+// first — every table's snapshots, every run of each model and question, the versions git
 // holds for the models — one sentence each in the mode's words, each a link to its detail.
 // `lakelet changes` is the same list as text; a name typed in the filter is its argument.
 
@@ -89,7 +89,7 @@ export function Changes({ session, mode, name, onOpenModel, onOpenTable, refresh
       <p className="muted legend" data-testid="changes-legend">
         {mode === 'simple'
           ? 'Newest first: data that arrived, questions refreshed, questions saved. Nothing here is recorded for its own sake; it is read from what the project keeps.'
-          : 'Newest first, from three sources: every table\'s snapshots (with the models each made out of date), each model\'s and question\'s last run (history keeps one per model), and the versions git holds for the models. Nothing is recorded for this list.'}
+          : 'Newest first, from three sources: every table\'s snapshots (with the models each made out of date), every run of each model and question, and the versions git holds for the models. Nothing is recorded for this list.'}
       </p>
     </section>
   );

@@ -5,7 +5,7 @@
 
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { Welcome } from './Welcome';
+import { Welcome, isBucketPrefix } from './Welcome';
 
 const recent = [
   { path: '/home/h/acme', name: 'acme', opened: 1 },
@@ -30,6 +30,28 @@ describe('Welcome', () => {
     expect((screen.getByTestId('open-folder') as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByTestId('hint').textContent).toContain('LAKELET_SIDECAR');
     expect(screen.queryByTestId('recent')).toBeNull();
+  });
+
+  it('Advanced names a bucket for the tables, which the dialog button passes to init (W1)', () => {
+    const onPick = vi.fn();
+    render(<Welcome recent={[]} canPick onPick={onPick} onOpen={() => {}} />);
+    expect(screen.queryByTestId('advanced-box')).toBeNull();
+    fireEvent.click(screen.getByTestId('advanced'));
+    const box = screen.getByTestId('advanced-box');
+    expect(box.textContent).toContain('lakelet init <folder> --warehouse s3://bucket/prefix');
+    fireEvent.change(screen.getByTestId('warehouse'), { target: { value: '/tmp/elsewhere' } });
+    expect(screen.getByTestId('warehouse-error')).toBeTruthy();
+    expect((screen.getByTestId('open-folder') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByTestId('warehouse'), { target: { value: ' s3://acme-lake/analytics ' } });
+    expect(screen.queryByTestId('warehouse-error')).toBeNull();
+    expect(box.textContent).toContain('--warehouse s3://acme-lake/analytics');
+    fireEvent.click(screen.getByTestId('open-folder'));
+    expect(onPick).toHaveBeenCalledWith('s3://acme-lake/analytics');
+    fireEvent.change(screen.getByTestId('warehouse'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('open-folder'));
+    expect(onPick).toHaveBeenLastCalledWith(undefined);
+    expect(isBucketPrefix('s3://b')).toBe(false);
+    expect(isBucketPrefix('s3://b/p')).toBe(true);
   });
 
   it('shows what went wrong and holds the buttons while busy', () => {
