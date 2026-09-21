@@ -83,10 +83,29 @@ export interface BucketCheck {
 }
 
 /** Decisions P1: the shell runs `lakelet bucket check <prefix> --json` (a window without
- *  a project has no core to ask; one with a core may ask it through `Api.checkBucket`). */
-export async function checkBucket(prefix: string): Promise<BucketCheck> {
+ *  a project has no core to ask; one with a core may ask it through `Api.checkBucket`),
+ *  with the chosen AWS profile in its environment (C1). */
+export async function checkBucket(prefix: string, profile?: string): Promise<BucketCheck> {
   if (!inTauri()) throw new Error('checking a bucket without a core is only in the app');
-  return invoke<BucketCheck>('check_bucket', { prefix });
+  return invoke<BucketCheck>('check_bucket', { prefix, profile: profile?.trim() || null });
+}
+
+/** Decisions C1: the profile names in this machine's `~/.aws/config` and `~/.aws/credentials`
+ *  (names only; the shell reads nothing else). `default` first when there is one. */
+export async function awsProfiles(): Promise<string[]> {
+  return inTauri() ? invoke<string[]>('aws_profiles') : [];
+}
+
+/** Decisions C1: the profile this window's project uses; null means the AWS default. */
+export async function projectProfile(): Promise<string | null> {
+  return inTauri() ? invoke<string | null>('project_profile') : null;
+}
+
+/** Decisions C1: set (or, with null, clear) this project's profile; the shell remembers it
+ *  per machine and starts the core again with it, which arrives as a `restarted` event. */
+export async function setProjectProfile(profile: string | null): Promise<void> {
+  if (!inTauri()) throw new Error('a project\'s profile is kept by the app');
+  return invoke<void>('set_project_profile', { profile: profile?.trim() || null });
 }
 
 /** Decisions P1: where a new project goes unless another folder is chosen. */
@@ -95,10 +114,11 @@ export async function defaultParent(): Promise<string | null> {
 }
 
 /** Decisions P1: `parent/name` made and opened as a project (`lakelet init`, with
- *  `--warehouse` for a bucket). Resolves to the folder's path. */
-export async function newProject(parent: string, name: string, warehouse?: string): Promise<string> {
+ *  `--warehouse` for a bucket, and the AWS profile it should use, C1). Resolves to the
+ *  folder's path. */
+export async function newProject(parent: string, name: string, warehouse?: string, profile?: string): Promise<string> {
   if (!inTauri()) throw new Error('creating a project is only in the app');
-  return invoke<string>('new_project', { parent, name, warehouse: warehouse?.trim() || null });
+  return invoke<string>('new_project', { parent, name, warehouse: warehouse?.trim() || null, profile: profile?.trim() || null });
 }
 
 /** A11: after two exits in a minute the shell stops restarting; this asks it to try again. */
@@ -126,8 +146,13 @@ export async function onDrop(handler: (e: { kind: 'over' | 'leave' | 'drop'; pat
   });
 }
 
+/** The shell's `sidecar` events for this window only. The shell emits them to a window
+ *  by label; the global `listen` of `@tauri-apps/api/event` hears events sent to any
+ *  target, so a second window's "ready" reached the first and put the second project's
+ *  session, health and tables into it (Hants, 2026-09-21: a window titled lakelet-demo
+ *  showing lakelet-second). Listening on the current webview window keeps them apart. */
 export async function onSidecarEvent(handler: (e: SidecarEvent) => void): Promise<() => void> {
   if (!inTauri()) return () => {};
-  const { listen } = await import('@tauri-apps/api/event');
-  return listen<SidecarEvent>('sidecar', (e) => handler(e.payload));
+  const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+  return getCurrentWebviewWindow().listen<SidecarEvent>('sidecar', (e) => handler(e.payload));
 }

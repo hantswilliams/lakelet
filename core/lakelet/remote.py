@@ -41,18 +41,22 @@ class S3Settings:
 
     def describe(self) -> dict[str, Any]:
         """What ``/api/health`` and the app say about credentials (real-data brief R4):
-        whether keys are in the environment, a named profile the default chain will use,
-        or nothing, plus the region and any self-hosted endpoint. Never the keys."""
+        whether keys are in the environment, the profile the default chain will use (a
+        named one, or ``default`` when AWS's own files have a ``[default]`` section;
+        decision C1), or nothing, plus the region and any self-hosted endpoint. Never
+        the keys."""
+        profile = os.environ.get("AWS_PROFILE") or None
         if self.access_key and self.secret_key:
             source = "environment"
-        elif os.environ.get("AWS_PROFILE"):
+        elif profile or _has_default_profile():
             source = "profile"
+            profile = profile or "default"
         else:
             source = "none"
         return {
             "configured": source != "none",
             "source": source,
-            "profile": os.environ.get("AWS_PROFILE") or None,
+            "profile": profile,
             "region": self.region,
             "endpoint": self.endpoint,
         }
@@ -141,6 +145,24 @@ class S3Settings:
                 f"USE_SSL {'true' if url.scheme == 'https' else 'false'}",
             ]
         return f"CREATE OR REPLACE SECRET {name} (" + ", ".join(parts) + ")"
+
+
+def _has_default_profile() -> bool:
+    """Whether AWS's own files name a ``[default]`` profile the credential chain will
+    pick up with nothing in the environment: ``~/.aws/credentials`` (or the file
+    ``AWS_SHARED_CREDENTIALS_FILE`` points at) or ``~/.aws/config``. Only the section
+    name is looked for; the values are never read."""
+    home = Path.home() / ".aws"
+    files = [Path(os.environ.get("AWS_SHARED_CREDENTIALS_FILE") or home / "credentials")]
+    files.append(Path(os.environ.get("AWS_CONFIG_FILE") or home / "config"))
+    for file in files:
+        try:
+            lines = file.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        if any(line.strip() == "[default]" for line in lines):
+            return True
+    return False
 
 
 @dataclass

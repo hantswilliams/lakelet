@@ -26,10 +26,13 @@ def s3():
 
 
 @pytest.fixture
-def env(s3, monkeypatch):
+def env(s3, monkeypatch, tmp_path):
     for k, v in s3.environment().items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("AWS_PROFILE", raising=False)
+    # this machine's own ~/.aws must not decide what "no credentials" means (C1)
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(tmp_path / "aws" / "credentials"))
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "aws" / "config"))
     return s3
 
 
@@ -65,6 +68,34 @@ def test_no_credentials_is_said_in_the_sentence(env, monkeypatch) -> None:
     r = check_prefix(env.uri(env.key("check-nokeys")))
     assert r.credentials["source"] == "none" and r.credentials["configured"] is False
     assert "no credentials in the environment" in r.sentence()
+
+
+def test_a_profile_is_reported_when_the_chain_would_use_one(env, monkeypatch, tmp_path) -> None:
+    """Decision C1: with no keys in the environment, `describe()` says `profile` for a named
+    AWS_PROFILE, and `default` when AWS's own files have a [default] section; the CLI's
+    --profile names one the way AWS_PROFILE does. The values in the file are never read."""
+    from lakelet.remote import S3Settings
+
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID")
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY")
+    assert S3Settings.from_env().describe()["source"] == "none"
+
+    creds = tmp_path / "aws" / "credentials"
+    creds.parent.mkdir()
+    creds.write_text("[work]\naws_access_key_id = not-read\n")
+    assert S3Settings.from_env().describe()["source"] == "none"  # a named one is not the default
+    creds.write_text("[work]\naws_access_key_id = x\n\n[default]\naws_access_key_id = y\n")
+    d = S3Settings.from_env().describe()
+    assert d == {**d, "configured": True, "source": "profile", "profile": "default"}
+
+    monkeypatch.setenv("AWS_PROFILE", "work")
+    d = S3Settings.from_env().describe()
+    assert d["source"] == "profile" and d["profile"] == "work"
+    monkeypatch.delenv("AWS_PROFILE")
+
+    args = ["--profile", "client-b", "bucket", "check", "s3://bucket", "--json"]
+    r = CliRunner().invoke(app, args)
+    assert json.loads(r.output)["credentials"]["profile"] == "client-b"  # the env fixture undoes it
 
 
 def test_the_cli_and_the_route(env, tmp_path) -> None:

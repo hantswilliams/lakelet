@@ -25,6 +25,7 @@ Nothing, except what you ask for:
 
 - `lakelet init` downloads DuckDB's Iceberg, httpfs, excel and aws extensions from `extensions.duckdb.org` once, and says so. Installers (session 10) bundle them, after which not even that.
 - `lakelet tables attach`, `discover` and `refresh` read the bucket you name, with the credentials in your environment or none for a public bucket. Nothing is written to a bucket unless you asked for `--metadata-in-bucket`.
+- Lakelet holds no AWS key. A project names an AWS profile; the app reads the profile *names* from `~/.aws/config` and `~/.aws/credentials` to list them, never the keys, and never writes to those files. The name is kept on this machine (`projects.json` next to the app's recent list), not in the project.
 - `--burst` (not built yet) will send a job to a worker in **your** cloud account, under a cost cap you set, and will say so before it does.
 - `lakelet run` invokes dbt with its usage statistics turned off (`DO_NOT_TRACK=1`), and the profile Lakelet writes for a `dbt` run by hand does the same.
 

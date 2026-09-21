@@ -3,7 +3,7 @@
 // Step 2 gate, the CLI-first rule: the line the app shows is the line the CLI takes.
 
 import { describe, expect, it } from 'vitest';
-import { attachCommand, defaultName, discoverCommand, importCommand, initCommand, isRemote, previewCommand, refreshCommand, remoteName, shellArg, sqlCommand, stripComments } from './command';
+import { attachCommand, bucketCheckCommand, defaultName, discoverCommand, importCommand, initCommand, isRemote, previewCommand, refreshCommand, remoteName, shellArg, sqlCommand, stripComments } from './command';
 
 describe('Copy as command', () => {
   it('builds the exact lakelet import line', () => {
@@ -15,6 +15,11 @@ describe('Copy as command', () => {
     expect(importCommand('/data/2026 exports')).toBe("lakelet import '/data/2026 exports'");
     expect(previewCommand('/data/orders.csv')).toBe('lakelet import /data/orders.csv --preview');
     expect(initCommand('/Users/h/acme')).toBe('lakelet init /Users/h/acme');
+    // C1: the profile goes before the verb, and only when there is a bucket to reach with it
+    expect(initCommand('/Users/h/acme', 's3://acme-lake/analytics', 'acme data')).toBe("lakelet --profile 'acme data' init /Users/h/acme --warehouse s3://acme-lake/analytics");
+    expect(initCommand('/Users/h/acme', undefined, 'acme-data')).toBe('lakelet init /Users/h/acme');
+    expect(bucketCheckCommand('s3://acme-lake/analytics', 'acme-data')).toBe('lakelet --profile acme-data bucket check s3://acme-lake/analytics');
+    expect(bucketCheckCommand('s3://acme-lake/analytics', ' ')).toBe('lakelet bucket check s3://acme-lake/analytics');
   });
 
   it('builds the lakelet sql line on one line, with --run-anyway when Red was overridden', () => {

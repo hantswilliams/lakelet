@@ -10,8 +10,8 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Api, type Health, type TableInfo } from './lib/api';
 import {
-  checkBucket, defaultParent, getSession, inTauri, newProject, onSidecarEvent, openProject, pickFolder, recentProjects, restartSidecar, windowProject,
-  type RecentProject, type Session,
+  awsProfiles, checkBucket, defaultParent, getSession, inTauri, newProject, onSidecarEvent, openProject, pickFolder, projectProfile, recentProjects, restartSidecar,
+  setProjectProfile, windowProject, type RecentProject, type Session,
 } from './lib/session';
 import { Explorer } from './components/Explorer';
 import { NewProject } from './components/NewProject';
@@ -64,6 +64,17 @@ export default function App() {
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [error, setError] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // C1: the Bucket row in settings is the shell's — the profiles on this machine and the
+  // project's choice — so it exists only inside the app.
+  const [bucketSetting, setBucketSetting] = useState<{ profiles: string[]; profile: string | null }>();
+  useEffect(() => {
+    if (!settingsOpen || !inTauri()) return;
+    Promise.all([awsProfiles(), projectProfile()]).then(([profiles, profile]) => setBucketSetting({ profiles, profile })).catch(() => setBucketSetting(undefined));
+  }, [settingsOpen]);
+  const bucket = bucketSetting && {
+    ...bucketSetting,
+    onProfile: async (profile: string | null) => { await setProjectProfile(profile); setBucketSetting((b) => b && { ...b, profile }); },
+  };
   const api = useMemo(() => (session ? new Api(session) : undefined), [session]);
 
   async function load(s: Session) {
@@ -150,19 +161,21 @@ export default function App() {
   }
 
   // P1: New project… — the dialog, its default parent from the shell, the bucket check
-  // through this window's core when it has one (the welcome screen asks the shell), and
-  // the folder made and opened here or in a new window.
+  // through the shell with the chosen AWS profile (C1; a browser asks its core), and the
+  // folder made and opened here or in a new window.
   const [newOpen, setNewOpen] = useState(false);
   const [parent, setParent] = useState<string | null>();
+  const [profiles, setProfiles] = useState<string[]>();
   useEffect(() => {
     if (!newOpen || parent !== undefined) return;
     defaultParent().then(setParent).catch(() => setParent(null));
+    if (inTauri()) awsProfiles().then(setProfiles).catch(() => setProfiles([]));
   }, [newOpen, parent]);
-  async function create(parentFolder: string, name: string, warehouse?: string) {
+  async function create(parentFolder: string, name: string, warehouse?: string, profile?: string) {
     setOpenError(undefined);
     setBusy(`making ${name}…`);
     try {
-      await newProject(parentFolder, name, warehouse);
+      await newProject(parentFolder, name, warehouse, profile);
       setNewOpen(false);
       await refreshProject();
     } finally {
@@ -303,7 +316,7 @@ export default function App() {
         // panel in the column would be cut off at the bottom
         <div className="modal" onMouseDown={(e) => { if (e.target === e.currentTarget) setSettingsOpen(false); }}>
           {api && status !== 'down' ? (
-            <SettingsPanel api={api} onClose={() => setSettingsOpen(false)} />
+            <SettingsPanel api={api} bucket={bucket} onClose={() => setSettingsOpen(false)} />
           ) : (
             <section className="settings" data-testid="settings"><header><h2>Settings</h2><button type="button" className="quiet" onClick={() => setSettingsOpen(false)}>Close (Esc)</button></header><p className="muted">The core is not running; settings are read and written through it. Restart it first.</p></section>
           )}
@@ -314,8 +327,9 @@ export default function App() {
           canCreate={inTauri()}
           defaultParent={parent}
           aws={health?.aws}
+          profiles={profiles}
           onChooseParent={pickFolder}
-          check={(prefix) => (api && status !== 'down' ? api.checkBucket(prefix) : checkBucket(prefix))}
+          check={(prefix, profile) => (inTauri() ? checkBucket(prefix, profile) : api && status !== 'down' ? api.checkBucket(prefix) : checkBucket(prefix))}
           onCreate={create}
           onClose={() => setNewOpen(false)}
         />

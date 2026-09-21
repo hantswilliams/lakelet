@@ -3,7 +3,9 @@
 // Settings (app brief, session 6 scope): only what the core reads from lakelet.toml, the
 // engine's memory limit and threads, plus the calibration-sharing toggle with nothing behind
 // it yet. Each save is `lakelet config set`, shown beside it. The engine reads these at
-// start; the app gives each window its own memory share regardless (A8).
+// start; the app gives each window its own memory share regardless (A8). The Bucket row
+// (decisions C1) is the shell's, not the file's: the AWS profile this project's bucket is
+// reached with, on this machine — a name, never a key.
 
 import { useEffect, useState } from 'react';
 import { Api, type SettingKey, type Settings } from '../lib/api';
@@ -20,11 +22,20 @@ const FIELDS: Array<{ key: SettingKey; label: string; help: string; kind: 'text'
   { key: 'git.auto_commit', label: 'Record a version on every save and run', help: 'Off means a run records no version. Saving a question is always a version, whatever this says.', kind: 'bool' },
 ];
 
-export function SettingsPanel({ api, onClose }: { api: Api; onClose: () => void }) {
+/** The Bucket row (C1), inside the app only: the profiles on this machine, the project's, and
+ *  the change, after which the shell starts the core again with it. */
+export interface BucketSetting {
+  profiles: string[];
+  profile: string | null;
+  onProfile: (profile: string | null) => Promise<void>;
+}
+
+export function SettingsPanel({ api, bucket, onClose }: { api: Api; bucket?: BucketSetting; onClose: () => void }) {
   const [settings, setSettings] = useState<Settings>();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>();
   const [saved, setSaved] = useState<string>();
+  const [changing, setChanging] = useState(false);
 
   useEffect(() => {
     api.settings().then((s) => {
@@ -94,6 +105,32 @@ export function SettingsPanel({ api, onClose }: { api: Api; onClose: () => void 
           </div>
         );
       })}
+      {bucket && (
+        <div className="setting" data-testid="setting-bucket">
+          <label>
+            <b>Bucket</b>
+            <span className="muted">The AWS profile this project's bucket is reached with, on this machine. The keys stay in AWS's own files; changing it starts the core again. In a terminal it is <code>lakelet --profile {bucket.profile ?? '<name>'} …</code>, or <code>AWS_PROFILE</code>.</span>
+          </label>
+          <div className="control">
+            <select
+              value={bucket.profile ?? ''}
+              aria-label="Bucket profile"
+              data-testid="input-bucket-profile"
+              disabled={changing}
+              onChange={(e) => {
+                const v = e.target.value || null;
+                setError(undefined);
+                setChanging(true);
+                bucket.onProfile(v).catch((err: unknown) => setError(message(err))).finally(() => setChanging(false));
+              }}
+            >
+              <option value="">the AWS default</option>
+              {bucket.profiles.filter((p) => p !== 'default').map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            {changing && <span className="muted">starting the core again…</span>}
+          </div>
+        </div>
+      )}
       <div className="keys">
         <h3>Keys</h3>
         <dl>

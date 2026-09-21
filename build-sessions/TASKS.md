@@ -192,6 +192,8 @@ Closed:
 
 ## Decisions waiting on Hants
 
+**`decisions-for-review_092126.md` C1–C3** (2026-09-21 evening): where a bucket's credentials live. Hants agreed in chat ("I like that idea — the AWS profile name per project"); **C1 and C2 built** the same evening (log §14): the shell's `projects.json` and `aws_profiles`, `AWS_PROFILE` on the sidecar, `describe()` saying `profile`/`default`, `lakelet --profile`, the picker in New project… and Settings → Bucket, the three sentences, `/docs/remote` Credentials, `PRIVACY.md`. Gates: cargo 13, `test_a_profile_is_reported_when_the_chain_would_use_one`, `NewProject.test.tsx`, `SettingsPanel.test.tsx`. **C3** (the keychain deferred to the ship brief) is a note, not a build. All three ticked Agree by Hants 2026-09-21; C3's line is in `ship-v0-plan.md` §7. Mac run: `tauri dev`, New project… → In a bucket → Profile.
+
 **`decisions-for-review_092126.md` Q1** agreed 2026-09-21 and **built** the same day: a question card's **See the answer** (Technical: **Rows**) — the workspace with `select * from <question>` run; a question never refreshed is refreshed first. `Models.test.tsx`, `save-question.spec`, `/docs/app`. With it, a core fix: a client gone before the first byte left the engine lock held (`test_a_client_gone_before_the_first_byte_frees_the_lock`).
 
 **`trust-round-plan.md` T1 to T8**: decided 2026-09-15, all agreed, built the same day (above).

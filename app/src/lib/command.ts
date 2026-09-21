@@ -67,9 +67,14 @@ export const expireCommand = (name: string): string => `lakelet tables expire ${
 export const publishCommand = (name: string, prefix: string, opts: { dryRun?: boolean; yes?: boolean } = {}): string =>
   `lakelet tables publish ${shellArg(name)} ${shellArg(prefix)}${opts.dryRun ? ' --dry-run' : ''}${opts.yes ? ' --yes' : ''}`;
 
-export const initCommand = (folder: string, warehouse?: string): string => `lakelet init ${shellArg(folder)}${warehouse ? ` --warehouse ${shellArg(warehouse)}` : ''}`;
+/** `lakelet --profile <name>` before the verb (decisions C1): the AWS profile a terminal would name. */
+const withProfile = (profile?: string): string => (profile?.trim() ? `lakelet --profile ${shellArg(profile.trim())}` : 'lakelet');
+export const initCommand = (folder: string, warehouse?: string, profile?: string): string =>
+  `${withProfile(warehouse ? profile : undefined)} init ${shellArg(folder)}${warehouse ? ` --warehouse ${shellArg(warehouse)}` : ''}`;
 /** `lakelet bucket check` (decisions P1): the prefix tried the way a project would use it. */
-export const bucketCheckCommand = (prefix: string): string => `lakelet bucket check ${shellArg(prefix)}`;
+export const bucketCheckCommand = (prefix: string, profile?: string): string => `${withProfile(profile)} bucket check ${shellArg(prefix)}`;
+/** What makes `~/.aws/credentials` on a machine that has none (decisions C2). */
+export const AWS_CONFIGURE = 'aws configure';
 export const relocateCommand = (): string => 'lakelet relocate';
 /** The lineage lines' command (versions brief G8). */
 export const lineageCommand = (name: string): string => `lakelet lineage ${shellArg(name)}`;

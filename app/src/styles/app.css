@@ -115,6 +115,9 @@ button.link.mono{font-family:var(--mono)}
 .new-project .bucket>button{justify-self:start}
 .new-project .bucket input{font:inherit;font-family:var(--mono);padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 .new-project .bucket .muted{font-size:12.5px}
+.new-project .bucket .profile{display:flex;align-items:center;gap:8px;font-size:13px}
+.new-project .bucket select,.settings .control select{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.new-project .bucket .no-aws{display:grid;gap:6px}
 .new-project .bucket code,.new-project .field code:not(.mono),.new-project label code{font:500 12px var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 .new-project footer.actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .new-project .hint{font-size:12.5px;margin:0}

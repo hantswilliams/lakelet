@@ -41,6 +41,10 @@ pub struct SidecarConfig {
     /// so the sidecar must allow it (`LAKELET_DEV_ORIGIN`); a release build passes nothing.
     pub dev_origin: Option<String>,
     pub ready_timeout: Duration,
+    /// The AWS profile this project uses (decisions C1): `AWS_PROFILE` on the sidecar, so
+    /// the core's credential chain reads that section of `~/.aws/credentials` (or the SSO
+    /// cache); `None` leaves the environment as it is. The shell never holds a key.
+    pub profile: Option<String>,
 }
 
 impl SidecarConfig {
@@ -51,6 +55,7 @@ impl SidecarConfig {
             memory_limit: None,
             dev_origin: if cfg!(debug_assertions) { Some(DEV_ORIGIN.to_string()) } else { None },
             ready_timeout: Duration::from_secs(20),
+            profile: None,
         }
     }
 }
@@ -192,6 +197,9 @@ fn spawn(config: &SidecarConfig) -> Result<(Child, Session, mpsc::Receiver<Strin
     if let Some(origin) = &config.dev_origin {
         command.env("LAKELET_DEV_ORIGIN", origin);
     }
+    if let Some(profile) = &config.profile {
+        command.env("AWS_PROFILE", profile);
+    }
     let mut child = command.spawn().map_err(SidecarError::Spawn)?;
 
     // stderr is read on a thread for the life of the process; the supervisor keeps a tail.
@@ -303,6 +311,7 @@ pub(crate) mod tests {
             memory_limit: Some("1GB".into()),
             dev_origin: Some("http://localhost:5173".into()),
             ready_timeout: Duration::from_secs(10),
+            profile: None,
         }
     }
 

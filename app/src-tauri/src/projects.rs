@@ -95,17 +95,17 @@ pub struct BucketCheck {
     pub credentials: serde_json::Value,
 }
 
-/// Run the core's check for a bucket prefix before a project is made there. The core's
-/// exit code says pass or fail; its JSON carries the words. A core that cannot run, or
-/// answers with no JSON, is an error of its own.
-pub fn check_bucket(executable: &OsString, prefix: &str) -> Result<BucketCheck, String> {
-    let output = Command::new(executable)
-        .arg("bucket")
-        .arg("check")
-        .arg(prefix.trim())
-        .arg("--json")
-        .output()
-        .map_err(|e| format!("could not run lakelet bucket check: {e}"))?;
+/// Run the core's check for a bucket prefix before a project is made there, with the
+/// AWS profile the project would use (decisions C1). The core's exit code says pass or
+/// fail; its JSON carries the words. A core that cannot run, or answers with no JSON, is
+/// an error of its own.
+pub fn check_bucket(executable: &OsString, prefix: &str, profile: Option<&str>) -> Result<BucketCheck, String> {
+    let mut command = Command::new(executable);
+    command.arg("bucket").arg("check").arg(prefix.trim()).arg("--json");
+    if let Some(profile) = profile {
+        command.env("AWS_PROFILE", profile);
+    }
+    let output = command.output().map_err(|e| format!("could not run lakelet bucket check: {e}"))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let line = stdout.lines().find(|l| l.trim_start().starts_with('{'));
     match line {
@@ -144,6 +144,87 @@ pub fn new_folder(parent: &Path, name: &str) -> Result<PathBuf, String> {
         std::fs::create_dir(&folder).map_err(|e| format!("could not make {}: {e}", folder.display()))?;
     }
     Ok(folder)
+}
+
+/// The profile names in AWS's own files (decisions C1): `[profile name]` and `[default]`
+/// in `~/.aws/config`, `[name]` in `~/.aws/credentials`, as the SDK reads them, with
+/// `default` first. Names only; the keys under them are never read.
+pub fn aws_profiles(home: &Path) -> Vec<String> {
+    let aws = home.join(".aws");
+    let mut names: Vec<String> = Vec::new();
+    let mut add = |name: &str| {
+        let name = name.trim();
+        if !name.is_empty() && !names.iter().any(|n| n == name) {
+            names.push(name.to_string());
+        }
+    };
+    for (file, prefixed) in [("config", true), ("credentials", false)] {
+        let Ok(text) = std::fs::read_to_string(aws.join(file)) else { continue };
+        for line in text.lines() {
+            let line = line.trim();
+            if let Some(inner) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+                let inner = inner.trim();
+                match (prefixed, inner.strip_prefix("profile ")) {
+                    (true, Some(name)) => add(name),
+                    (true, None) if inner == "default" => add(inner),
+                    (true, None) => {} // `[sso-session x]`, `[services x]`: not profiles
+                    (false, _) => add(inner),
+                }
+            }
+        }
+    }
+    names.sort_by(|a, b| (a != "default").cmp(&(b != "default")).then_with(|| a.cmp(b)));
+    names
+}
+
+/// Which AWS profile each project uses on this machine (decisions C1): a JSON file next
+/// to `recent.json`, `{"<canonical path>": {"profile": "name"}}`. A per-person, per-machine
+/// fact, so not in `lakelet.toml` (shared, in git) and not in the project's `.lakelet/`.
+pub struct ProjectSettings {
+    file: PathBuf,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct ProjectSetting {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+}
+
+impl ProjectSettings {
+    pub fn at(file: impl Into<PathBuf>) -> Self {
+        Self { file: file.into() }
+    }
+
+    fn all(&self) -> HashMap<String, ProjectSetting> {
+        std::fs::read_to_string(&self.file)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn profile_of(&self, project: &Path) -> Option<String> {
+        self.all().get(&project.display().to_string())?.profile.clone()
+    }
+
+    /// Remember the project's profile; `None` forgets it (the AWS default applies).
+    pub fn set_profile(&self, project: &Path, profile: Option<&str>) -> std::io::Result<()> {
+        let mut all = self.all();
+        let key = project.display().to_string();
+        let profile = profile.map(str::trim).filter(|p| !p.is_empty()).map(str::to_string);
+        match profile {
+            Some(p) => all.entry(key).or_default().profile = Some(p),
+            None => {
+                if let Some(setting) = all.get_mut(&key) {
+                    setting.profile = None;
+                }
+                all.retain(|_, s| *s != ProjectSetting::default());
+            }
+        }
+        if let Some(parent) = self.file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&self.file, serde_json::to_string_pretty(&all)?)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -246,7 +327,7 @@ impl OpenProjects {
     /// Start the project's sidecar for this window, blocking until it is ready or has
     /// failed. The memory share is 60% of RAM halved for every other window with a sidecar
     /// at this moment (A8); windows already open keep theirs.
-    pub fn open(&self, label: &str, prepared: Prepared) -> Result<Session, String> {
+    pub fn open(&self, label: &str, prepared: Prepared, profile: Option<String>) -> Result<Session, String> {
         let limit = {
             let mut windows = self.windows.lock().unwrap();
             let others = windows
@@ -265,6 +346,7 @@ impl OpenProjects {
             memory_limit: Some(limit),
             dev_origin: self.dev_origin.clone(),
             ready_timeout: self.ready_timeout,
+            profile,
         };
         let started = Supervisor::start(config);
         let mut windows = self.windows.lock().unwrap();
@@ -438,22 +520,26 @@ mod tests {
     fn the_bucket_check_carries_the_core_s_verdict_and_words() {
         let dir = temp_dir("bucket-check");
         let exe = fake_executable(&dir, 60);
-        let ok = check_bucket(&exe, " s3://lakelet-test/acme ").expect("the check runs");
+        let ok = check_bucket(&exe, " s3://lakelet-test/acme ", None).expect("the check runs");
         assert!(ok.ok && ok.read && ok.write && ok.error.is_none(), "{ok:?}");
         assert_eq!(ok.prefix, "s3://lakelet-test/acme");
         assert!(ok.sentence.contains("is writable"), "{ok:?}");
         assert_eq!(ok.credentials["source"], "environment");
-        let denied = check_bucket(&exe, "s3://denied-bucket/acme").unwrap();
+        let denied = check_bucket(&exe, "s3://denied-bucket/acme", None).unwrap();
         assert!(!denied.ok && denied.read && !denied.write, "{denied:?}");
         assert!(denied.error.as_deref().unwrap_or("").contains("ACCESS_DENIED"), "{denied:?}");
-        let nokeys = check_bucket(&exe, "s3://nokeys-bucket/acme").unwrap();
+        let nokeys = check_bucket(&exe, "s3://nokeys-bucket/acme", None).unwrap();
         assert!(!nokeys.ok, "{nokeys:?}");
         assert_eq!(nokeys.credentials["source"], "none");
         assert!(nokeys.sentence.contains("no credentials"), "{nokeys:?}");
-        let bad = check_bucket(&exe, "/tmp/elsewhere").unwrap();
+        let bad = check_bucket(&exe, "/tmp/elsewhere", None).unwrap();
         assert!(!bad.ok && bad.error.as_deref().unwrap_or("").contains("s3://bucket/prefix"), "{bad:?}");
         let missing = OsString::from(dir.join("no-such-lakelet"));
-        assert!(check_bucket(&missing, "s3://x/y").unwrap_err().contains("could not run"));
+        assert!(check_bucket(&missing, "s3://x/y", None).unwrap_err().contains("could not run"));
+        // C1: the profile goes to the check as AWS_PROFILE, and the fake reports it
+        let with = check_bucket(&exe, "s3://lakelet-test/acme", Some("acme-data")).unwrap();
+        assert_eq!(with.credentials["source"], "profile");
+        assert_eq!(with.credentials["profile"], "acme-data");
     }
 
     #[test]
@@ -478,6 +564,34 @@ mod tests {
     }
 
     #[test]
+    fn the_profile_names_come_from_aws_s_own_files_and_nothing_else_is_read() {
+        let home = temp_dir("aws-profiles");
+        assert!(aws_profiles(&home).is_empty(), "no ~/.aws: no profiles");
+        std::fs::create_dir_all(home.join(".aws")).unwrap();
+        std::fs::write(
+            home.join(".aws").join("config"),
+            "[default]\nregion = us-east-1\n\n[profile work]\nsso_session = corp\n\n[sso-session corp]\nsso_start_url = x\n\n[profile client-b]\nregion = eu-west-1\n",
+        )
+        .unwrap();
+        std::fs::write(home.join(".aws").join("credentials"), "[personal]\naws_access_key_id = AKIA\naws_secret_access_key = s\n\n[work]\naws_access_key_id = AKIB\n").unwrap();
+        assert_eq!(aws_profiles(&home), vec!["default", "client-b", "personal", "work"], "default first, then sorted, each once, sso-session left out");
+    }
+
+    #[test]
+    fn a_project_s_profile_is_remembered_per_machine_and_forgotten_on_none() {
+        let dir = temp_dir("project-settings");
+        let settings = ProjectSettings::at(dir.join("data").join("projects.json"));
+        let acme = dir.join("acme");
+        assert_eq!(settings.profile_of(&acme), None);
+        settings.set_profile(&acme, Some(" work ")).unwrap();
+        assert_eq!(settings.profile_of(&acme), Some("work".to_string()));
+        assert_eq!(settings.profile_of(&dir.join("other")), None);
+        settings.set_profile(&acme, Some("")).unwrap();
+        assert_eq!(settings.profile_of(&acme), None);
+        assert_eq!(std::fs::read_to_string(dir.join("data").join("projects.json")).unwrap().trim(), "{}", "an empty setting leaves no entry");
+    }
+
+    #[test]
     fn two_windows_get_two_sidecars_with_halved_limits_and_closing_kills() {
         let dir = temp_dir("windows");
         let exe = fake_executable(&dir, 60);
@@ -486,15 +600,18 @@ mod tests {
         let a = prepare(&exe, &{ let p = dir.join("a"); std::fs::create_dir_all(&p).unwrap(); p }, None).unwrap();
         let b = prepare(&exe, &{ let p = dir.join("b"); std::fs::create_dir_all(&p).unwrap(); p }, None).unwrap();
 
-        let sa = open.open("project-1", a.clone()).expect("first sidecar starts");
+        let sa = open.open("project-1", a.clone(), None).expect("first sidecar starts");
         assert!(sa.ready_ms > 0 && sa.ready_ms < 10_000, "spawn to ready is measured: {}", sa.ready_ms);
         assert!(sa.initialised.as_deref().unwrap_or("").contains("lakelet.toml"), "the init output reaches the window");
-        let sb = open.open("project-2", b.clone()).expect("second sidecar starts");
+        let sb = open.open("project-2", b.clone(), Some("acme-data".to_string())).expect("second sidecar starts");
         assert_ne!(sa.pid, sb.pid);
         let args_a = std::fs::read_to_string(a.project.join(".lakelet").join("fake-args.txt")).unwrap();
         let args_b = std::fs::read_to_string(b.project.join(".lakelet").join("fake-args.txt")).unwrap();
         assert!(args_a.contains("--memory-limit 6144MiB"), "{args_a}");
         assert!(args_b.contains("--memory-limit 3072MiB"), "halved for the second window: {args_b}");
+        // C1: the project's profile reaches the sidecar as AWS_PROFILE; none means none
+        assert!(args_b.contains("env AWS_PROFILE=acme-data"), "{args_b}");
+        assert!(!args_a.contains("AWS_PROFILE"), "{args_a}");
 
         assert_eq!(open.window_for(&b.project), Some("project-2".to_string()));
         assert_eq!(open.project_of("project-1"), Some(a.project.clone()));

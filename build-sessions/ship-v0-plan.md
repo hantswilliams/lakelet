@@ -202,6 +202,7 @@ Each step ends with a test that stays in the suite, or a measurement recorded in
 - **An Intel Mac.** Whether a free Intel runner is offered when the workflow is written; without one, Intel is "built on request" in `/docs/install`.
 - **The PyPI name and the trademark** (`TASKS.md`); the package name falls back to `lakelet-cli` without the command changing.
 - **The frozen sidecar and `ready_ms`.** From a venv it is 871 ms cold on the 64 GB Mac; a frozen interpreter imports from a flat directory, which is usually no slower, but the number is the point of step 0's gate.
+- **Keys for people without the AWS CLI** (`decisions-for-review_092126.md` C3, agreed 2026-09-21). The installed app reaches a private bucket through an AWS profile on the machine (C1), which presumes `aws configure` or `aws sso login` has been run once. If the first outsiders say that was a wall, the candidate is O3 of that file: the shell stores a key pair in the OS keychain (macOS Keychain, Linux Secret Service; the `keyring` crate) and injects it into the sidecar's environment at start; the core stays environment-only and never reads the keychain, so the audit and privacy story do not change. Not built until they say so.
 
 ---
 

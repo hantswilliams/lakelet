@@ -7,7 +7,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { BucketCheck } from '../lib/session';
-import { NewProject, isProjectName } from './NewProject';
+import { NO_AWS, NewProject, credentialsLine, isProjectName } from './NewProject';
 
 const creds = { configured: true, source: 'environment' as const, profile: null, region: 'us-east-1', endpoint: null };
 const pass = (prefix: string): BucketCheck => ({ prefix, ok: true, read: true, write: true, error: null, sentence: `${prefix} is writable with keys from the environment; one object was written and removed.`, credentials: creds });
@@ -38,7 +38,7 @@ describe('NewProject', () => {
     expect(create.disabled).toBe(false);
     expect(create.textContent).toBe('Create');
     fireEvent.click(create);
-    await waitFor(() => expect(onCreate).toHaveBeenCalledWith('/home/h/Documents', 'acme', undefined));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith('/home/h/Documents', 'acme', undefined, undefined));
   });
 
   it('Choose… changes the parent', async () => {
@@ -62,11 +62,11 @@ describe('NewProject', () => {
     expect(screen.getByTestId('warehouse-error')).toBeTruthy();
     fireEvent.change(screen.getByTestId('warehouse'), { target: { value: ' s3://denied-lake/analytics ' } });
     expect(screen.queryByTestId('warehouse-error')).toBeNull();
-    expect(screen.getByTestId('command').textContent).toContain('lakelet init /home/h/Documents/acme --warehouse s3://denied-lake/analytics');
+    expect(screen.getAllByTestId('command').at(-1)?.textContent).toContain('lakelet init /home/h/Documents/acme --warehouse s3://denied-lake/analytics'); // the last line is the footer's; `aws configure` sits above it (C2)
     expect(create.textContent).toBe('Check and create');
     fireEvent.click(create);
     await waitFor(() => expect(screen.getByTestId('check-result').dataset.ok).toBe('false'));
-    expect(check).toHaveBeenCalledWith('s3://denied-lake/analytics');
+    expect(check).toHaveBeenCalledWith('s3://denied-lake/analytics', undefined);
     expect(screen.getByTestId('check-result').textContent).toContain('ACCESS_DENIED');
     expect(onCreate).not.toHaveBeenCalled();
     // a prefix that passes: the check's sentence, then Create makes the folder with the warehouse
@@ -77,8 +77,57 @@ describe('NewProject', () => {
     expect(screen.queryByTestId('no-credentials')).toBeNull();
     expect(create.textContent).toBe('Create');
     fireEvent.click(create);
-    await waitFor(() => expect(onCreate).toHaveBeenCalledWith('/home/h/Documents', 'acme', 's3://acme-lake/analytics'));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith('/home/h/Documents', 'acme', 's3://acme-lake/analytics', undefined));
     expect(check).toHaveBeenCalledTimes(2); // not checked again on Create
+  });
+
+  it('C2: the line under the prefix is one of three sentences', () => {
+    expect(credentialsLine('acme-data', [], undefined)).toBe('Using profile acme-data.');
+    expect(credentialsLine('', ['default', 'work'], undefined)).toBe('No profile chosen; the AWS default profile will be used.');
+    expect(credentialsLine('', undefined, creds)).toBe('No profile chosen; the AWS default profile will be used.');
+    expect(credentialsLine('', [], undefined)).toBe(NO_AWS);
+    expect(credentialsLine('', undefined, { ...creds, configured: false, source: 'none' })).toBe(NO_AWS);
+    expect(credentialsLine('', undefined, undefined)).toBeUndefined(); // nothing known yet
+  });
+
+  it('C1: the profile picker names the machine\'s profiles, the check and the folder use the choice, and the lines say so', async () => {
+    const check = vi.fn(async (p: string, profile?: string) => ({ ...pass(p), credentials: { ...creds, source: 'profile' as const, profile: profile ?? 'default' } }));
+    const onCreate = vi.fn(async () => {});
+    render(<NewProject {...base} check={check} onCreate={onCreate} profiles={['default', 'client-b', 'work']} />);
+    fireEvent.change(screen.getByTestId('project-name'), { target: { value: 'acme' } });
+    fireEvent.click(screen.getByTestId('where-bucket'));
+    const picker = screen.getByTestId('profile') as HTMLSelectElement;
+    expect([...picker.options].map((o) => o.textContent)).toEqual(['the AWS default', 'client-b', 'work']); // default is the blank choice, not a second entry
+    expect(screen.getByTestId('credentials-line').textContent).toBe('No profile chosen; the AWS default profile will be used.');
+    expect(screen.queryByTestId('no-credentials')).toBeNull();
+    fireEvent.change(picker, { target: { value: 'client-b' } });
+    expect(screen.getByTestId('credentials-line').textContent).toBe('Using profile client-b.');
+    fireEvent.change(screen.getByTestId('warehouse'), { target: { value: 's3://acme-lake/analytics' } });
+    expect(screen.getByText(/lakelet --profile client-b bucket check s3:\/\/acme-lake\/analytics/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('check-bucket'));
+    await waitFor(() => expect(screen.getByTestId('check-result').dataset.ok).toBe('true'));
+    expect(check).toHaveBeenCalledWith('s3://acme-lake/analytics', 'client-b');
+    // another profile: the result was for the other one, so it is checked again on Create
+    fireEvent.change(picker, { target: { value: 'work' } });
+    expect(screen.queryByTestId('check-result')).toBeNull();
+    expect(screen.getByTestId('create-project').textContent).toBe('Check and create');
+    fireEvent.click(screen.getByTestId('create-project'));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith('/home/h/Documents', 'acme', 's3://acme-lake/analytics', 'work'));
+    expect(check).toHaveBeenLastCalledWith('s3://acme-lake/analytics', 'work');
+    expect(screen.getAllByTestId('command').some((c) => c.textContent?.includes("lakelet --profile work init /home/h/Documents/acme --warehouse s3://acme-lake/analytics"))).toBe(true);
+  });
+
+  it('C2: a machine with no AWS files gets the aws configure line to copy, and no picker in a browser', () => {
+    const { unmount } = render(<NewProject {...base} check={async (p) => pass(p)} onCreate={async () => {}} profiles={[]} />);
+    fireEvent.click(screen.getByTestId('where-bucket'));
+    expect(screen.getByTestId('no-credentials').textContent).toContain('run aws configure in a terminal once');
+    expect(screen.getAllByTestId('command').map((c) => c.querySelector('code')?.textContent)).toContain('aws configure');
+    expect((screen.getByTestId('profile') as HTMLSelectElement).options.length).toBe(1);
+    unmount();
+    render(<NewProject {...base} canCreate={false} check={async (p) => pass(p)} onCreate={async () => {}} aws={{ ...creds, configured: false, source: 'none' }} />);
+    fireEvent.click(screen.getByTestId('where-bucket'));
+    expect(screen.queryByTestId('profile')).toBeNull();
+    expect(screen.getByTestId('no-credentials').textContent).toContain(NO_AWS);
   });
 
   it('a check that cannot run, and a create that fails, are lines in the dialog; Esc closes it', async () => {

@@ -19,12 +19,14 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
-use projects::{canonical, prepare, BucketCheck, OpenProjects, RecentProject, RecentProjects};
+use projects::{canonical, prepare, BucketCheck, OpenProjects, ProjectSettings, RecentProject, RecentProjects};
 use supervisor::{Session, DEV_ORIGIN};
 
 pub struct Shell {
     open: OpenProjects,
     recent: RecentProjects,
+    /// Per-machine settings by project (decisions C1): the AWS profile each one uses.
+    settings: ProjectSettings,
     windows_made: AtomicUsize,
 }
 
@@ -84,7 +86,8 @@ fn start_in_window(app: AppHandle, shell: Arc<Shell>, label: String, folder: Pat
             }
         };
         let _ = shell.recent.remember(&prepared.project);
-        match shell.open.open(&label, prepared) {
+        let profile = shell.settings.profile_of(&prepared.project);
+        match shell.open.open(&label, prepared, profile) {
             Ok(session) => {
                 let _ = app.emit_to(&label, "sidecar", supervisor::SidecarEvent::Ready { session });
             }
@@ -172,13 +175,38 @@ fn restart_sidecar(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<S
 
 /// Decisions P1: the New project dialog's check of a bucket before the folder is made,
 /// `lakelet bucket check <prefix> --json` on the shell's executable (a window without a
-/// project has no core to ask).
+/// project has no core to ask), with the profile the project would use (C1).
 #[tauri::command]
-async fn check_bucket(shell: State<'_, Arc<Shell>>, prefix: String) -> Result<BucketCheck, String> {
+async fn check_bucket(shell: State<'_, Arc<Shell>>, prefix: String, profile: Option<String>) -> Result<BucketCheck, String> {
     let executable = shell.open.executable.clone();
-    tauri::async_runtime::spawn_blocking(move || projects::check_bucket(&executable, &prefix))
+    let profile = profile.map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
+    tauri::async_runtime::spawn_blocking(move || projects::check_bucket(&executable, &prefix, profile.as_deref()))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// Decisions C1: the profile names in this machine's `~/.aws/config` and `~/.aws/credentials`.
+#[tauri::command]
+fn aws_profiles(app: AppHandle) -> Vec<String> {
+    app.path().home_dir().map(|home| projects::aws_profiles(&home)).unwrap_or_default()
+}
+
+/// Decisions C1: the profile this window's project uses, or none (the AWS default).
+#[tauri::command]
+fn project_profile(window: tauri::Window, shell: State<'_, Arc<Shell>>) -> Option<String> {
+    let project = shell.open.project_of(window.label())?;
+    shell.settings.profile_of(&project)
+}
+
+/// Decisions C1: set (or clear) the profile of this window's project and start its core
+/// again with it, since the environment is read at start.
+#[tauri::command]
+fn set_project_profile(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>, profile: Option<String>) -> Result<(), String> {
+    let label = window.label().to_string();
+    let project = shell.open.project_of(&label).ok_or_else(|| "this window has no project".to_string())?;
+    shell.settings.set_profile(&project, profile.as_deref()).map_err(|e| format!("could not save the profile: {e}"))?;
+    start_in_window(app, shell.inner().clone(), label, project, None);
+    Ok(())
 }
 
 /// Decisions P1: where a new project goes by default — the user's Documents folder, or
@@ -196,12 +224,18 @@ fn default_parent(app: AppHandle) -> Option<String> {
 /// Decisions P1: a new project — `parent/name` made (or an empty folder of that name
 /// taken), then opened, which runs `lakelet init` there, with `--warehouse` for a bucket.
 #[tauri::command]
-async fn new_project(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>, parent: String, name: String, warehouse: Option<String>) -> Result<String, String> {
+async fn new_project(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>, parent: String, name: String, warehouse: Option<String>, profile: Option<String>) -> Result<String, String> {
     let shell = shell.inner().clone();
     let label = window.label().to_string();
     let warehouse = warehouse.map(|w| w.trim().to_string()).filter(|w| !w.is_empty());
+    let profile = profile.map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
     tauri::async_runtime::spawn_blocking(move || {
         let folder = projects::new_folder(Path::new(&parent), &name)?;
+        if let Some(profile) = &profile {
+            // remembered by the canonical path, which is how the window will name it
+            let canonical = canonical(&folder)?;
+            shell.settings.set_profile(&canonical, Some(profile)).map_err(|e| format!("could not save the profile: {e}"))?;
+        }
         open_folder(&app, &shell, &label, folder.clone(), warehouse)?;
         Ok(folder.display().to_string())
     })
@@ -235,10 +269,12 @@ pub fn run() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir().unwrap_or_else(|_| std::env::temp_dir().join("lakelet-app"));
             let recent = RecentProjects::at(data_dir.join("recent.json"));
+            let settings = ProjectSettings::at(data_dir.join("projects.json"));
             let dev_origin = if cfg!(debug_assertions) { Some(DEV_ORIGIN.to_string()) } else { None };
             let shell = Arc::new(Shell {
                 open: OpenProjects::new(supervisor::sidecar_executable(), total_ram(), dev_origin),
                 recent,
+                settings,
                 windows_made: AtomicUsize::new(0),
             });
             app.manage(shell.clone());
@@ -263,7 +299,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![get_session, window_project, recent_projects, pick_folder, pick_files, open_project, restart_sidecar, check_bucket, default_parent, new_project])
+        .invoke_handler(tauri::generate_handler![get_session, window_project, recent_projects, pick_folder, pick_files, open_project, restart_sidecar, check_bucket, default_parent, new_project, aws_profiles, project_profile, set_project_profile])
         .build(tauri::generate_context!())
         .expect("error while building the Lakelet shell")
         .run(|app, event| {

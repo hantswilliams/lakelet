@@ -34,7 +34,8 @@ by `web/scripts/gen-cli-reference.py`. Do not edit by hand; re-run the script af
 CLI change.
 
 Every verb runs against the project in the current folder; `-C <path>` points at another
-one. The gauge line goes to stderr and rows to stdout, so `lakelet sql … > out.csv` keeps
+one, and `--profile <name>` names the AWS profile for a private bucket, as `AWS_PROFILE`
+would ([credentials](/docs/remote#credentials)). The gauge line goes to stderr and rows to stdout, so `lakelet sql … > out.csv` keeps
 the two apart. Exit codes: `0` ran; `1` an error, named on stderr; `2` a Red verdict that
 was refused (add `--run-anyway`); `4` a catalog conflict after retries.
 

@@ -24,8 +24,9 @@ export interface DropZoneProps {
 
 const FORMATS = 'CSV, TSV, Parquet, JSON, JSONL or Excel; a folder becomes one table per file; an s3://bucket/prefix/ of Parquet is attached in place, nothing copied. You see the columns before anything is written.';
 
+/** Decisions C2: what to do on this machine, and never a key typed into the app. */
 export const NO_CREDENTIALS =
-  'The core has no AWS credentials. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (or AWS_PROFILE) in the shell that starts the app and restart the core, or tick "public bucket" for a dataset that needs none.';
+  'No AWS credentials on this machine: choose a profile in Settings, or run aws configure in a terminal once, or tick "public bucket" for a dataset that needs none.';
 
 export function DropZone({ native, over, busy, aws, onPaths, onChoose }: DropZoneProps) {
   const [path, setPath] = useState('');

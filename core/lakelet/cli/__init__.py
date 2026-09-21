@@ -66,10 +66,20 @@ def main(
         Path | None,
         typer.Option("--project", "-C", help="The project folder; the current folder by default."),
     ] = None,
+    profile: Annotated[
+        str | None,
+        typer.Option(
+            "--profile",
+            metavar="<name>",
+            help="The AWS profile for a private bucket, as AWS_PROFILE names it.",
+        ),
+    ] = None,
 ) -> None:
     """Your laptop is the warehouse until it can't be."""
     if project is not None:
         os.environ[PROJECT_ENV] = str(project)
+    if profile is not None:
+        os.environ["AWS_PROFILE"] = profile
 
 
 def _root() -> Path:

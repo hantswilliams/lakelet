@@ -36,8 +36,9 @@ if args[:2] == ["bucket", "check"]:
     # decisions P1: the core's check, answered by the prefix's name — a bucket called
     # `denied-…` refuses the write, `nokeys-…` has no credentials, anything not s3:// is bad
     prefix = args[2]
-    source = "none" if prefix.startswith("s3://nokeys-") else "environment"
-    creds = {"configured": source != "none", "source": source, "profile": None, "region": "us-east-1", "endpoint": None}
+    profile = os.environ.get("AWS_PROFILE")
+    source = "none" if prefix.startswith("s3://nokeys-") else "profile" if profile else "environment"
+    creds = {"configured": source != "none", "source": source, "profile": profile, "region": "us-east-1", "endpoint": None}
     if not prefix.startswith("s3://") or "/" not in prefix[5:]:
         result = {"prefix": prefix, "credentials": creds, "read": False, "write": False, "error": "a warehouse is an s3://bucket/prefix"}
     elif prefix.startswith("s3://denied-") or source == "none":
@@ -61,6 +62,8 @@ with open(os.path.join(lakelet_dir, "fake-args.txt"), "w", encoding="utf-8") as 
     f.write(" ".join(args))
     if "LAKELET_DEV_ORIGIN" in os.environ:
         f.write(f" env LAKELET_DEV_ORIGIN={os.environ['LAKELET_DEV_ORIGIN']}")
+    if "AWS_PROFILE" in os.environ:
+        f.write(f" env AWS_PROFILE={os.environ['AWS_PROFILE']}")
 
 if lifetime == 0:
     print("fake sidecar refusing to start", file=sys.stderr)

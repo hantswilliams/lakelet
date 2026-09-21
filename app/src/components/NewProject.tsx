@@ -6,15 +6,16 @@
 // credentials the environment offers, and one object written under the prefix and
 // removed, so the first import is not the first thing to fail. The line beside the button
 // is the `lakelet init` it runs. "In this folder" and "in a bucket" are the words: the
-// catalog and the engine are here either way.
+// catalog and the engine are here either way. The bucket's credentials are an AWS profile
+// on this machine (decisions C1): the app stores a name, never a key, and the line under
+// the prefix says which one will be used, or what to do when there is none (C2).
 
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Health } from '../lib/api';
-import { bucketCheckCommand, initCommand } from '../lib/command';
+import { AWS_CONFIGURE, bucketCheckCommand, initCommand } from '../lib/command';
 import type { BucketCheck } from '../lib/session';
 import { isBucketPrefix } from '../screens/Welcome';
 import { Command } from './Command';
-import { NO_CREDENTIALS } from './DropZone';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -25,11 +26,23 @@ export interface NewProjectProps {
   defaultParent?: string | null;
   /** The core's credentials from health, when this window has a core; the line says so early. */
   aws?: Health['aws'];
+  /** The AWS profiles on this machine (C1), from the shell; undefined in a browser, which has no picker. */
+  profiles?: string[];
   onChooseParent: () => Promise<string | null>;
-  check: (prefix: string) => Promise<BucketCheck>;
-  onCreate: (parent: string, name: string, warehouse?: string) => Promise<void>;
+  check: (prefix: string, profile?: string) => Promise<BucketCheck>;
+  onCreate: (parent: string, name: string, warehouse?: string, profile?: string) => Promise<void>;
   onClose: () => void;
 }
+
+/** Decisions C2: the three sentences under the prefix. `undefined` while nothing is known
+ *  (a browser whose core has not answered health yet). */
+export function credentialsLine(profile: string, profiles: string[] | undefined, aws: Health['aws'] | undefined): string | undefined {
+  if (profile) return `Using profile ${profile}.`;
+  if (profiles === undefined && aws === undefined) return undefined;
+  const any = (profiles?.length ?? 0) > 0 || !!aws?.configured;
+  return any ? 'No profile chosen; the AWS default profile will be used.' : NO_AWS;
+}
+export const NO_AWS = 'No AWS credentials on this machine: run aws configure in a terminal once, then check the bucket.';
 
 const joinPath = (parent: string, name: string) => `${parent.replace(/[\\/]+$/, '')}${parent.includes('\\') && !parent.includes('/') ? '\\' : '/'}${name}`;
 
@@ -38,13 +51,15 @@ export const isProjectName = (s: string): boolean => {
   return name.length > 0 && name !== '.' && name !== '..' && !/[\\/]/.test(name);
 };
 
-export function NewProject({ canCreate, defaultParent, aws, onChooseParent, check, onCreate, onClose }: NewProjectProps) {
+export function NewProject({ canCreate, defaultParent, aws, profiles, onChooseParent, check, onCreate, onClose }: NewProjectProps) {
   const [name, setName] = useState('');
   const [parent, setParent] = useState<string>(defaultParent ?? '');
   const [where, setWhere] = useState<'folder' | 'bucket'>('folder');
   const [prefix, setPrefix] = useState('');
+  const [profile, setProfile] = useState(''); // '' is the AWS default
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<BucketCheck>();
+  const [checkedWith, setCheckedWith] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -60,16 +75,19 @@ export function NewProject({ canCreate, defaultParent, aws, onChooseParent, chec
   const prefixOk = isBucketPrefix(trimmed);
   const nameOk = isProjectName(name);
   const folder = parent && nameOk ? joinPath(parent, name.trim()) : '';
-  const noCredentials = bucket && aws !== undefined && !aws.configured;
-  const checkedThis = result && result.prefix === trimmed;
+  const chosen = profile.trim();
+  const line = bucket ? credentialsLine(chosen, profiles, aws) : undefined;
+  // a result is for one prefix and one profile; changing either makes it stale
+  const checkedThis = result && result.prefix === trimmed && checkedWith === chosen;
   const canSubmit = canCreate && !!parent && nameOk && !busy && !checking && (!bucket || prefixOk);
 
   async function runCheck(): Promise<BucketCheck | undefined> {
     setError(undefined);
     setChecking(true);
     try {
-      const r = await check(trimmed);
+      const r = await check(trimmed, chosen || undefined);
       setResult(r);
+      setCheckedWith(chosen);
       return r;
     } catch (e: unknown) {
       setError(message(e));
@@ -89,7 +107,7 @@ export function NewProject({ canCreate, defaultParent, aws, onChooseParent, chec
     }
     setBusy(true);
     try {
-      await onCreate(parent, name.trim(), bucket ? trimmed : undefined);
+      await onCreate(parent, name.trim(), bucket ? trimmed : undefined, bucket && chosen ? chosen : undefined);
     } catch (err: unknown) {
       setError(message(err));
       setBusy(false);
@@ -140,18 +158,31 @@ export function NewProject({ canCreate, defaultParent, aws, onChooseParent, chec
               <input type="text" value={prefix} placeholder="s3://bucket/prefix" spellCheck={false} data-testid="warehouse" onChange={(e) => { setPrefix(e.target.value); setError(undefined); }} />
               <button type="button" className="quiet" onClick={() => void runCheck()} disabled={!prefixOk || checking || busy} data-testid="check-bucket">{checking ? 'checking…' : 'Check the bucket'}</button>
               {trimmed && !prefixOk && <em className="error-line" data-testid="warehouse-error">A warehouse is an <code>s3://bucket/prefix</code>.</em>}
-              {noCredentials && !checkedThis && <em className="muted" data-testid="no-credentials">{NO_CREDENTIALS}</em>}
+              {profiles !== undefined && (
+                <label className="profile">
+                  <span>Profile</span>
+                  <select value={profile} data-testid="profile" disabled={busy || checking} onChange={(e) => { setProfile(e.target.value); setError(undefined); }}>
+                    <option value="">the AWS default</option>
+                    {profiles.filter((p) => p !== 'default').map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </label>
+              )}
+              {line && !checkedThis && (line === NO_AWS ? (
+                <div className="muted no-aws" data-testid="no-credentials"><span>{line}</span><Command line={AWS_CONFIGURE} /></div>
+              ) : (
+                <em className="muted" data-testid="credentials-line">{line}</em>
+              ))}
               {checkedThis && (
                 <em className={result.ok ? 'ok-line' : 'error-line'} data-testid="check-result" data-ok={result.ok ? 'true' : 'false'}>{result.sentence}</em>
               )}
-              <span className="muted">Credentials come from the environment the app was started in; nothing is created in your account. In a terminal the check is <code>{bucketCheckCommand(trimmed || 's3://bucket/prefix')}</code>.</span>
+              <span className="muted">The keys stay in AWS's own files; Lakelet keeps only the profile's name, on this machine. Nothing is created in your account. In a terminal the check is <code>{bucketCheckCommand(trimmed || 's3://bucket/prefix', chosen)}</code>.</span>
             </div>
           )}
         </fieldset>
         {error && <div className="error" data-testid="new-project-error"><pre>{error}</pre></div>}
         <footer className="actions">
           <button type="submit" className="primary" disabled={!canSubmit} data-testid="create-project">{busy ? 'making it…' : bucket && !checkedThis ? 'Check and create' : 'Create'}</button>
-          <Command line={folder ? initCommand(folder, bucket ? trimmed || 's3://bucket/prefix' : undefined) : `lakelet init <folder>${bucket ? ` --warehouse ${trimmed || 's3://bucket/prefix'}` : ''}`} />
+          <Command line={folder ? initCommand(folder, bucket ? trimmed || 's3://bucket/prefix' : undefined, chosen) : `lakelet init <folder>${bucket ? ` --warehouse ${trimmed || 's3://bucket/prefix'}` : ''}`} />
         </footer>
         {!canCreate && <p className="muted hint">In a browser the folder cannot be made; the app does it. The bucket check works here when a core is running.</p>}
       </form>
