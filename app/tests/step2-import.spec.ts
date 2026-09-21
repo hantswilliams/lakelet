@@ -60,10 +60,15 @@ test('a CSV is previewed, imported on a click, and lands in the panel with rows 
 
   await page.getByTestId('import').click();
   await expect(page.getByTestId('imported')).toContainText('Imported orders (3 rows)');
+  // the explorer's entry (U2): rows, where, and the freshness dot with the time on hover;
+  // the size is on the detail
   const row = page.getByTestId('table-orders');
-  await expect(row).toContainText('3');
-  await expect(row).toContainText(/\d+ (B|KB|MB)/);
-  await expect(row).toContainText('just now');
+  await expect(row).toContainText('3 rows');
+  await expect(row).toContainText('local');
+  await expect(page.getByTestId('fresh-orders')).toHaveAttribute('title', 'updated just now');
+  await expect(page.getByTestId('fresh-orders')).toHaveClass(/today/);
+  await row.locator('button.entry').click();
+  await expect(page.getByTestId('detail')).toContainText(/\d+ (B|KB|MB)/);
 });
 
 test('a table that exists offers replace or append, and the line says which', async ({ page }) => {
@@ -102,7 +107,7 @@ test('a folder drop lists three files with their notes and imports one table eac
   await expect(page.getByTestId('imported')).toContainText('customers (2 rows)');
   await expect(page.getByTestId('table-regions')).toContainText('4');
   await expect(page.getByTestId('table-tiny')).toContainText('1');
-  await expect(page.getByTestId('tables').locator('tbody tr')).toHaveCount(4); // orders and the three
+  await expect(page.getByTestId('tables').locator('li')).toHaveCount(4); // orders and the three
 });
 
 test('a path that is not data says so without leaving the screen', async ({ page }) => {

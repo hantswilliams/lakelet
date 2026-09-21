@@ -1,7 +1,8 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
-// Step 0 gate (app brief §4): the window reaches "core ready", shows what health says, and
-// the tables panel is the empty-project state; a table imported through the API appears.
+// Step 0 gate (app brief §4): the window reaches "core ready", the status strip shows what
+// health says, and the explorer is the empty-project state; a table imported through the
+// CLI appears in it.
 
 import { test, expect } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
@@ -30,8 +31,7 @@ test('a table imported through the CLI appears in the panel', async ({ page }) =
   expect(imported.status, imported.stderr).toBe(0);
   await page.goto(pageUrl(s));
   await expect(page.getByRole('status')).toHaveText('core ready');
-  const row = page.getByTestId('tables').locator('tr', { hasText: 'orders' });
-  await expect(row).toContainText('3');
+  await expect(page.getByTestId('table-orders')).toContainText('3 rows'); // the explorer's entry (U2)
 });
 
 test('without a session the window is the welcome screen and says how to get one', async ({ page }) => {

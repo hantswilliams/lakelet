@@ -32,6 +32,27 @@ if args and args[0] == "init":
         print(f"  every table's files go to {warehouse} (the catalog stays in .lakelet/)")
     sys.exit(0)
 
+if args[:2] == ["bucket", "check"]:
+    # decisions P1: the core's check, answered by the prefix's name — a bucket called
+    # `denied-…` refuses the write, `nokeys-…` has no credentials, anything not s3:// is bad
+    prefix = args[2]
+    source = "none" if prefix.startswith("s3://nokeys-") else "environment"
+    creds = {"configured": source != "none", "source": source, "profile": None, "region": "us-east-1", "endpoint": None}
+    if not prefix.startswith("s3://") or "/" not in prefix[5:]:
+        result = {"prefix": prefix, "credentials": creds, "read": False, "write": False, "error": "a warehouse is an s3://bucket/prefix"}
+    elif prefix.startswith("s3://denied-") or source == "none":
+        result = {"prefix": prefix, "credentials": creds, "read": True, "write": False, "error": "ACCESS_DENIED during PutObject operation"}
+    else:
+        result = {"prefix": prefix, "credentials": creds, "read": True, "write": True, "error": None}
+    result["ok"] = result["read"] and result["write"]
+    where = "keys from the environment" if source == "environment" else "no credentials in the environment"
+    result["sentence"] = f"{prefix} is writable with {where}; one object was written and removed." if result["ok"] else f"{prefix}: {result['error']} ({where})."
+    if "--json" in args:
+        print(json.dumps(result))
+    else:
+        print(result["sentence"])
+    sys.exit(0 if result["ok"] else 1)
+
 project = args[args.index("-C") + 1]
 lifetime = int(os.environ.get("LAKELET_FAKE_LIFETIME", "60"))
 lakelet_dir = os.path.join(project, ".lakelet")

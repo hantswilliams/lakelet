@@ -38,3 +38,35 @@ test('a bucket warehouse says so in the panel and the detail, and a query runs',
   await expect(page.getByTestId('gauge')).toHaveAttribute('data-verdict', /green|yellow/);
   await expect(page.getByTestId('grid')).toContainText('c1');
 });
+
+// Decisions P1: New project… (⌘/Ctrl+N; the button is on the welcome screen and in Open…)
+// checks a bucket through this window's core before the folder would be made: the store
+// takes a write under a good prefix, refuses one under a bucket that is not there, and the
+// sentence says which; the folder itself is the app's to make, so a browser stops there.
+test('New project… checks the bucket through the core and says what it found', async ({ page }) => {
+  const s = sidecar();
+  await page.goto(pageUrl(s));
+  await expect(page.getByRole('status')).toHaveText('core ready');
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+  await page.keyboard.press(`${mod}+n`);
+  const dialog = page.getByTestId('new-project');
+  await expect(dialog).toBeVisible();
+  await dialog.getByTestId('project-name').fill('acme');
+  await dialog.getByTestId('where-bucket').check();
+  await expect(dialog.getByTestId('no-credentials')).toHaveCount(0); // this core has keys (Moto's)
+  await dialog.getByTestId('warehouse').fill('s3://lakelet-test/new-acme');
+  await expect(dialog.getByTestId('command')).toContainText('lakelet init <folder> --warehouse s3://lakelet-test/new-acme'); // no parent in a browser
+  await dialog.getByTestId('check-bucket').click();
+  const result = dialog.getByTestId('check-result');
+  await expect(result).toHaveAttribute('data-ok', 'true');
+  await expect(result).toContainText('s3://lakelet-test/new-acme is writable with keys from the environment; one object was written and removed.');
+
+  await dialog.getByTestId('warehouse').fill('s3://lakelet-no-such-bucket-zz/acme');
+  await expect(result).toHaveCount(0); // the result was for the other prefix
+  await dialog.getByTestId('check-bucket').click();
+  await expect(result).toHaveAttribute('data-ok', 'false');
+  await expect(result).toContainText('bucket does not exist');
+  await expect(dialog.getByTestId('create-project')).toBeDisabled(); // a browser cannot make the folder
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+});

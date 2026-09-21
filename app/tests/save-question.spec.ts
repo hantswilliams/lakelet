@@ -109,5 +109,7 @@ test('a question is saved from the query screen and appears on the Models screen
   await expect(row.getByTestId('state')).toHaveText('fresh', { timeout: 90_000 });
   await expect(screen.getByTestId('model-detail').getByTestId('state-sentence')).toHaveText('fresh');
   await expect(screen.getByTestId('model-detail').getByTestId('what-changed')).toHaveCount(0);
-  await expect(screen.getByTestId('review')).toHaveCount(0);
+  // and it has left the review — which may still list the seeded question when the
+  // versions spec, on the same sidecar, restored it in parallel
+  await expect(screen.getByTestId('review-total_by_customer')).toHaveCount(0);
 });

@@ -1,0 +1,12 @@
+/* Copyright 2026 Lakelet contributors
+   SPDX-License-Identifier: Apache-2.0
+   The app's base rules, on top of the palette the site and the app share
+   (`web/src/styles/palette.css`, imported in `main.tsx` before this). No colours here:
+   everything reads a token. */
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+a:not(.btn){text-decoration-color:var(--shallow);text-underline-offset:3px}
+code,pre,kbd,.mono{font-family:var(--mono)}
+input:focus-visible,button:focus-visible,select:focus-visible{outline:3px solid var(--slow);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}

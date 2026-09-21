@@ -1,25 +1,27 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
 // The window (app brief steps 0 to 2): the welcome screen when it has no project, else the
-// project with its own sidecar: the status dot, what health says, the time the core took to
-// be ready, screen 2 (SQL, the verdict, the streaming grid) once there is a table to ask,
-// screen 1 (tables, drop zone, preview, import), screens 7 and 8 (models, Simple or
-// Technical) and screen 5 (the gauge's record).
+// project with its own sidecar: the bar (the status dot, Open…, the mode and theme
+// switches, Settings), the sidebar with the five screens and the explorer (decisions U2),
+// the screen itself — Tables is the query workspace (U1), then Models, Lineage, Changes,
+// Gauge — and the status strip along the bottom (what health says, the time the core took
+// to be ready).
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Api, type Health, type TableInfo } from './lib/api';
 import {
-  getSession, inTauri, onSidecarEvent, openProject, pickFolder, recentProjects, restartSidecar, windowProject,
+  checkBucket, defaultParent, getSession, inTauri, newProject, onSidecarEvent, openProject, pickFolder, recentProjects, restartSidecar, windowProject,
   type RecentProject, type Session,
 } from './lib/session';
+import { Explorer } from './components/Explorer';
+import { NewProject } from './components/NewProject';
 import { OpenMenu } from './components/OpenMenu';
 import { SettingsPanel } from './components/SettingsPanel';
+import { Sidebar, screenForKey, type Screen } from './components/Sidebar';
 import { StatusDot, type Status } from './components/StatusDot';
-import { loadMode, saveMode, words, type Mode } from './lib/vocabulary';
+import { loadMode, saveMode, type Mode } from './lib/vocabulary';
 import { applyTheme, loadTheme, saveTheme, THEMES, themeLabel, type Theme } from './lib/theme';
-// Screen 2 carries Arrow and CodeMirror; loaded once there is a table to ask, so the first
-// paint (the launch budget, §3.2) does not wait for them.
-const Query = lazy(() => import('./screens/Query').then((m) => ({ default: m.Query })));
+import { useTables } from './lib/useTables';
 const Gauge = lazy(() => import('./screens/Gauge').then((m) => ({ default: m.Gauge })));
 const Models = lazy(() => import('./screens/Models').then((m) => ({ default: m.Models })));
 const Lineage = lazy(() => import('./screens/Lineage').then((m) => ({ default: m.Lineage })));
@@ -40,12 +42,11 @@ export default function App() {
   const [detail, setDetail] = useState<string>();
   const [session, setSession] = useState<Session>();
   const [health, setHealth] = useState<Health>();
-  const [screen, setScreen] = useState<'tables' | 'models' | 'gauge' | 'lineage' | 'changes'>('tables');
+  const [screen, setScreen] = useState<Screen>('tables');
   // G8: a lineage link crosses screens — a table's detail from the Models screen, a model
-  // from the Tables screen; the target screen reads the name once and clears it.
-  const [openTable, setOpenTable] = useState<string>();
+  // from the Tables screen; the Models screen reads the name once and clears it, a table's
+  // detail is the window's (`work`, below).
   const [openModel, setOpenModel] = useState<string>();
-  const followTable = (name: string) => { setOpenTable(name); setScreen('tables'); };
   const followModel = (name: string) => { setOpenModel(name); setScreen('models'); };
   // L2: a detail's Recent strip opens the Changes screen filtered to that name.
   const [changesName, setChangesName] = useState<string>();
@@ -76,6 +77,11 @@ export default function App() {
   const refreshHealth = useCallback(async () => {
     if (session) setHealth(await new Api(session).health());
   }, [session]);
+  // The tables' verbs and what they show (U1, U2): the explorer in the sidebar starts them
+  // from any screen; the Tables screen shows the preview or the detail.
+  const showTables = useCallback(() => setScreen('tables'), []);
+  const work = useTables({ session: status === 'down' ? undefined : session, tables, mode, onChanged: refreshTables, onRelocated: refreshHealth, onShow: showTables });
+  const followTable = (name: string) => void work.open(name);
 
   // Which project this window has; asked again after opening one into this window.
   const refreshProject = useCallback(async () => {
@@ -125,13 +131,13 @@ export default function App() {
   }, [project]);
 
   // A10: the dialog, then the shell opens the folder here (no project yet) or in a new window.
-  async function open(path?: string, warehouse?: string) {
+  async function open(path?: string) {
     setOpenError(undefined);
     try {
       const folder = path ?? (await pickFolder());
       if (!folder) return;
       setBusy(`opening ${baseName(folder)}…`);
-      await openProject(folder, warehouse);
+      await openProject(folder);
       await refreshProject();
     } catch (e: unknown) {
       setOpenError(message(e));
@@ -140,13 +146,38 @@ export default function App() {
     }
   }
 
+  // P1: New project… — the dialog, its default parent from the shell, the bucket check
+  // through this window's core when it has one (the welcome screen asks the shell), and
+  // the folder made and opened here or in a new window.
+  const [newOpen, setNewOpen] = useState(false);
+  const [parent, setParent] = useState<string | null>();
+  useEffect(() => {
+    if (!newOpen || parent !== undefined) return;
+    defaultParent().then(setParent).catch(() => setParent(null));
+  }, [newOpen, parent]);
+  async function create(parentFolder: string, name: string, warehouse?: string) {
+    setOpenError(undefined);
+    setBusy(`making ${name}…`);
+    try {
+      await newProject(parentFolder, name, warehouse);
+      setNewOpen(false);
+      await refreshProject();
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
   // F0.8.6 and the settings key: ⌘/Ctrl+, opens settings, Esc closes it, ⌘/Ctrl+K goes to
-  // the SQL box (the ask box's key, reserved for it).
+  // the SQL box (the ask box's key, reserved for it); ⌘/Ctrl+1…5 are the screens (U2);
+  // ⌘/Ctrl+N is New project… (P1).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      const target = screenForKey(e);
       if (mod && e.key === ',') { e.preventDefault(); setSettingsOpen((o) => !o); }
       else if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); (document.querySelector('.cm-content') as HTMLElement | null)?.focus(); }
+      else if (mod && e.key.toLowerCase() === 'n' && !e.shiftKey) { e.preventDefault(); setNewOpen(true); }
+      else if (target) { e.preventDefault(); setScreen(target); }
       else if (e.key === 'Escape') setSettingsOpen(false);
     };
     window.addEventListener('keydown', onKey);
@@ -172,20 +203,15 @@ export default function App() {
   return (
     <div className="app">
       <header className="bar">
-        <span className="wordmark">lakelet</span>
+        <span className="wordmark" data-testid="wordmark">
+          {/* the site's mark (web/src/components/Brand.astro), in the brand colour */}
+          <svg width="22" height="18" viewBox="0 0 33 27" aria-hidden="true" fill="none"><path d="M2 16C7 11 10 11 15 16C20 21 24 21 31 14M2 23C7 18 10 18 15 23C20 28 24 27 31 21" stroke="currentColor" strokeWidth="2.5" /><path d="M10 7c2-6 9-7 12-1-3 6-9 7-12 1Z" fill="currentColor" /><path d="m11 7-5-4v8Z" fill="currentColor" /></svg>
+          lakelet
+        </span>
         <span className="project" data-testid="project">{health?.project ?? (project ? baseName(project) : '')}</span>
         {project !== null && <StatusDot status={status} detail={detail} />}
         {inTauri() && project !== null && (
-          <OpenMenu recent={recent} current={project} disabled={!!busy} onOpen={(p) => open(p)} onPick={(warehouse) => open(undefined, warehouse)} />
-        )}
-        {api && (
-          <nav className="screens" aria-label="Screens" data-testid="screens">
-            <button type="button" className={screen === 'tables' ? 'on' : ''} onClick={() => setScreen('tables')} aria-pressed={screen === 'tables'} data-testid="screen-tables">Tables</button>
-            <button type="button" className={screen === 'models' ? 'on' : ''} onClick={() => setScreen('models')} aria-pressed={screen === 'models'} data-testid="screen-models">{words(mode).screen}</button>
-            <button type="button" className={screen === 'lineage' ? 'on' : ''} onClick={() => setScreen('lineage')} aria-pressed={screen === 'lineage'} data-testid="screen-lineage">{mode === 'simple' ? 'Map' : 'Lineage'}</button>
-            <button type="button" className={screen === 'changes' ? 'on' : ''} onClick={() => { setChangesName(undefined); setScreen('changes'); }} aria-pressed={screen === 'changes'} data-testid="screen-changes">{mode === 'simple' ? 'Recent' : 'Changes'}</button>
-            <button type="button" className={screen === 'gauge' ? 'on' : ''} onClick={() => setScreen('gauge')} aria-pressed={screen === 'gauge'} data-testid="screen-gauge">Gauge</button>
-          </nav>
+          <OpenMenu recent={recent} current={project} disabled={!!busy} onOpen={(p) => open(p)} onPick={() => open()} onNew={() => setNewOpen(true)} />
         )}
         {api && (
           <nav className="screens mode" aria-label="Mode" data-testid="mode" title="Simple mode says question and check; Technical says model, test and the command.">
@@ -202,11 +228,29 @@ export default function App() {
           <button type="button" className="quiet" onClick={() => setSettingsOpen((o) => !o)} aria-pressed={settingsOpen} title="Settings (⌘/Ctrl+,)" data-testid="settings-button">Settings</button>
         )}
       </header>
-      <main>
-        {project === null ? (
-          <Welcome recent={recent} canPick={inTauri()} busy={busy} error={openError} onPick={(warehouse) => open(undefined, warehouse)} onOpen={(p) => open(p)} />
-        ) : (
-          <>
+      {project === null ? (
+        <main className="alone">
+          <Welcome recent={recent} canPick={inTauri()} busy={busy} error={openError} onNew={() => setNewOpen(true)} onPick={() => open()} onOpen={(p) => open(p)} />
+        </main>
+      ) : (
+        <div className="body">
+          {api && (
+            <Sidebar screen={screen} mode={mode} onScreen={(s) => { if (s === 'changes') setChangesName(undefined); setScreen(s); }}>
+              <Explorer
+                tables={tables}
+                busy={work.busy}
+                native={inTauri()}
+                over={work.over}
+                aws={health?.aws}
+                onPaths={(p, anonymous) => void work.preview(p, anonymous)}
+                onChoose={() => void work.choose()}
+                onRefresh={(name) => void work.refresh(name)}
+                onOpen={followTable}
+                open={screen === 'tables' ? work.detail?.table.name : undefined}
+              />
+            </Sidebar>
+          )}
+          <main className={screen === 'tables' ? 'workspace-host' : undefined}>
             {openError && <section className="error" data-testid="open-error"><b>That folder could not be opened.</b><pre>{openError}</pre></section>}
             {error && (
               <section className="error" data-testid="error">
@@ -249,25 +293,35 @@ export default function App() {
                 <Gauge session={session} health={health} onHealthChanged={refreshHealth} />
               </Suspense>
             )}
-            {health && screen === 'tables' && (
-              <section className="health" data-testid="health">
-                <div><b>{health.lakelet}</b><span>lakelet</span></div>
-                <div><b>{health.duckdb}</b><span>DuckDB</span></div>
-                <div><b>{health.machine.memory_limit_text ?? '—'}</b><span>memory limit, this window</span></div>
-                <div title={health.throughput_probe === 'cached' ? 'Measured through the page cache and capped; run `lakelet gauge probe` in the project to measure the disk.' : undefined}>
-                  <b>{health.throughput_local_mbps ? `${Math.round(health.throughput_local_mbps).toLocaleString()} MB/s` : '—'}</b>
-                  <span>{health.throughput_probe === 'cached' ? 'local disk (cached; run lakelet gauge probe)' : 'local disk'}</span>
-                </div>
-                <div data-testid="ready-ms"><b>{session?.ready_ms ? `${session.ready_ms} ms` : '—'}</b><span>core ready in</span></div>
-              </section>
+            {session && status !== 'down' && screen === 'tables' && (
+              <Tables session={session} tables={tables} work={work} movedFrom={health?.moved_from} mode={mode} onDone={() => void refreshTables()} onOpenModel={followModel} onOpenChanges={followChanges} />
             )}
-            {session && status !== 'down' && screen === 'tables' && tables.length > 0 && (
-              <Suspense fallback={<section className="query" data-testid="query-loading" />}><Query session={session} tables={tables} mode={mode} onDone={() => void refreshTables()} /></Suspense>
-            )}
-            {session && status !== 'down' && screen === 'tables' && <Tables session={session} tables={tables} aws={health?.aws} movedFrom={health?.moved_from} onRelocated={refreshHealth} mode={mode} onChanged={refreshTables} openName={openTable} onOpened={() => setOpenTable(undefined)} onOpenModel={followModel} onOpenChanges={followChanges} />}
-          </>
-        )}
-      </main>
+          </main>
+        </div>
+      )}
+      {newOpen && (
+        <NewProject
+          canCreate={inTauri()}
+          defaultParent={parent}
+          aws={health?.aws}
+          onChooseParent={pickFolder}
+          check={(prefix) => (api && status !== 'down' ? api.checkBucket(prefix) : checkBucket(prefix))}
+          onCreate={create}
+          onClose={() => setNewOpen(false)}
+        />
+      )}
+      {project !== null && health && (
+        <footer className="strip" data-testid="health">
+          <div><b>{health.lakelet}</b><span>lakelet</span></div>
+          <div><b>{health.duckdb}</b><span>DuckDB</span></div>
+          <div><b>{health.machine.memory_limit_text ?? '—'}</b><span>memory limit, this window</span></div>
+          <div title={health.throughput_probe === 'cached' ? 'Measured through the page cache and capped; run `lakelet gauge probe` in the project to measure the disk.' : undefined}>
+            <b>{health.throughput_local_mbps ? `${Math.round(health.throughput_local_mbps).toLocaleString()} MB/s` : '—'}</b>
+            <span>{health.throughput_probe === 'cached' ? 'local disk (cached; run lakelet gauge probe)' : 'local disk'}</span>
+          </div>
+          <div data-testid="ready-ms"><b>{session?.ready_ms ? `${session.ready_ms} ms` : '—'}</b><span>core ready in</span></div>
+        </footer>
+      )}
     </div>
   );
 }

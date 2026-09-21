@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+import secrets
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -140,6 +141,88 @@ class S3Settings:
                 f"USE_SSL {'true' if url.scheme == 'https' else 'false'}",
             ]
         return f"CREATE OR REPLACE SECRET {name} (" + ", ".join(parts) + ")"
+
+
+@dataclass
+class BucketCheck:
+    """What ``lakelet bucket check`` found (decisions P1): the credentials the environment
+    offers, whether the prefix can be listed, and whether one object could be written under
+    it and deleted again — so a project's first import is not the first thing to fail."""
+
+    prefix: str
+    credentials: dict[str, Any]
+    read: bool = False
+    write: bool = False
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.read and self.write
+
+    def sentence(self) -> str:
+        source = self.credentials.get("source")
+        where = (
+            "keys from the environment"
+            if source == "environment"
+            else f"the profile {self.credentials.get('profile')}"
+            if source == "profile"
+            else "no credentials in the environment"
+        )
+        if self.ok:
+            return f"{self.prefix} is writable with {where}; one object was written and removed."
+        if self.error:
+            return f"{self.prefix}: {self.error} ({where})."
+        return f"{self.prefix} could not be checked ({where})."
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**asdict(self), "ok": self.ok, "sentence": self.sentence()}
+
+
+def check_prefix(prefix: str, settings: S3Settings | None = None) -> BucketCheck:
+    """Try the prefix the way a project would use it: list it, then write one object under
+    it and delete it. Nothing else is touched; a prefix that did not exist keeps the
+    zero-byte folder marker the file system leaves (the S3 console leaves the same when a
+    folder is made). A failure is reported in the store's words rather than raised."""
+    settings = settings or S3Settings.from_env()
+    prefix = prefix.strip()
+    result = BucketCheck(prefix=prefix, credentials=settings.describe())
+    if not prefix.startswith("s3://"):
+        result.error = "a warehouse is an s3://bucket/prefix"
+        return result
+    _, path = split_uri(prefix)
+    path = path.rstrip("/")
+    bucket = path.split("/")[0]
+    if not bucket or "/" not in path:
+        result.error = "a warehouse is an s3://bucket/prefix, with a prefix under the bucket"
+        return result
+    try:
+        fs = settings.filesystem("s3", bucket=bucket)
+        fs.get_file_info(pafs.FileSelector(path, allow_not_found=True))
+        result.read = True
+    except OSError as e:
+        result.error = _store_words(e)
+        return result
+    probe = f"{path}/.lakelet-check-{secrets.token_hex(4)}"
+    try:
+        with fs.open_output_stream(probe) as f:
+            f.write(b"lakelet bucket check\n")
+        fs.delete_file(probe)
+        result.write = True
+    except OSError as e:
+        result.error = _store_words(e)
+    return result
+
+
+def _store_words(e: OSError) -> str:
+    """The store's reason, on one line, without the SDK's framing."""
+    text = " ".join(str(e).split())
+    for marker in ("AWS Error ", "Error "):
+        if marker in text:
+            text = text.split(marker, 1)[1]
+            break
+    if " (Request ID:" in text:
+        text = text.split(" (Request ID:", 1)[0]
+    return text[:300]
 
 
 PUBLIC_BUCKETS_FILE = "public-buckets.json"

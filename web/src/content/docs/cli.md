@@ -44,6 +44,7 @@ Commands:
   gauge     The gauge's record.
   audit     Prove what leaves the machine.
   config    The settings in lakelet.toml.
+  bucket    A bucket you own, before a project uses it.
 ```
 
 ### `lakelet init`
@@ -627,6 +628,37 @@ Arguments:
   value  auto or a size; auto or a count; true or false.  [required]
 
 Options:
+  --help  Show this message and exit.
+```
+
+### `lakelet bucket`
+
+```text
+Usage: lakelet bucket [OPTIONS] COMMAND [ARGS]...
+
+  A bucket you own, before a project uses it.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  check  Try a bucket the way a project would (decisions P1): the credentials in...
+```
+
+#### `lakelet bucket check`
+
+```text
+Usage: lakelet bucket check [OPTIONS] {prefix}
+
+  Try a bucket the way a project would (decisions P1): the credentials in the
+  environment, a list of the prefix, one object written under it and removed. Nothing is
+  created; no project is needed. Exit 1 when the prefix cannot be written.
+
+Arguments:
+  prefix  s3://bucket/prefix the project's tables would use.  [required]
+
+Options:
+  --json  The result as JSON.
   --help  Show this message and exit.
 ```
 

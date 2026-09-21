@@ -5,7 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
-  server: { port: 5173, strictPort: true },
+  // `fs.allow` reaches the palette the app shares with the site (`web/src/styles/palette.css`).
+  server: { port: 5173, strictPort: true, fs: { allow: ['..'] } },
   build: { target: ['es2022', 'safari16'], sourcemap: false },
   test: { environment: 'jsdom', include: ['src/**/*.test.tsx'], setupFiles: ['src/test-setup.ts'] },
 });

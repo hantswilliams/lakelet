@@ -108,8 +108,9 @@ test('the Recent strip on the detail, and the Changes screen: the saves, the res
   await detail.getByTestId('run-this').click();
   await expect(screen.getByTestId('run-report')).toBeVisible({ timeout: 90_000 });
   await screen.getByTestId('dag').locator('tbody tr', { hasText: name }).click();
-  await expect(recent.getByTestId('recent-run')).toContainText(`${name} built in`, { timeout: 30_000 });
-  await expect(recent.getByTestId('recent-run')).toContainText('just now');
+  // every run is kept (history schema 2), so the newest run entry is the one just made
+  await expect(recent.getByTestId('recent-run').first()).toContainText(`${name} built in`, { timeout: 30_000 });
+  await expect(recent.getByTestId('recent-run').first()).toContainText('just now');
 
   // All changes: the screen arrives filtered to this name, with the CLI's line
   await detail.getByTestId('recent-more').click();
@@ -129,7 +130,9 @@ test('the Recent strip on the detail, and the Changes screen: the saves, the res
   await expect(changes.getByTestId('command')).toContainText('lakelet changes --last 100');
   await expect(changes.getByTestId('entry-snapshot').last()).toContainText('orders: append +4 rows');
   await expect(changes.getByTestId('entry-version').last()).toContainText('lakelet init');
-  await expect(changes.getByTestId('feed').locator('li').first()).toContainText(`${name} built in`);
+  // the run is at the top — unless the save-question spec, on the same sidecar, built its
+  // question in the meantime, so the newest run entry about this name is what is asserted
+  await expect(changes.getByTestId('entry-run').filter({ hasText: name }).first()).toContainText(`${name} built in`);
   // an entry is a link: the table's opens its detail on the Tables screen
   await changes.getByTestId('entry-snapshot').last().getByTestId('open-orders').click();
   await expect(page.getByTestId('detail')).toContainText('orders · 4 rows');
@@ -138,6 +141,6 @@ test('the Recent strip on the detail, and the Changes screen: the saves, the res
   // Simple mode: the screen is Recent, and its words
   await page.getByTestId('mode-simple').click();
   await page.getByTestId('screen-changes').click();
-  await expect(changes.getByTestId('entry-run').first()).toContainText(`${name} refreshed in`);
+  await expect(changes.getByTestId('entry-run').filter({ hasText: name }).first()).toContainText(`${name} refreshed in`);
   await expect(changes.getByTestId('entry-snapshot').last()).toContainText('orders: 4 rows added');
 });

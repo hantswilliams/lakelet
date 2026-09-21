@@ -1,28 +1,26 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
-// "Open…" in the bar (app brief A10): the recent projects, then the folder dialog. Each
-// opens in a new window; the one this window shows is left out.
+// "Open…" in the bar (app brief A10): the recent projects, the folder dialog, and New
+// project… (decisions P1). Each opens in a new window; the one this window shows is left out.
 
 import { useEffect, useRef, useState } from 'react';
 import type { RecentProject } from '../lib/session';
-import { isBucketPrefix } from '../screens/Welcome';
 
 export interface OpenMenuProps {
   recent: RecentProject[];
   current?: string | null;
   disabled?: boolean;
   onOpen: (path: string) => void;
-  /** The folder dialog; with a `warehouse` the new folder's tables live in that bucket
-   *  (decisions W1: `lakelet init --warehouse s3://…`). */
-  onPick: (warehouse?: string) => void;
+  /** The folder dialog. */
+  onPick: () => void;
+  /** The New project dialog (P1). */
+  onNew: () => void;
 }
 
-export function OpenMenu({ recent, current, disabled, onOpen, onPick }: OpenMenuProps) {
+export function OpenMenu({ recent, current, disabled, onOpen, onPick, onNew }: OpenMenuProps) {
   const [open, setOpen] = useState(false);
-  const [bucket, setBucket] = useState<string>(); // the bucket row, when it is showing
   const ref = useRef<HTMLDivElement>(null);
   const others = recent.filter((p) => p.path !== current);
-  const prefix = (bucket ?? '').trim();
 
   useEffect(() => {
     if (!open) return;
@@ -52,15 +50,7 @@ export function OpenMenu({ recent, current, disabled, onOpen, onPick }: OpenMenu
             <button type="button" role="menuitem" onClick={() => { setOpen(false); onPick(); }}>Other folder…</button>
           </li>
           <li role="none">
-            {bucket === undefined ? (
-              <button type="button" role="menuitem" data-testid="open-bucket" onClick={() => setBucket('')}>New folder, tables in a bucket…<span>lakelet init &lt;folder&gt; --warehouse s3://…</span></button>
-            ) : (
-              <div className="bucket-row" data-testid="bucket-row">
-                <input type="text" value={bucket} placeholder="s3://bucket/prefix" spellCheck={false} autoFocus data-testid="bucket-prefix" onChange={(e) => setBucket(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && isBucketPrefix(prefix)) { setOpen(false); setBucket(undefined); onPick(prefix); } }} />
-                <button type="button" className="primary" disabled={!isBucketPrefix(prefix)} data-testid="bucket-pick" onClick={() => { setOpen(false); setBucket(undefined); onPick(prefix); }}>Choose folder…</button>
-                <span>A folder that is not a project yet; its tables' files go to the bucket from the first import. Credentials come from the environment the app was started in.</span>
-              </div>
-            )}
+            <button type="button" role="menuitem" data-testid="open-new" onClick={() => { setOpen(false); onNew(); }}>New project…<span>a name, and whether its tables live in the folder or in a bucket</span></button>
           </li>
         </ul>
       )}

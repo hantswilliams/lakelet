@@ -29,7 +29,8 @@ export function SettingsPanel({ api, onClose }: { api: Api; onClose: () => void 
   useEffect(() => {
     api.settings().then((s) => {
       setSettings(s);
-      setDrafts(Object.fromEntries(Object.entries(s.settings).map(([k, v]) => [k, String(v)])));
+      // what the file says seeds the boxes; a value typed before the answer arrived stays
+      setDrafts((d) => ({ ...Object.fromEntries(Object.entries(s.settings).map(([k, v]) => [k, String(v)])), ...d }));
     }).catch((e: unknown) => setError(message(e)));
   }, [api]);
 
@@ -100,6 +101,8 @@ export function SettingsPanel({ api, onClose }: { api: Api; onClose: () => void 
           <dt>Esc</dt><dd>stop a running query; close this panel</dd>
           <dt>⌘/Ctrl+K</dt><dd>to the SQL box (the ask box, in a later session)</dd>
           <dt>⌘/Ctrl+,</dt><dd>settings</dd>
+          <dt>⌘/Ctrl+1 … 5</dt><dd>Tables, Models, Lineage, Changes, Gauge</dd>
+          <dt>⌘/Ctrl+N</dt><dd>New project…</dd>
         </dl>
       </div>
     </section>

@@ -1,7 +1,8 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
-// Screen 1's drop zone (app brief A9): drop a file or a folder, or choose one, or type a
-// path; the terminal command sits beside it. A drop previews first; import is a click. An
+// The drop zone (app brief A9), at the top of the sidebar's explorer since decisions U2:
+// drop a file or a folder, or Import… one, or type a path; the terminal command sits under
+// it. A drop previews first; import is a click. An
 // `s3://` prefix (real-data brief R4) is previewed the same way and attached in place, with
 // the public-bucket switch and, when the core has no credentials, the line saying so.
 
@@ -20,6 +21,8 @@ export interface DropZoneProps {
   onPaths: (paths: string[], anonymous?: boolean) => void;
   onChoose: () => void;
 }
+
+const FORMATS = 'CSV, TSV, Parquet, JSON, JSONL or Excel; a folder becomes one table per file; an s3://bucket/prefix/ of Parquet is attached in place, nothing copied. You see the columns before anything is written.';
 
 export const NO_CREDENTIALS =
   'The core has no AWS credentials. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (or AWS_PROFILE) in the shell that starts the app and restart the core, or tick "public bucket" for a dataset that needs none.';
@@ -46,10 +49,10 @@ export function DropZone({ native, over, busy, aws, onPaths, onChoose }: DropZon
     <section className={`drop${over ? ' over' : ''}`} data-testid="drop-zone">
       <div className="target">
         <b>{native ? 'Drop a file or a folder here' : 'Type a file or folder path'}</b>
-        <span className="muted">CSV, TSV, Parquet, JSON, JSONL or Excel; a folder becomes one table per file; an <code>s3://bucket/prefix/</code> of Parquet is attached in place, nothing copied. You see the columns before anything is written.</span>
+        <span className="muted" title={FORMATS}>CSV, Parquet, JSON or Excel, a folder, or an <code>s3://</code> prefix. You see the columns before anything is written.</span>
         <form className="path" onSubmit={submit}>
           {native && (
-            <button type="button" className="quiet" onClick={onChoose} disabled={!!busy} data-testid="choose-files">Choose files…</button>
+            <button type="button" className="quiet" onClick={onChoose} disabled={!!busy} data-testid="choose-files">Import…</button>
           )}
           <input
             type="text"

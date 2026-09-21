@@ -67,7 +67,9 @@ export const expireCommand = (name: string): string => `lakelet tables expire ${
 export const publishCommand = (name: string, prefix: string, opts: { dryRun?: boolean; yes?: boolean } = {}): string =>
   `lakelet tables publish ${shellArg(name)} ${shellArg(prefix)}${opts.dryRun ? ' --dry-run' : ''}${opts.yes ? ' --yes' : ''}`;
 
-export const initCommand = (folder: string): string => `lakelet init ${shellArg(folder)}`;
+export const initCommand = (folder: string, warehouse?: string): string => `lakelet init ${shellArg(folder)}${warehouse ? ` --warehouse ${shellArg(warehouse)}` : ''}`;
+/** `lakelet bucket check` (decisions P1): the prefix tried the way a project would use it. */
+export const bucketCheckCommand = (prefix: string): string => `lakelet bucket check ${shellArg(prefix)}`;
 export const relocateCommand = (): string => 'lakelet relocate';
 /** The lineage lines' command (versions brief G8). */
 export const lineageCommand = (name: string): string => `lakelet lineage ${shellArg(name)}`;

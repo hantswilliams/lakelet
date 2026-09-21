@@ -39,7 +39,7 @@ test('a group-by draws a bar chart with one bar per group, and two numbers draw 
   await expect(chart.locator('svg')).toContainText('c0'); // the axis names the groups
   // no dual axis, no legend, one hue
   await expect(chart.locator('svg .role-legend')).toHaveCount(0);
-  expect(await bars.first().getAttribute('fill')).toBe('#2E6E9E');
+  expect(await bars.first().getAttribute('fill')).toBe('#164F44');
 
   await runSql(page, 'select id, x from big where id < 20');
   await expect(page.getByTestId('chart')).toHaveCount(0);

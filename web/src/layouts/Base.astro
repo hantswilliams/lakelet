@@ -1,6 +1,7 @@
 ---
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
+import '../styles/palette.css'; // the one palette the site and the app share (U3)
 import '../styles/exploration.css';
 import '../styles/website.css';
 import Nav from '../components/Nav.astro';
@@ -13,7 +14,7 @@ const fullTitle = title === site.name ? `${site.name} — ${site.tagline}` : `${
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">

@@ -81,30 +81,29 @@ describe('the three choices', () => {
 
 describe('the chart draws in the theme the window is in', () => {
   it('reads its colours from the document rather than writing them down', () => {
-    document.documentElement.style.setProperty('--lake', '#6FA8D0');
-    document.documentElement.style.setProperty('--muted', '#9AA8B6');
-    document.documentElement.style.setProperty('--line', '#2A343E');
-    document.documentElement.style.setProperty('--bg', '#11161B');
+    // the dark set's values, as the palette (web/src/styles/palette.css) has them
+    const dark = { '--lake': '#D6EE83', '--muted': '#A5B8B9', '--line': '#304247', '--bg': '#101F24', '--panel': '#15292E', '--local': '#3FBE85', '--slow': '#E0AC3C', '--burst': '#F0705E' };
+    for (const [t, v] of Object.entries(dark)) document.documentElement.style.setProperty(t, v);
     try {
       expect(chartColours()).toEqual({
-        lake: '#6FA8D0', muted: '#9AA8B6', line: '#2A343E', grid: '#11161B',
+        lake: '#D6EE83', muted: '#A5B8B9', line: '#304247', grid: '#101F24', panel: '#15292E', local: '#3FBE85', slow: '#E0AC3C', burst: '#F0705E',
       });
       const plan = planChart(
         [{ name: 'c', type: 'Utf8' }, { name: 'n', type: 'Int64' }],
         [['a', 1], ['b', 2]],
       )!;
       const spec = JSON.stringify(vegaLiteSpec(plan));
-      expect(spec).toContain('#6FA8D0'); // the dark lake, on the mark
-      expect(spec).toContain('#9AA8B6'); // the dark muted, on the axis labels
-      expect(spec).not.toContain('#2E6E9E'); // never the light palette's lake
+      expect(spec).toContain('#D6EE83'); // the dark lake, on the mark
+      expect(spec).toContain('#A5B8B9'); // the dark muted, on the axis labels
+      expect(spec).not.toContain('#164F44'); // never the light palette's lake
     } finally {
-      for (const t of ['--lake', '--muted', '--line', '--bg']) document.documentElement.style.removeProperty(t);
+      for (const t of Object.keys(dark)) document.documentElement.style.removeProperty(t);
     }
   });
 
   it('falls back to the light palette when there is no document to ask', () => {
     expect(chartColours(null)).toEqual({
-      lake: '#2E6E9E', muted: '#5C6B7A', line: '#D5DBE2', grid: '#EEF1F4',
+      lake: '#164F44', muted: '#5F6E68', line: '#D5DCD6', grid: '#F4F6F1', panel: '#FFFFFF', local: '#1F8A5B', slow: '#C98A12', burst: '#D24B3A',
     });
   });
 });

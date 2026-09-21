@@ -71,6 +71,36 @@ export async function openProject(path: string, warehouse?: string): Promise<voi
   return invoke<void>('open_project', { path, warehouse: warehouse?.trim() || null });
 }
 
+/** What `lakelet bucket check` says (decisions P1), from the shell or the core's route. */
+export interface BucketCheck {
+  prefix: string;
+  ok: boolean;
+  read: boolean;
+  write: boolean;
+  error: string | null;
+  sentence: string;
+  credentials: { configured: boolean; source: 'environment' | 'profile' | 'none'; profile: string | null; region: string; endpoint: string | null };
+}
+
+/** Decisions P1: the shell runs `lakelet bucket check <prefix> --json` (a window without
+ *  a project has no core to ask; one with a core may ask it through `Api.checkBucket`). */
+export async function checkBucket(prefix: string): Promise<BucketCheck> {
+  if (!inTauri()) throw new Error('checking a bucket without a core is only in the app');
+  return invoke<BucketCheck>('check_bucket', { prefix });
+}
+
+/** Decisions P1: where a new project goes unless another folder is chosen. */
+export async function defaultParent(): Promise<string | null> {
+  return inTauri() ? invoke<string | null>('default_parent') : null;
+}
+
+/** Decisions P1: `parent/name` made and opened as a project (`lakelet init`, with
+ *  `--warehouse` for a bucket). Resolves to the folder's path. */
+export async function newProject(parent: string, name: string, warehouse?: string): Promise<string> {
+  if (!inTauri()) throw new Error('creating a project is only in the app');
+  return invoke<string>('new_project', { parent, name, warehouse: warehouse?.trim() || null });
+}
+
 /** A11: after two exits in a minute the shell stops restarting; this asks it to try again. */
 export async function restartSidecar(): Promise<void> {
   if (!inTauri()) throw new Error('restarting the core is only in the app');

@@ -4,7 +4,7 @@ An open-source, local-first lakehouse in one binary: Iceberg tables on your lapt
 
 Developer preview, macOS and Linux, from source. Apache 2.0. Site and docs: **https://hantswilliams.github.io/lakelet/**
 
-![The query screen: the verdict and the sentence before the rows, then the chart and the grid](docs/screenshots/query-verdict.png)
+![The window: the sidebar with the table explorer, the SQL box over the results, the verdict and the sentence before the rows, then the chart and the grid](docs/screenshots/query-verdict.png)
 
 ## What it is
 
@@ -20,14 +20,14 @@ What it is not, yet: burst to your own cloud when the laptop is not enough, ques
 **Built, from source, today**
 
 - **The CLI**: init, import, sql, estimate, tables, config — from a clone, with uv — [docs](https://hantswilliams.github.io/lakelet/docs/cli)
-- **Lakelet Lookahead**: the verdict and its sentence before anything runs; Red refuses, and every run is recorded — [docs](https://hantswilliams.github.io/lakelet/docs/gauge)
+- **Lakelet Lookahead (the gauge)**: the verdict and its sentence before anything runs; Red refuses, and every run is recorded — [docs](https://hantswilliams.github.io/lakelet/docs/gauge)
 - **Files into Iceberg tables**: CSV, TSV, Parquet, JSON, JSONL and Excel, with the type coercions written down — [docs](https://hantswilliams.github.io/lakelet/docs/tables)
 - **Parquet already in S3**: attach, refresh and discover a prefix in place — nothing copied, and public buckets need no credentials — [docs](https://hantswilliams.github.io/lakelet/docs/remote)
 - **The Iceberg REST catalog**: SQLite locally, served over HTTP; DuckDB, pyiceberg, Spark and Trino all read it — [docs](https://hantswilliams.github.io/lakelet/docs/catalog)
 - **Saved questions as dbt models**: each one written with two checks, built through the catalog by dbt — [docs](https://hantswilliams.github.io/lakelet/docs/questions)
 - **lakelet run — the dbt DAG, by verdict**: every model gets its own verdict before it builds, dbt runs through the catalog, and view models become Iceberg views every engine can see — [docs](https://hantswilliams.github.io/lakelet/docs/dbt)
 - **The local HTTP API**: lakelet serve, loopback only, bearer token, results as an Arrow stream — [docs](https://hantswilliams.github.io/lakelet/docs/api)
-- **The desktop app**: from source, no installer: projects, drop-to-import with a preview, the SQL screen with the verdict before the rows, the streaming grid, the auto-chart, the table detail, the Gauge screen with estimate-versus-actual, settings — [docs](https://hantswilliams.github.io/lakelet/docs/app)
+- **The desktop app**: from source, no installer: projects, a sidebar with the table explorer, the query workspace (SQL over the results on a split, the verdict before the rows, the streaming grid, the auto-chart, the table detail in the results pane), the Gauge screen with estimate-versus-actual, settings — [docs](https://hantswilliams.github.io/lakelet/docs/app)
 - **Proof it stays put**: lakelet audit network measures zero outbound attempts on the quickstart; PRIVACY.md says exactly what is stored where — [docs](https://hantswilliams.github.io/lakelet/docs/install)
 - **Every save is a version**: the project is a git repository, a save or a run is a commit, lakelet versions and restore, the Versions section on the model detail — [docs](https://hantswilliams.github.io/lakelet/docs/questions)
 - **A warehouse in a bucket**: lakelet init --warehouse s3://bucket/prefix puts every table\'s data and metadata in the bucket; import, run, expire and every reader work against it, tested on Moto and a real bucket; lakelet tables publish moves one local table into a bucket later, every snapshot kept — [docs](https://hantswilliams.github.io/lakelet/docs/remote)

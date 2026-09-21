@@ -90,9 +90,10 @@ test('the plan, a model, Run all, the view detail, the runs, and Simple mode', a
   await expect(page.getByTestId('table-stg')).toBeVisible();
   await page.getByTestId('table-stg').click();
   const view = page.getByTestId('detail');
-  await expect(view).toBeVisible();
-  expect(await view.getAttribute('data-kind')).toBe('view');
+  // the orders detail opened above is still there when the screen comes back (U1: the
+  // window holds it), so wait for stg's before reading its kind
   await expect(view).toContainText('stg · view · 3 columns');
+  expect(await view.getAttribute('data-kind')).toBe('view');
   await expect(view.getByTestId('view-sql')).toContainText('amt > 0');
   await expect(view.getByTestId('view-sql')).toContainText('"main"."orders"');
   await expect(view.getByTestId('view-version')).toContainText('1 version · this one just now');

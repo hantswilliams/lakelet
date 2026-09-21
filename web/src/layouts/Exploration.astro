@@ -2,6 +2,7 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
 import { url } from '../lib/url';
+import '../styles/palette.css';
 import '../styles/exploration.css';
 interface Props { title: string; theme?: string; active?: string }
 const { title, theme = 'studio', active = 'overview' } = Astro.props;
@@ -13,7 +14,7 @@ const concepts = [
 ];
 ---
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme={theme === 'story' ? 'dark' : undefined}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

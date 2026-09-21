@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The core's /api (docs: the local HTTP API), called directly from the webview.
 
-import type { Session } from './session';
+import type { BucketCheck, Session } from './session';
 
 export interface Health {
   lakelet: string;
@@ -558,6 +558,11 @@ export class Api {
   /** `lakelet tables publish <name> <prefix> [--dry-run] [--yes]` (W2). 409 `not_publishable` with the reason. */
   publish(name: string, prefix: string, dryRun = false, yes = false): Promise<PublishReport> {
     return this.post<PublishReport>(`/tables/${encodeURIComponent(name)}/publish`, { prefix, dry_run: dryRun, yes });
+  }
+
+  /** `lakelet bucket check` (decisions P1) through this core, for the New project dialog. */
+  checkBucket(prefix: string): Promise<BucketCheck> {
+    return this.post<BucketCheck>('/bucket/check', { prefix });
   }
 
   /** `lakelet relocate`: after the folder moved, the tables' locations rewritten under it. */

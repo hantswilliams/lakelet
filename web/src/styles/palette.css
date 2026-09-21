@@ -1,0 +1,53 @@
+/* Copyright 2026 Lakelet contributors
+   SPDX-License-Identifier: Apache-2.0
+
+   Lakelet's palette — the one source for the site and the app (decisions U3, September 20,
+   2026). The site imports it from `web/src/layouts/Base.astro` and the app from
+   `app/src/main.tsx`; neither defines a colour of its own, and a test in the app
+   (`src/styles/palette.test.ts`) holds both to it.
+
+   Two sets. Light is the default; dark applies when the machine asks for it and nothing
+   chose light, or when `data-theme="dark"` is on the document — the site pins dark that
+   way, the app's System | Light | Dark switch writes it (decision D1). The verdict colours
+   carry meaning and stay the same three hues in both sets; the brand is the green family
+   of the site — the deep green on light surfaces, the lime on dark ones, because lime on
+   white fails contrast and would fight the Green verdict. `--paper` and `--accent` are the
+   site's names for `--bg` and `--lake`. */
+
+:root {
+  /* surfaces and text */
+  --bg: #F4F6F1; --panel: #FFFFFF; --panel-2: #EEF2EE; --head: #EEF2EE;
+  --ink: #1A2A26; --ink-soft: #3F4F49; --muted: #5F6E68; --line: #D5DCD6;
+  --refused: #FBECEA;
+  /* brand */
+  --lake: #164F44; --lake-hover: #0F3A32; --on-lake: #FFFFFF; --shallow: #7DA898; --cloud: #E3EEE7;
+  /* verdicts: Green runs here, Yellow runs here but slowly, Red would not */
+  --local: #1F8A5B; --slow: #C98A12; --burst: #D24B3A;
+  /* terminal panels, the same in both sets */
+  --term: #0B191E; --term2: #14272D; --termline: #304247;
+  /* the site's names */
+  --paper: var(--bg); --accent: var(--lake);
+  /* type */
+  --sans: Manrope, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #101F24; --panel: #15292E; --panel-2: #1B302E; --head: #22363B;
+    --ink: #F0F2E8; --ink-soft: #C9D5D0; --muted: #A5B8B9; --line: #304247;
+    --refused: #3A2320;
+    --lake: #D6EE83; --lake-hover: #E3F7A2; --on-lake: #172622; --shallow: #B1CD70; --cloud: #263A31;
+    --local: #3FBE85; --slow: #E0AC3C; --burst: #F0705E;
+    --paper: var(--bg); --accent: var(--lake);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #101F24; --panel: #15292E; --panel-2: #1B302E; --head: #22363B;
+  --ink: #F0F2E8; --ink-soft: #C9D5D0; --muted: #A5B8B9; --line: #304247;
+  --refused: #3A2320;
+  --lake: #D6EE83; --lake-hover: #E3F7A2; --on-lake: #172622; --shallow: #B1CD70; --cloud: #263A31;
+  --local: #3FBE85; --slow: #E0AC3C; --burst: #F0705E;
+  --paper: var(--bg); --accent: var(--lake);
+}

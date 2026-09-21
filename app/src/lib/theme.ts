@@ -1,7 +1,8 @@
 // Copyright 2026 Lakelet contributors
 // SPDX-License-Identifier: Apache-2.0
 // Light and dark (decision D1, September 12). Three choices: System follows the machine,
-// Light and Dark override it. The palette itself is CSS (`styles/theme.css`); this file only
+// Light and Dark override it. The palette itself is CSS (`web/src/styles/palette.css`, shared
+// with the site since decisions U3); this file only
 // decides which of the three is in force and writes it where CSS can see it.
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -27,7 +28,7 @@ export function saveTheme(theme: Theme): void {
   }
 }
 
-/** System leaves `data-theme` off, so the media query in `styles/theme.css` decides; Light
+/** System leaves `data-theme` off, so the media query in the palette decides; Light
  *  and Dark set it, and those rules outrank the media query. */
 export function applyTheme(theme: Theme, root: HTMLElement = document.documentElement): void {
   if (theme === 'system') root.removeAttribute('data-theme');

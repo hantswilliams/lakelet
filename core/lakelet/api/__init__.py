@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from lakelet import __version__, relocate
+from lakelet import __version__, relocate, remote
 from lakelet.engine import CatalogConflict
 from lakelet.gauge import inputs
 from lakelet.project import identifier
@@ -302,6 +302,12 @@ def create_router(project: Project, token: str) -> APIRouter:
             # the folder this project's tables were written in, when it is not this one (T5)
             "moved_from": relocate.moved_from(project),
         }
+
+    @router.post("/bucket/check", dependencies=guarded)
+    def bucket_check(body: dict[str, Any]) -> dict[str, Any]:
+        """`lakelet bucket check` (decisions P1): the app's New project dialog, from a
+        window that has a core; the welcome screen asks the shell to run the CLI."""
+        return remote.check_prefix(str(body.get("prefix", ""))).to_dict()
 
     @router.post("/relocate", dependencies=guarded)
     def relocate_project() -> dict[str, Any]:

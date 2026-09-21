@@ -191,6 +191,17 @@ Closed:
 
 **`trust-round-plan.md` T1 to T8**: decided 2026-09-15, all agreed, built the same day (above).
 
+**`decisions-for-review_092026.md` P1, U1, U2, U3, U4 agreed 2026-09-20; P2 skipped for now** (Hants: it needs more thought). Built in the order U4, U3, U2+U1, P1 — **all five built 2026-09-20**, awaiting Hants' Mac run (`tauri dev` for the dialog and the folder it makes) and commit; the log is `lakelet-build-sessions_092026.md`.
+
+| Item | What | Status |
+|---|---|---|
+| U4 | The app icon from the site's mark, macOS and Linux sets, the site favicon | **built** 2026-09-20 |
+| U3 | One palette from one token file, the green family, the gauge keeps its name | **built** 2026-09-20; `palette.test.tsx`, screenshots seen by Hants |
+| U2 | The sidebar with the table explorer | **built** 2026-09-20; `Sidebar.test.tsx`, `Explorer.test.tsx`, screenshots to Hants |
+| U1 | The query workspace: editor over results, split | **built** 2026-09-20; `Split.test.tsx`, the specs and `/docs/app` updated, the README screenshot retaken |
+| P1 | New project…: in this folder, or in a bucket, with a credential check | **built** 2026-09-20; `test_bucket_check.py`, cargo (the shell's check and the new folder), `NewProject.test.tsx`, `bucket.spec` on the tenth sidecar |
+| P2 | The hosting model — skipped 2026-09-20, needs more thought; a brief when it is taken up | held |
+
 **`decisions-for-review_091726.md` W1, W2, L1, L2, L3** (2026-09-17, from Hants' two questions after the round closed: is writing to S3 handled — partly, at the catalog layer, not as a product path — and how to show the lineage of file and Iceberg changes): W1 an `s3://` warehouse first-class at `init`; W2 `lakelet tables publish` (the PRD's `publish`, pulled forward from session 8 through `relocate`'s rewriter); L1 a Lineage screen (the graph, drawn by the app); L2 a Changes feed across tables, models and versions; L3 each snapshot naming the models it made out of date. Ship (`ship-v0-plan.md`) is held behind whatever is chosen (Hants, 2026-09-17: not publishing yet).
 
 **`decisions-for-review_091526.md` V1, V2, V4** (2026-09-15, from the four articles in `research/`; `research/README.md` has the links): V1 format-version 3 for new tables after a spike; V2 `lakelet tables compact`; V4 the durability sentence, Renart and Duckle as comparables, the unsourced figures kept out. V1 first: V2 depends on its result. **V3 decided 2026-09-16** (a per-model state and `lakelet run --stale`): built inside step 4 of the versions round.

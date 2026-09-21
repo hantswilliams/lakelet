@@ -35,9 +35,9 @@ const { stack = false, dark = false, layout = 'inline', note, id } = Astro.props
   /* dark band variant */
   form.waitlist.dark{margin:22px auto 0;max-width:720px}
   form.waitlist.dark .row{justify-content:center}
-  form.waitlist.dark input[type=email],form.waitlist.dark select{background:#22303D;border-color:#3A4856;color:#fff}
+  form.waitlist.dark input[type=email],form.waitlist.dark select{background:var(--panel-2);border-color:var(--line);color:var(--ink)}
   form.waitlist.dark input[type=email]{max-width:320px}
   form.waitlist.dark select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%239AA8B6' stroke-width='1.8'/%3E%3C/svg%3E")}
   form.waitlist.dark .fine{text-align:center}
-  form.waitlist.dark .fine.done{color:#8FE0B0}
+  form.waitlist.dark .fine.done{color:var(--local)}
 </style>

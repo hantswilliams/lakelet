@@ -30,7 +30,7 @@ test('the gauge screen lists the runs, draws the scatter, exports without names,
   await page.getByTestId('screen-gauge').click();
   const screen = page.getByTestId('gauge-screen');
   await expect(screen).toBeVisible();
-  await expect(page.getByTestId('tables')).toHaveCount(0); // the tables screen is the other one
+  await expect(page.getByTestId('workspace')).toHaveCount(0); // the Tables screen is the other one; the explorer stays in the sidebar (U2)
 
   // Tiles and the list (the tiles say — until the summary arrives; wait for it).
   await expect(page.getByTestId('tile-runs')).not.toHaveText('—');

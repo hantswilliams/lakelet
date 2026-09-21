@@ -28,6 +28,7 @@ question_app = typer.Typer(no_args_is_help=True, help="Saved questions: dbt mode
 gauge_app = typer.Typer(no_args_is_help=True, help="The gauge's record.")
 audit_app = typer.Typer(no_args_is_help=True, help="Prove what leaves the machine.")
 config_app = typer.Typer(no_args_is_help=True, help="The settings in lakelet.toml.")
+bucket_app = typer.Typer(no_args_is_help=True, help="A bucket you own, before a project uses it.")
 for name, sub in (
     ("tables", tables_app),
     ("catalog", catalog_app),
@@ -35,6 +36,7 @@ for name, sub in (
     ("gauge", gauge_app),
     ("audit", audit_app),
     ("config", config_app),
+    ("bucket", bucket_app),
 ):
     app.add_typer(sub, name=name)
 
@@ -573,6 +575,27 @@ def tables_discover(
     for d in found:
         t.add_row(d.prefix, d.kind, str(d.files), _human_bytes(d.bytes))
     out.print(t)
+
+
+@bucket_app.command("check")
+def bucket_check(
+    prefix: Annotated[
+        str, typer.Argument(help="s3://bucket/prefix the project's tables would use.")
+    ],
+    as_json: Annotated[bool, typer.Option("--json", help="The result as JSON.")] = False,
+) -> None:
+    """Try a bucket the way a project would (decisions P1): the credentials in the
+    environment, a list of the prefix, one object written under it and removed. Nothing is
+    created; no project is needed. Exit 1 when the prefix cannot be written."""
+    from lakelet.remote import check_prefix
+
+    result = check_prefix(prefix)
+    if as_json:
+        typer.echo(json.dumps(result.to_dict()))
+    else:
+        out.print(result.sentence(), highlight=False)
+    if not result.ok:
+        raise typer.Exit(1)
 
 
 # -- sql and estimate ------------------------------------------------------------

@@ -82,6 +82,70 @@ pub fn prepare(executable: &OsString, folder: &Path, warehouse: Option<&str>) ->
     Ok(Prepared { project, initialised: Some(text.trim().to_string()) })
 }
 
+/// What `lakelet bucket check --json` says (decisions P1): the credentials the environment
+/// offers, whether the prefix lists and takes a write, and the sentence for the dialog.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct BucketCheck {
+    pub prefix: String,
+    pub ok: bool,
+    pub read: bool,
+    pub write: bool,
+    pub error: Option<String>,
+    pub sentence: String,
+    pub credentials: serde_json::Value,
+}
+
+/// Run the core's check for a bucket prefix before a project is made there. The core's
+/// exit code says pass or fail; its JSON carries the words. A core that cannot run, or
+/// answers with no JSON, is an error of its own.
+pub fn check_bucket(executable: &OsString, prefix: &str) -> Result<BucketCheck, String> {
+    let output = Command::new(executable)
+        .arg("bucket")
+        .arg("check")
+        .arg(prefix.trim())
+        .arg("--json")
+        .output()
+        .map_err(|e| format!("could not run lakelet bucket check: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.lines().find(|l| l.trim_start().starts_with('{'));
+    match line {
+        Some(json) => serde_json::from_str(json).map_err(|e| format!("lakelet bucket check answered oddly: {e}\n{}", stdout.trim())),
+        None => Err(format!(
+            "lakelet bucket check {} said nothing usable:\n{}{}",
+            prefix,
+            stdout.trim(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+    }
+}
+
+/// A new project's folder (decisions P1): `parent/name`, made here if it does not exist.
+/// A folder that exists must be empty and not a project, so nothing of anyone's is taken
+/// over by mistake; the name is one path segment.
+pub fn new_folder(parent: &Path, name: &str) -> Result<PathBuf, String> {
+    let name = name.trim();
+    if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
+        return Err(format!("a project name is one folder name, not {name:?}"));
+    }
+    let parent = canonical(parent)?;
+    let folder = parent.join(name);
+    if folder.exists() {
+        if !folder.is_dir() {
+            return Err(format!("{} exists and is not a folder", folder.display()));
+        }
+        if is_project(&folder) {
+            return Err(format!("{} is a Lakelet project already; open it instead", folder.display()));
+        }
+        let occupied = std::fs::read_dir(&folder).map_err(|e| format!("{}: {e}", folder.display()))?.next().is_some();
+        if occupied {
+            return Err(format!("{} exists and is not empty; pick another name, or open it as it is", folder.display()));
+        }
+    } else {
+        std::fs::create_dir(&folder).map_err(|e| format!("could not make {}: {e}", folder.display()))?;
+    }
+    Ok(folder)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RecentProject {
     pub path: PathBuf,
@@ -368,6 +432,49 @@ mod tests {
         let err = prepare(&exe, &bad, Some("/tmp/elsewhere")).unwrap_err();
         assert!(err.contains("s3://bucket/prefix"), "{err}");
         assert!(!is_project(&bad));
+    }
+
+    #[test]
+    fn the_bucket_check_carries_the_core_s_verdict_and_words() {
+        let dir = temp_dir("bucket-check");
+        let exe = fake_executable(&dir, 60);
+        let ok = check_bucket(&exe, " s3://lakelet-test/acme ").expect("the check runs");
+        assert!(ok.ok && ok.read && ok.write && ok.error.is_none(), "{ok:?}");
+        assert_eq!(ok.prefix, "s3://lakelet-test/acme");
+        assert!(ok.sentence.contains("is writable"), "{ok:?}");
+        assert_eq!(ok.credentials["source"], "environment");
+        let denied = check_bucket(&exe, "s3://denied-bucket/acme").unwrap();
+        assert!(!denied.ok && denied.read && !denied.write, "{denied:?}");
+        assert!(denied.error.as_deref().unwrap_or("").contains("ACCESS_DENIED"), "{denied:?}");
+        let nokeys = check_bucket(&exe, "s3://nokeys-bucket/acme").unwrap();
+        assert!(!nokeys.ok, "{nokeys:?}");
+        assert_eq!(nokeys.credentials["source"], "none");
+        assert!(nokeys.sentence.contains("no credentials"), "{nokeys:?}");
+        let bad = check_bucket(&exe, "/tmp/elsewhere").unwrap();
+        assert!(!bad.ok && bad.error.as_deref().unwrap_or("").contains("s3://bucket/prefix"), "{bad:?}");
+        let missing = OsString::from(dir.join("no-such-lakelet"));
+        assert!(check_bucket(&missing, "s3://x/y").unwrap_err().contains("could not run"));
+    }
+
+    #[test]
+    fn a_new_folder_is_made_under_the_parent_and_never_takes_one_that_is_in_use() {
+        let dir = temp_dir("new-folder");
+        let folder = new_folder(&dir, " acme ").unwrap();
+        assert_eq!(folder, dir.canonicalize().unwrap().join("acme"));
+        assert!(folder.is_dir());
+        assert_eq!(new_folder(&dir, "acme").unwrap(), folder, "an empty folder is fine to use");
+        std::fs::write(folder.join("lakelet.toml"), "").unwrap();
+        assert!(new_folder(&dir, "acme").unwrap_err().contains("project already"));
+        let busy = dir.join("busy");
+        std::fs::create_dir_all(&busy).unwrap();
+        std::fs::write(busy.join("notes.txt"), "x").unwrap();
+        assert!(new_folder(&dir, "busy").unwrap_err().contains("not empty"));
+        std::fs::write(dir.join("file"), "x").unwrap();
+        assert!(new_folder(&dir, "file").unwrap_err().contains("not a folder"));
+        for bad in ["", " ", ".", "..", "a/b", "a\\b"] {
+            assert!(new_folder(&dir, bad).unwrap_err().contains("one folder name"), "{bad:?}");
+        }
+        assert!(new_folder(&dir.join("missing"), "x").unwrap_err().contains("not a folder"));
     }
 
     #[test]

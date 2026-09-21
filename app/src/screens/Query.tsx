@@ -3,8 +3,10 @@
 // Screen 2 of the app brief: SQL in, the verdict before the rows, the rows as they stream.
 // Cmd/Ctrl+Enter runs; Esc aborts the fetch, which closes the core's result and records the
 // run as stopped early; Red is a refusal until "Run anyway"; the grid keeps 100,000 rows.
+// Since decisions U1 the editor sits above the results with a draggable split, and a
+// table's detail or a preview takes the results pane when the explorer opened one.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Api, ApiError, type TableInfo } from '../lib/api';
 import { RedRefused, runQuery, type Column, type Row, type VerdictLine } from '../lib/arrow';
 import { sqlCommand } from '../lib/command';
@@ -15,6 +17,7 @@ import { Chart } from '../components/Chart';
 import { Grid } from '../components/Grid';
 import { SqlEditor } from '../components/SqlEditor';
 import { SaveQuestion } from '../components/SaveQuestion';
+import { Split } from '../components/Split';
 import type { Mode } from '../lib/vocabulary';
 
 export const ROW_CAP = 100_000;
@@ -29,9 +32,15 @@ export interface QueryProps {
   onDone?: () => void;
   /** After a question is saved: the Models screen lists it on its next plan (G7). */
   onSaved?: () => void;
+  /** What takes the results pane's place when set (a table's detail, a preview; U1). */
+  panel?: ReactNode;
+  /** Run was pressed: the rows are what it is for, so the window clears the panel. */
+  onRun?: () => void;
+  /** Lines above the results pane: an import's report, a drop's error. */
+  notices?: ReactNode;
 }
 
-export function Query({ session, tables, mode, onDone, onSaved }: QueryProps) {
+export function Query({ session, tables, mode, onDone, onSaved, panel, notices, onRun }: QueryProps) {
   const [sql, setSql] = useState('');
   const [state, setState] = useState<RunState>({ kind: 'idle' });
   const [columns, setColumns] = useState<Column[]>([]);
@@ -58,6 +67,7 @@ export function Query({ session, tables, mode, onDone, onSaved }: QueryProps) {
   const run = useCallback(async (text: string, red: boolean) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    onRun?.();
     controller.current?.abort();
     const ac = new AbortController();
     controller.current = ac;
@@ -114,7 +124,7 @@ export function Query({ session, tables, mode, onDone, onSaved }: QueryProps) {
     } finally {
       if (controller.current === ac) controller.current = undefined;
     }
-  }, [session, flush]);
+  }, [session, flush, onRun]);
 
   const cancel = useCallback(() => { controller.current?.abort(); }, []);
 
@@ -135,21 +145,36 @@ export function Query({ session, tables, mode, onDone, onSaved }: QueryProps) {
 
   return (
     <section className="query" data-testid="query" data-verdict-ms={timing.verdict?.toFixed(0)} data-first-rows-ms={timing.firstRows?.toFixed(0)} data-first-rows={timing.firstCount} data-done-ms={timing.done?.toFixed(0)}>
-      <SqlEditor value={sql} onChange={(s) => { setSql(s); setAllowRed(false); }} onRun={() => void run(sql, allowRed)} onCancel={cancel} schema={schema} autoFocus />
-      <div className="query-bar">
-        {running ? (
-          <button type="button" className="quiet" onClick={cancel} data-testid="cancel">Stop (Esc)</button>
-        ) : (
-          <button type="button" className="primary" onClick={() => void run(sql, allowRed)} disabled={!sql.trim()} data-testid="run">Run</button>
-        )}
-        {verdict && !running && (
-          <SaveQuestion api={api} sql={sql.trim()} mode={mode} firstColumn={columns[0]?.name} red={verdict.verdict === 'red'} onSaved={onSaved} />
-        )}
-        <Command line={sql.trim() ? sqlCommand(sql.trim(), allowRed) : 'lakelet sql <sql>'} />
-      </div>
-      <GaugeLine state={state} onRunAnyway={() => { setAllowRed(true); void run(sql, true); }} />
-      <Chart columns={columns} rows={rows} done={state.kind === 'done'} />
-      <Grid columns={columns} rows={rows} />
+      <Split
+        top={
+          <>
+            <SqlEditor value={sql} onChange={(s) => { setSql(s); setAllowRed(false); }} onRun={() => void run(sql, allowRed)} onCancel={cancel} schema={schema} autoFocus />
+            <div className="query-bar">
+              {running ? (
+                <button type="button" className="quiet" onClick={cancel} data-testid="cancel">Stop (Esc)</button>
+              ) : (
+                <button type="button" className="primary" onClick={() => void run(sql, allowRed)} disabled={!sql.trim()} data-testid="run">Run</button>
+              )}
+              {verdict && !running && (
+                <SaveQuestion api={api} sql={sql.trim()} mode={mode} firstColumn={columns[0]?.name} red={verdict.verdict === 'red'} onSaved={onSaved} />
+              )}
+              <Command line={sql.trim() ? sqlCommand(sql.trim(), allowRed) : 'lakelet sql <sql>'} />
+            </div>
+            <GaugeLine state={state} onRunAnyway={() => { setAllowRed(true); void run(sql, true); }} />
+          </>
+        }
+        bottom={
+          <>
+            {notices}
+            {panel ?? (
+              <>
+                <Chart columns={columns} rows={rows} done={state.kind === 'done'} />
+                <Grid columns={columns} rows={rows} />
+              </>
+            )}
+          </>
+        }
+      />
     </section>
   );
 }

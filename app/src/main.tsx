@@ -3,8 +3,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import './styles/tokens.css';
-import './styles/theme.css'; // after the tokens it overrides, before the rules that read them
+import '../../web/src/styles/palette.css'; // the one palette the site and the app share (U3)
+import './styles/base.css';
 import './styles/app.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

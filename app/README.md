@@ -16,11 +16,16 @@ Each window is one project with its own `lakelet serve`, given 60% of RAM for th
 window and half that for each further one (A8). "Open…" in the bar opens another folder in a
 new window; the recent ten are in `recent.json` under the app's data directory (A10).
 
-Screen 1: drop a file or a folder on the window (or "Choose files…", or type a path), see
-the columns and the first rows, import on a click. Screen 2: SQL in the box, ⌘/Ctrl+Enter,
-the verdict before any row, rows streaming into the grid, Esc to stop, Red as a refusal
-until "Run anyway"; a result of one categorical and one numeric column draws a bar chart, a
-date and a numeric a line. Settings (⌘/Ctrl+,) are `lakelet config set` on `lakelet.toml`.
+The sidebar (decisions U2) has the five screens (⌘/Ctrl+1…5) and, under Tables, the
+explorer: the drop zone with "Import…" and every table with its rows, where its data is and
+a freshness dot. The Tables screen is the workspace (U1): the SQL box above the results on
+a draggable split; drop a file or a folder on the window (or "Import…", or type a path), see
+the columns and the first rows in the results pane, import on a click; click a table in the
+explorer and its detail opens there. SQL: ⌘/Ctrl+Enter, the verdict before any row, rows
+streaming into the grid, Esc to stop, Red as a refusal until "Run anyway"; a result of one
+categorical and one numeric column draws a bar chart, a date and a numeric a line. The
+status strip along the bottom is what `/api/health` says. Settings (⌘/Ctrl+,) are
+`lakelet config set` on `lakelet.toml`.
 If the core stops, the shell restarts it once; twice in a minute shows its last lines and a
 button. Every action shows the `lakelet` line it is, with a copy button
 (`src/lib/command.ts`).

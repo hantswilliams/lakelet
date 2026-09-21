@@ -10,7 +10,7 @@
 pub mod projects;
 pub mod supervisor;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -19,7 +19,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
-use projects::{canonical, prepare, OpenProjects, RecentProject, RecentProjects};
+use projects::{canonical, prepare, BucketCheck, OpenProjects, RecentProject, RecentProjects};
 use supervisor::{Session, DEV_ORIGIN};
 
 pub struct Shell {
@@ -170,6 +170,45 @@ fn restart_sidecar(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<S
     Ok(())
 }
 
+/// Decisions P1: the New project dialog's check of a bucket before the folder is made,
+/// `lakelet bucket check <prefix> --json` on the shell's executable (a window without a
+/// project has no core to ask).
+#[tauri::command]
+async fn check_bucket(shell: State<'_, Arc<Shell>>, prefix: String) -> Result<BucketCheck, String> {
+    let executable = shell.open.executable.clone();
+    tauri::async_runtime::spawn_blocking(move || projects::check_bucket(&executable, &prefix))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Decisions P1: where a new project goes by default — the user's Documents folder, or
+/// the home folder when there is none.
+#[tauri::command]
+fn default_parent(app: AppHandle) -> Option<String> {
+    app.path()
+        .document_dir()
+        .ok()
+        .filter(|p| p.is_dir())
+        .or_else(|| app.path().home_dir().ok())
+        .map(|p| p.display().to_string())
+}
+
+/// Decisions P1: a new project — `parent/name` made (or an empty folder of that name
+/// taken), then opened, which runs `lakelet init` there, with `--warehouse` for a bucket.
+#[tauri::command]
+async fn new_project(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>, parent: String, name: String, warehouse: Option<String>) -> Result<String, String> {
+    let shell = shell.inner().clone();
+    let label = window.label().to_string();
+    let warehouse = warehouse.map(|w| w.trim().to_string()).filter(|w| !w.is_empty());
+    tauri::async_runtime::spawn_blocking(move || {
+        let folder = projects::new_folder(Path::new(&parent), &name)?;
+        open_folder(&app, &shell, &label, folder.clone(), warehouse)?;
+        Ok(folder.display().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// A10: open a folder as a project, running `lakelet init` first when it needs it.
 #[tauri::command]
 async fn open_project(app: AppHandle, window: tauri::Window, shell: State<'_, Arc<Shell>>, path: String, warehouse: Option<String>) -> Result<(), String> {
@@ -224,7 +263,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![get_session, window_project, recent_projects, pick_folder, pick_files, open_project, restart_sidecar])
+        .invoke_handler(tauri::generate_handler![get_session, window_project, recent_projects, pick_folder, pick_files, open_project, restart_sidecar, check_bucket, default_parent, new_project])
         .build(tauri::generate_context!())
         .expect("error while building the Lakelet shell")
         .run(|app, event| {

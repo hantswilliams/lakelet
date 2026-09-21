@@ -48,14 +48,15 @@ export function planChart(columns: Column[], rows: Row[]): ChartPlan | null {
   return { kind, x: x.name, y: y.name, values };
 }
 
-// The site's tokens (tokens.css): the lake for the one series, muted ink for text, the
-// line colour for hairlines. Text never wears the series colour.
+// The palette the site and the app share (web/src/styles/palette.css): the lake for the one
+// series, muted ink for text, the line colour for hairlines. Text never wears the series
+// colour.
 //
 // Read from the document rather than written down, so a chart is drawn in the theme the
 // window is actually in (decision D1). Vega is handed colours, not CSS, so this is the one
 // place a dark window would otherwise keep light-grey axes on a dark panel. The fallbacks
 // are the light values, for a render with no document to ask (a test, a server).
-const FALLBACK = { lake: '#2E6E9E', muted: '#5C6B7A', line: '#D5DBE2', grid: '#EEF1F4' };
+const FALLBACK = { lake: '#164F44', muted: '#5F6E68', line: '#D5DCD6', grid: '#F4F6F1', panel: '#FFFFFF', local: '#1F8A5B', slow: '#C98A12', burst: '#D24B3A' };
 
 export function chartColours(root: HTMLElement | null = globalThis.document?.documentElement ?? null) {
   if (!root) return { ...FALLBACK };
@@ -66,6 +67,10 @@ export function chartColours(root: HTMLElement | null = globalThis.document?.doc
     muted: token('--muted', FALLBACK.muted),
     line: token('--line', FALLBACK.line),
     grid: token('--bg', FALLBACK.grid), // the grid is the window's own background, a shade under the panel
+    panel: token('--panel', FALLBACK.panel),
+    local: token('--local', FALLBACK.local),
+    slow: token('--slow', FALLBACK.slow),
+    burst: token('--burst', FALLBACK.burst),
   };
 }
 
@@ -84,7 +89,7 @@ export function vegaLiteSpec(plan: ChartPlan): Record<string, unknown> {
   return {
     $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
     width: 'container',
-    height: 240,
+    height: 200,
     background: 'transparent',
     data: { values: plan.values },
     mark,
@@ -106,12 +111,12 @@ export function vegaLiteSpec(plan: ChartPlan): Record<string, unknown> {
 /** One completed local run with both numbers: what the scatter plots. */
 export interface GaugePoint { est: number; actual: number; verdict: string; when: string }
 
-const VERDICT_COLOURS = { green: '#1F8A5B', yellow: '#C98A12', red: '#D24B3A' } as const; // the site's verdict tokens
 
 /** Estimate versus actual on log axes with the diagonal of a perfect estimate; the verdict
  *  colours a point and the legend names it, so colour is never the only carrier. */
 export function scatterSpec(points: GaugePoint[]): Record<string, unknown> {
-  const { muted, line, grid } = chartColours();
+  const { muted, line, grid, panel, local, slow, burst } = chartColours();
+  const verdictColours = { green: local, yellow: slow, red: burst };
   const all = points.flatMap((p) => [p.est, p.actual]).filter((v) => v > 0);
   const lo = Math.max(Math.min(...all, 1) / 2, 0.001);
   const hi = Math.max(...all, 1) * 2;
@@ -128,14 +133,14 @@ export function scatterSpec(points: GaugePoint[]): Record<string, unknown> {
       },
       {
         data: { values: points },
-        mark: { type: 'point', filled: true, size: 70, opacity: 0.85, stroke: '#FFFFFF', strokeWidth: 1.5, tooltip: true },
+        mark: { type: 'point', filled: true, size: 70, opacity: 0.85, stroke: panel, strokeWidth: 1.5, tooltip: true },
         encoding: {
           x: { field: 'est', type: 'quantitative', scale: { type: 'log', domain: [lo, hi] }, axis: { title: 'estimated seconds', format: '~s', tickCount: 5 } },
           y: { field: 'actual', type: 'quantitative', scale: { type: 'log', domain: [lo, hi] }, axis: { title: 'actual seconds', format: '~s', tickCount: 5 } },
           color: {
             field: 'verdict',
             type: 'nominal',
-            scale: { domain: ['green', 'yellow', 'red'], range: [VERDICT_COLOURS.green, VERDICT_COLOURS.yellow, VERDICT_COLOURS.red] },
+            scale: { domain: ['green', 'yellow', 'red'], range: [verdictColours.green, verdictColours.yellow, verdictColours.red] },
             legend: { title: null, orient: 'top', labelExpr: "datum.label == 'green' ? 'Green · runs here' : datum.label == 'yellow' ? 'Yellow · slowly' : 'Red · more machine'" },
           },
           tooltip: [
