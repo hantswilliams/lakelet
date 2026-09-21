@@ -168,7 +168,7 @@ test('the plan, a model, Run all, the view detail, the runs, and Simple mode', a
   await expect(screen).toContainText('2 questions · all quick');
   const card = screen.getByTestId('card-stg');
   await expect(card).toContainText('answered live · last refreshed just now');
-  await expect(card).toContainText('Ready in about');
+  await expect(card).toContainText(/Ready (in about|right away)/);
   await expect(card).toContainText('2 checks: id is never empty; id is never repeated');
   await expect(screen.getByTestId('card-by_customer')).toContainText('saved as a table');
   await expect(screen.getByTestId('card-by_customer')).toContainText('no checks');

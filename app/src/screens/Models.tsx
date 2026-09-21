@@ -38,6 +38,8 @@ export interface ModelsProps {
   onSelected?: () => void;
   /** A lineage link named a table or view: the Tables screen opens its detail. */
   onOpenTable?: (name: string) => void;
+  /** Decisions Q1: the rows of a model — the Tables screen with `select * from <name>` run. */
+  onAnswer?: (name: string) => void;
   /** The detail's Recent strip (L2): the Changes screen, filtered to the model. */
   onOpenChanges?: (name: string) => void;
 }
@@ -124,7 +126,7 @@ function Review({ models, mode, onSelect }: { models: PlannedModel[]; mode: Mode
   );
 }
 
-export function Models({ session, mode, tables, onChanged, select, onSelected, onOpenTable, onOpenChanges }: ModelsProps) {
+export function Models({ session, mode, tables, onChanged, select, onSelected, onOpenTable, onAnswer, onOpenChanges }: ModelsProps) {
   const api = new Api(session);
   const w = words(mode);
   const [models, setModels] = useState<PlannedModel[]>();
@@ -175,6 +177,21 @@ export function Models({ session, mode, tables, onChanged, select, onSelected, o
       setBusy(undefined);
     }
   }
+
+  // Q1: the rows. A model never built has none yet, so the run comes first; the rows are
+  // asked for only when it built.
+  async function answer(m: PlannedModel) {
+    if (!onAnswer) return;
+    if (m.state === 'never') {
+      await run([m.name]); // `load` after it re-plans; a run that failed or was refused leaves the state
+      const built = await api.runPlan([m.name]).catch(() => undefined);
+      if (!built?.some((x) => x.name === m.name && x.state !== 'never')) return;
+    }
+    onAnswer(m.name);
+  }
+  const answerButton = (m: PlannedModel, primary = false) => onAnswer && (
+    <button type="button" className={primary ? 'primary' : 'quiet'} disabled={!!busy} data-testid={`answer-${m.name}`} onClick={() => void answer(m)}>{m.state === 'never' ? w.answerAfterRun : w.answer}</button>
+  );
 
   const byName = new Map(tables.map((t) => [t.name, t]));
   const results = new Map<string, ModelResult>((report?.results ?? []).map((r) => [r.name, r]));
@@ -260,6 +277,7 @@ export function Models({ session, mode, tables, onChanged, select, onSelected, o
                 </p>
                 {r && <p className={r.status === 'success' ? 'muted' : 'failed'}>{r.status === 'success' ? `refreshed just now in ${humanSeconds(r.seconds)}` : `failed: ${r.message ?? r.status}`}</p>}
                 <footer>
+                  {answerButton(m, true)}
                   <button type="button" className="quiet" disabled={!!busy} data-testid={`refresh-${m.name}`} onClick={() => void run([m.name])}>{w.runOne}</button>
                   <Command line={runCommand([m.name])} />
                   <button type="button" className="quiet" aria-pressed={historyOf === m.name} data-testid={`history-${m.name}`} onClick={() => setHistoryOf((h) => (h === m.name ? undefined : m.name))}>{w.versions}</button>
@@ -342,6 +360,7 @@ export function Models({ session, mode, tables, onChanged, select, onSelected, o
               <footer className="actions">
                 <button type="button" className={current.verdict === 'red' ? 'quiet' : 'primary'} disabled={!!busy} data-testid="run-this" onClick={() => void run([current.name])}>{w.runOne}</button>
                 <Command line={runCommand([current.name])} />
+                {answerButton(current)}
                 {current.verdict === 'red' && <span className="muted">Red: the run refuses this one until {w.runAnyway.toLowerCase()}.</span>}
               </footer>
               <Versions session={session} mode={mode} model={current} onRestored={load} />

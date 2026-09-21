@@ -5,7 +5,7 @@
 // cards with checks; a Red model's run is refused until Run anyway. The core is a stubbed
 // fetch here; the Playwright spec runs it against the real one.
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup as cleanupAll, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlannedModel, RunReport } from '../lib/api';
 import { Models } from './Models';
@@ -233,6 +233,40 @@ describe('the Models screen', () => {
     fireEvent.click(screen.getByTestId('refresh-stg'));
     await waitFor(() => expect(screen.getByTestId('run-report')).toBeTruthy());
     expect(screen.getByTestId('run-report').textContent).toContain('1 question built in 1.2 s. Answered live: stg.');
+  });
+
+  it('See the answer (Q1) hands the rows to the workspace; a question never refreshed is refreshed first', async () => {
+    // the plan after a run says agg is built now: the stub answers the second plan with it fresh
+    let plans = 0;
+    const models = [stg, agg];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/run/plan')) {
+        plans += 1;
+        const body = url.includes('select=agg') ? [{ ...agg, state: 'fresh' as const }] : models;
+        return new Response(JSON.stringify(body), { status: 200 });
+      }
+      if (url.endsWith('/run')) return new Response(JSON.stringify(okReport(['agg'])), { status: 200 });
+      return new Response('{}', { status: 404 });
+    }));
+    const onAnswer = vi.fn();
+    render(<Models session={session} mode="simple" tables={[]} onChanged={async () => {}} onAnswer={onAnswer} />);
+    await waitFor(() => expect(screen.getByTestId('cards')).toBeTruthy());
+    expect(screen.getByTestId('answer-stg').textContent).toBe('See the answer');
+    expect(screen.getByTestId('answer-agg').textContent).toBe('Refresh, then see the answer');
+    fireEvent.click(screen.getByTestId('answer-stg'));
+    expect(onAnswer).toHaveBeenCalledWith('stg');
+    // never refreshed: the run, then a plan of that one model, then the rows
+    fireEvent.click(screen.getByTestId('answer-agg'));
+    await waitFor(() => expect(onAnswer).toHaveBeenCalledWith('agg'));
+    expect(plans).toBeGreaterThanOrEqual(2);
+    // Technical: the detail's footer says Rows
+    cleanupAll();
+    stub([stg, agg], () => new Response('{}', { status: 200 }));
+    render(<Models session={session} mode="technical" tables={[]} onChanged={async () => {}} onAnswer={onAnswer} />);
+    await waitFor(() => expect(screen.getByTestId('model-detail')).toBeTruthy());
+    expect(screen.getByTestId('answer-stg').textContent).toBe('Rows');
+    fireEvent.click(screen.getByTestId('answer-stg'));
+    expect(onAnswer).toHaveBeenLastCalledWith('stg');
   });
 
   it('says when the plan failed, in the plan\'s own words', async () => {

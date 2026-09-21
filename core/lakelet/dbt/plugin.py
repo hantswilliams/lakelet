@@ -46,6 +46,8 @@ class Plugin(BasePlugin):
 
     def configure_connection(self, conn: DuckDBPyConnection) -> None:
         conn.execute("LOAD iceberg; LOAD httpfs")
+        # as the engine (`engine.py`): a GeoParquet column stays the binary the catalog says
+        conn.execute("SET enable_geoparquet_conversion = false")
         # A table in a bucket (decisions W1: an `s3://` warehouse, or a table attached
         # from one) needs the same credentials the engine has: explicit keys from the
         # environment, else the AWS default chain, which is tried and left alone when it

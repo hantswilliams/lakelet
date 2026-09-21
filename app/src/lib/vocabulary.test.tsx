@@ -48,6 +48,7 @@ describe('the two vocabularies', () => {
   it('say the verdict as the gauge does, or as the wait', () => {
     expect(verdictSentence(model({}), 'technical')).toBe('Green — about 2 s');
     expect(verdictSentence(model({}), 'simple')).toBe('Ready in about 2 s.');
+    expect(verdictSentence(model({ est_wall_local: 0.3 }), 'simple')).toBe('Ready right away.'); // not "about under a second"
     expect(verdictSentence(model({ verdict: 'yellow', est_wall_local: 240 }), 'simple')).toBe('Takes a while: about 4.0 min. Fine to start and come back.');
     expect(verdictSentence(model({ verdict: 'red', est_wall_local: 9000 }), 'simple')).toBe('Too big for this machine right now.');
     expect(verdictSentence(model({ error: 'Table with name x does not exist', verdict: null, words: null }), 'technical')).toBe('not estimated: Table with name x does not exist');

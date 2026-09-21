@@ -3,9 +3,9 @@
 // The sidebar (decisions U2): the five screens as entries — Tables, Models, Lineage,
 // Changes, Gauge, in Simple mode's words when it is on — with ⌘/Ctrl+1…5 as their keys,
 // and under Tables the explorer, so the tables are one click away from any screen. It
-// collapses to icons; the choice is remembered for the window.
+// collapses to icons, and its edge drags to the width wanted; both are remembered.
 
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type { Mode } from '../lib/vocabulary';
 import { words } from '../lib/vocabulary';
 
@@ -65,14 +65,66 @@ export interface SidebarProps {
   children?: ReactNode;
 }
 
+const WIDTH_KEY = 'lakelet.sidebar-width';
+export const DEFAULT_WIDTH = 272;
+const MIN_WIDTH = 200;
+const MAX_WIDTH = 520;
+
+export const clampWidth = (w: number) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(w)));
+
+export function loadWidth(): number {
+  try {
+    const w = Number(localStorage.getItem(WIDTH_KEY));
+    return w > 0 ? clampWidth(w) : DEFAULT_WIDTH;
+  } catch {
+    return DEFAULT_WIDTH;
+  }
+}
+
+function saveWidth(w: number): void {
+  try {
+    localStorage.setItem(WIDTH_KEY, String(w));
+  } catch {
+    // a webview without storage
+  }
+}
+
 const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 
 export function Sidebar({ screen, mode, onScreen, children }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<boolean>(loadCollapsed);
   const toggle = () => { saveCollapsed(!collapsed); setCollapsed(!collapsed); };
+  const [width, setWidth] = useState<number>(loadWidth);
+  const host = useRef<HTMLElement>(null);
+  const dragging = useRef(false);
+
+  // the edge drags the width; the pointer's x against the sidebar's left is the width
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    dragging.current = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragging.current) return;
+    const left = host.current?.getBoundingClientRect().left ?? 0;
+    setWidth(clampWidth(e.clientX - left));
+  }
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    dragging.current = false;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    saveWidth(width);
+  }
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      const w = clampWidth(width + (e.key === 'ArrowRight' ? 16 : -16));
+      setWidth(w);
+      saveWidth(w);
+    }
+  }
 
   return (
-    <aside className={`sidebar${collapsed ? ' icons' : ''}`} data-testid="sidebar" data-collapsed={collapsed ? 'true' : undefined}>
+    <aside ref={host} className={`sidebar${collapsed ? ' icons' : ''}`} style={collapsed ? undefined : { width }} data-testid="sidebar" data-collapsed={collapsed ? 'true' : undefined} data-width={collapsed ? undefined : width}>
       <nav className="entries" aria-label="Screens" data-testid="screens">
         {SCREENS.map((s, i) => (
           <button
@@ -95,6 +147,23 @@ export function Sidebar({ screen, mode, onScreen, children }: SidebarProps) {
         <svg viewBox="0 0 16 16" aria-hidden="true">{collapsed ? <path d="M6 3l5 5-5 5" /> : <path d="M10 3 5 8l5 5" />}</svg>
         {!collapsed && <span className="label">Collapse</span>}
       </button>
+      {!collapsed && (
+        <div
+          className="sidebar-edge"
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={width}
+          aria-valuemin={MIN_WIDTH}
+          aria-valuemax={MAX_WIDTH}
+          tabIndex={0}
+          title="Drag to resize the sidebar; ← and → move it too"
+          data-testid="sidebar-edge"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onKeyDown={onKeyDown}
+        />
+      )}
     </aside>
   );
 }

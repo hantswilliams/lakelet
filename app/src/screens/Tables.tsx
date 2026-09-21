@@ -32,9 +32,12 @@ export interface TablesProps {
   onOpenModel?: (name: string) => void;
   /** A detail's Recent strip (L2): the Changes screen, filtered to that name. */
   onOpenChanges?: (name: string) => void;
+  /** SQL to run on arrival (Q1), and the word that it was taken. */
+  arrive?: string;
+  onArrived?: () => void;
 }
 
-export function Tables({ session, tables, work, movedFrom, mode, onDone, onOpenModel, onOpenChanges }: TablesProps) {
+export function Tables({ session, tables, work, movedFrom, mode, onDone, onOpenModel, onOpenChanges, arrive, onArrived }: TablesProps) {
   const { busy, dropError, pending, done, detail } = work;
 
   // Run shows rows: whatever sat in their place goes (a detail; a preview not yet imported).
@@ -110,7 +113,7 @@ export function Tables({ session, tables, work, movedFrom, mode, onDone, onOpenM
       )}
       {tables.length > 0 ? (
         <Suspense fallback={<section className="query" data-testid="query-loading" />}>
-          <Query session={session} tables={tables} mode={mode} onDone={onDone} panel={panel} notices={notices} onRun={clearPanel} />
+          <Query session={session} tables={tables} mode={mode} onDone={onDone} panel={panel} notices={notices} onRun={clearPanel} arrive={arrive} onArrived={onArrived} />
         </Suspense>
       ) : (
         <Split

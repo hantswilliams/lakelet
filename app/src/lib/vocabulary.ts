@@ -31,6 +31,10 @@ export interface Words {
   versions: string;
   /** `lakelet run --stale` (V3): the button beside Run all. */
   runStale: string;
+  /** The rows (decisions Q1): the workspace with `select * from <name>` run. */
+  answer: string;
+  /** The same for a model never built: the run first, then the rows. */
+  answerAfterRun: string;
 }
 
 const TECHNICAL: Words = {
@@ -49,6 +53,8 @@ const TECHNICAL: Words = {
   running: 'running…',
   versions: 'Versions',
   runStale: 'Run what changed',
+  answer: 'Rows',
+  answerAfterRun: 'Run, then rows',
 };
 
 const SIMPLE: Words = {
@@ -67,6 +73,8 @@ const SIMPLE: Words = {
   running: 'refreshing…',
   versions: 'History',
   runStale: 'Refresh what changed',
+  answer: 'See the answer',
+  answerAfterRun: 'Refresh, then see the answer',
 };
 
 export const words = (mode: Mode): Words => (mode === 'simple' ? SIMPLE : TECHNICAL);
@@ -120,7 +128,8 @@ export function verdictSentence(m: Pick<PlannedModel, 'verdict' | 'words' | 'rea
   if (mode === 'technical') return m.words ?? m.reason ?? m.verdict ?? '—';
   const wait = m.est_wall_local !== null && m.est_wall_local !== undefined ? humanSeconds(m.est_wall_local) : null;
   switch (m.verdict) {
-    case 'green': return wait ? `Ready in about ${wait}.` : 'Ready right away.';
+    // "about under a second" is not a sentence: a sub-second estimate is "right away"
+    case 'green': return wait && wait !== 'under a second' ? `Ready in about ${wait}.` : 'Ready right away.';
     case 'yellow': return wait ? `Takes a while: about ${wait}. Fine to start and come back.` : 'Takes a while. Fine to start and come back.';
     case 'red': return 'Too big for this machine right now.';
     case 'none': return 'Not sized: it reads something outside the project, so there is no estimate. It will run.';

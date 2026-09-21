@@ -72,9 +72,21 @@ test('a question is saved from the query screen and appears on the Models screen
   await expect(screen.getByTestId('model-detail').getByTestId('state-sentence')).toHaveText('never · never built');
   await expect(screen.getByTestId('run-stale')).toHaveText(/^Run what changed \(\d+\)$/);
   await expect(screen.getByTestId('command').filter({ hasText: 'lakelet run --stale' })).toHaveCount(1);
+  // Q1: never built, the detail's button says so and does the run first
+  await expect(screen.getByTestId('answer-total_by_customer')).toHaveText('Run, then rows');
   await screen.getByTestId('run-stale').click();
   await expect(screen.getByTestId('run-report')).toContainText('built in', { timeout: 90_000 });
   await expect(row.getByTestId('state')).toHaveText('fresh', { timeout: 90_000 });
+
+  // Q1: Rows is the workspace with `select * from total_by_customer` run — the verdict, the
+  // grid with the question's rows, the line beside the box
+  await expect(screen.getByTestId('answer-total_by_customer')).toHaveText('Rows');
+  await screen.getByTestId('answer-total_by_customer').click();
+  await expect(page.getByTestId('workspace')).toBeVisible();
+  await expect(page.getByTestId('gauge')).toHaveAttribute('data-verdict', /green|yellow/, { timeout: 30_000 });
+  await expect(page.getByTestId('query')).toHaveAttribute('data-done-ms', /\d+/);
+  await expect(page.getByTestId('grid')).toContainText('c1');
+  await expect(page.getByTestId('query').getByTestId('command').locator('code')).toHaveText("lakelet sql 'select * from total_by_customer'");
 
   // an edit through Save (the same title, Replace it) makes it edited; refreshing what
   // changed makes it fresh again

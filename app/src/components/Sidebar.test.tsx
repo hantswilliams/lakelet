@@ -3,9 +3,9 @@
 // Decisions U2: the five entries in the mode's words, the one that is on, the keys, the
 // explorer under them, and the collapse to icons that is remembered.
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SCREENS, Sidebar, loadCollapsed, screenForKey, screenLabel } from './Sidebar';
+import { DEFAULT_WIDTH, SCREENS, Sidebar, clampWidth, loadCollapsed, loadWidth, screenForKey, screenLabel } from './Sidebar';
 
 // Node 22 and newer expose a `localStorage` global of their own that shadows jsdom's and
 // has no `clear()` (it failed on the Mac); this storage depends on neither.
@@ -68,5 +68,40 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByTestId('sidebar-toggle'));
     expect(screen.getByText('the explorer')).toBeTruthy();
     expect(loadCollapsed()).toBe(false);
+  });
+
+  it('the edge drags the width, the arrows move it, both within bounds, and it is remembered', () => {
+    expect(loadWidth()).toBe(DEFAULT_WIDTH);
+    const { unmount } = render(<Sidebar screen="tables" mode="technical" onScreen={() => {}}><p>the explorer</p></Sidebar>);
+    const aside = screen.getByTestId('sidebar');
+    aside.getBoundingClientRect = () => ({ left: 0, top: 0, width: DEFAULT_WIDTH, height: 800, right: DEFAULT_WIDTH, bottom: 800, x: 0, y: 0, toJSON: () => ({}) });
+    const edge = screen.getByTestId('sidebar-edge');
+    edge.setPointerCapture = () => {};
+    edge.releasePointerCapture = () => {};
+    // jsdom has no PointerEvent; a MouseEvent under the pointer name carries the x React reads
+    const pointer = (type: string, clientX: number) => act(() => { edge.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX })); });
+    pointer('pointerdown', DEFAULT_WIDTH);
+    pointer('pointermove', 340);
+    expect(aside.dataset.width).toBe('340');
+    expect(aside.style.width).toBe('340px');
+    pointer('pointermove', 900); // past the ceiling
+    expect(aside.dataset.width).toBe(String(clampWidth(900)));
+    pointer('pointerup', 900);
+    expect(loadWidth()).toBe(clampWidth(900));
+    pointer('pointermove', 300); // after the button is up: nothing
+    expect(aside.dataset.width).toBe(String(clampWidth(900)));
+    fireEvent.keyDown(edge, { key: 'ArrowLeft' });
+    expect(aside.dataset.width).toBe(String(clampWidth(900) - 16));
+    expect(loadWidth()).toBe(clampWidth(900) - 16);
+    for (let i = 0; i < 40; i++) fireEvent.keyDown(edge, { key: 'ArrowLeft' });
+    expect(aside.dataset.width).toBe(String(clampWidth(0))); // the floor
+    // collapsed: no edge, no inline width; the remembered width comes back with the explorer
+    fireEvent.click(screen.getByTestId('sidebar-toggle'));
+    expect(screen.queryByTestId('sidebar-edge')).toBeNull();
+    expect(aside.style.width).toBe('');
+    unmount();
+    render(<Sidebar screen="tables" mode="technical" onScreen={() => {}} />);
+    fireEvent.click(screen.getByTestId('sidebar-toggle'));
+    expect(screen.getByTestId('sidebar').dataset.width).toBe(String(clampWidth(0)));
   });
 });

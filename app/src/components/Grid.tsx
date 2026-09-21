@@ -9,10 +9,16 @@ import type { Column, Row } from '../lib/arrow';
 
 const ROW = 30;
 
-const cell = (v: unknown, type: string): string => {
+/** A cell's text. Binary (a GeoParquet geometry's WKB, a blob) is its size and the first
+ *  bytes in hex, not the byte-by-index object JSON would make of a Uint8Array. */
+export const cell = (v: unknown, type: string): string => {
   if (v === null || v === undefined) return '∅';
   if (typeof v === 'string' && type.startsWith('Decimal') && /^-?\d+(\.\d+)?$/.test(v)) return decimalText(v);
   if (typeof v === 'number') return Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  if (v instanceof Uint8Array) {
+    const head = Array.from(v.subarray(0, 8), (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${v.length.toLocaleString()} ${v.length === 1 ? 'byte' : 'bytes'} · ${head}${v.length > 8 ? '…' : ''}`;
+  }
   if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
 };

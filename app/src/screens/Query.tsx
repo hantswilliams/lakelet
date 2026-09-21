@@ -38,10 +38,14 @@ export interface QueryProps {
   onRun?: () => void;
   /** Lines above the results pane: an import's report, a drop's error. */
   notices?: ReactNode;
+  /** SQL to put in the box and run on arrival (decisions Q1: a question's answer); the
+   *  window clears it through `onArrived` so a re-render does not run it again. */
+  arrive?: string;
+  onArrived?: () => void;
 }
 
-export function Query({ session, tables, mode, onDone, onSaved, panel, notices, onRun }: QueryProps) {
-  const [sql, setSql] = useState('');
+export function Query({ session, tables, mode, onDone, onSaved, panel, notices, onRun, arrive, onArrived }: QueryProps) {
+  const [sql, setSql] = useState(arrive ?? '');
   const [state, setState] = useState<RunState>({ kind: 'idle' });
   const [columns, setColumns] = useState<Column[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -82,11 +86,16 @@ export function Query({ session, tables, mode, onDone, onSaved, panel, notices, 
     let capped = false;
     let first = true;
     setTiming({});
+    // A run that a newer one replaced (Run pressed again; the arrival effect twice under
+    // StrictMode) says nothing more: its late rows, verdict or "stopped" would land on top
+    // of the newer run's state.
+    const current = () => controller.current === ac;
     try {
       const result = await runQuery(api, trimmed, red, ac.signal, {
-        onVerdict: (v) => { verdict = v; setTiming((t) => ({ ...t, verdict: performance.now() - t0 })); setState({ kind: 'running', verdict: v, rows: 0 }); },
-        onSchema: (cols) => setColumns(cols),
+        onVerdict: (v) => { verdict = v; if (!current()) return; setTiming((t) => ({ ...t, verdict: performance.now() - t0 })); setState({ kind: 'running', verdict: v, rows: 0 }); },
+        onSchema: (cols) => { if (current()) setColumns(cols); },
         onRows: (batch) => {
+          if (!current()) return false;
           const room = ROW_CAP - count;
           const take = batch.length > room ? batch.slice(0, room) : batch;
           count += take.length;
@@ -106,11 +115,13 @@ export function Query({ session, tables, mode, onDone, onSaved, panel, notices, 
           return true;
         },
       });
+      if (!current()) return;
       flush();
       setTiming((t) => ({ ...t, done: performance.now() - t0 }));
       setState({ kind: 'done', verdict: verdict!, rows: count, seconds: (performance.now() - t0) / 1000, complete: result.complete && !capped, capped });
       onDone?.();
     } catch (e: unknown) {
+      if (!current()) return;
       flush();
       if (ac.signal.aborted) {
         setState({ kind: 'stopped', verdict, rows: count, seconds: (performance.now() - t0) / 1000 });
@@ -127,6 +138,15 @@ export function Query({ session, tables, mode, onDone, onSaved, panel, notices, 
   }, [session, flush, onRun]);
 
   const cancel = useCallback(() => { controller.current?.abort(); }, []);
+
+  // Q1: SQL handed in is run at once, as if typed and Run pressed.
+  useEffect(() => {
+    if (!arrive) return;
+    setSql(arrive);
+    setAllowRed(false);
+    onArrived?.();
+    void run(arrive, false);
+  }, [arrive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => controller.current?.abort(), []);
 

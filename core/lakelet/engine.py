@@ -106,6 +106,13 @@ class Engine:
                 "DuckDB's iceberg, httpfs, excel and aws extensions are not installed on this "
                 "machine; `lakelet init` installs them once"
             ) from e
+        # A GeoParquet column (a `geo` footer entry; Overture's files) is registered in the
+        # catalog as `binary`, its WKB bytes. With this on, and DuckDB's spatial extension
+        # on the machine, the Parquet reader turns the column into GEOMETRY on its own and
+        # the Iceberg scan then fails to cast it back to binary — every read of the table
+        # refused. Off, the bytes come through as they are; `st_geomfromwkb` is in core
+        # DuckDB for anyone who wants the geometry.
+        self.con.execute("SET enable_geoparquet_conversion = false")
         # The user's own credentials (brief D36): explicit keys from the environment, else
         # the AWS default chain. Local work never needs either, so a chain that resolves
         # nothing is kept as a message for the first s3:// operation, not raised here.

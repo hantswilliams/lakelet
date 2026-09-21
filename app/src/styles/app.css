@@ -20,8 +20,11 @@ main.workspace-host>.workspace{flex:1;min-height:0}
 .strip div{display:inline-flex;gap:5px;align-items:baseline;white-space:nowrap}
 .strip b{font-weight:600;color:var(--ink)}
 /* the sidebar (U2): the five screens, then the explorer; collapsed to icons on a click */
-.sidebar{width:272px;flex:none;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--line);overflow:hidden;transition:width .12s}
+.sidebar{width:272px;flex:none;position:relative;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--line);overflow:hidden}
 .sidebar.icons{width:52px}
+/* the edge drags the width (remembered); a hairline that lights up under the pointer */
+.sidebar-edge{position:absolute;top:0;right:0;bottom:0;width:6px;cursor:col-resize}
+.sidebar-edge:hover,.sidebar-edge:focus-visible{background:var(--cloud);outline:none;box-shadow:inset -2px 0 var(--lake)}
 .sidebar .entries{display:grid;gap:2px;padding:10px 8px;border-bottom:1px solid var(--line)}
 .sidebar .entries button{display:flex;align-items:center;gap:10px;padding:7px 9px;border:0;border-radius:8px;background:none;color:var(--ink-soft);font:600 13px var(--sans);cursor:pointer;text-align:left;white-space:nowrap}
 .sidebar .entries button:hover{background:var(--bg)}
@@ -186,7 +189,7 @@ button.link.mono{font-family:var(--mono)}
 .chart-host .vega-embed{width:100%}
 .chart-host .vega-embed svg{max-width:100%}
 /* settings */
-.settings{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:grid;gap:14px}
+.settings{width:min(760px,100%);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:grid;gap:14px;box-shadow:0 16px 48px rgba(0,0,0,.25)}
 .settings header{display:flex;align-items:center;justify-content:space-between}
 .settings h2{font-size:16px}
 .settings .setting{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:16px;align-items:start;padding-top:12px;border-top:1px solid var(--line)}

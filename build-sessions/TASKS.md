@@ -146,6 +146,9 @@ Definition of done (core brief §6): tests green on both runners ✓; budgets me
 
 ## Open items that are not steps
 
+- [ ] The catalog's `create_table` answers a failure inside `create_metadata` (pyiceberg refusing V3, 2026-09-21) with a bare 500 and a non-JSON body, which pyiceberg reports as "Invalid JSON"; the exception handler should turn it into the catalog's JSON error shape. Seen in a probe, not in the app.
+- [ ] **V1 (format-version 3), a fact for it:** pyiceberg 0.12 refuses to *write* V3 metadata (`NotImplementedError`, apache/iceberg-python#1551), so a V3 table cannot be created through the catalog until pyiceberg can; DuckDB's writer can make one. Found 2026-09-21 while probing the geometry column.
+
 Open:
 
 - [x] The first Arrow batch reaching the app carries several thousand rows: it did not; the screen's stopwatch read the count late (2026-09-11, real-data step 3). The first batch is one 1,000-row batch, asserted.
@@ -188,6 +191,8 @@ Closed:
 - [x] Developer docs (2026-09-09): `/docs` with the pages under `web/src/content/docs/`, the CLI reference generated, `llms.txt`, the nav's GitHub link; `/docs/transactions` on what DuckDB-Iceberg refuses inside one transaction.
 
 ## Decisions waiting on Hants
+
+**`decisions-for-review_092126.md` Q1** agreed 2026-09-21 and **built** the same day: a question card's **See the answer** (Technical: **Rows**) — the workspace with `select * from <question>` run; a question never refreshed is refreshed first. `Models.test.tsx`, `save-question.spec`, `/docs/app`. With it, a core fix: a client gone before the first byte left the engine lock held (`test_a_client_gone_before_the_first_byte_frees_the_lock`).
 
 **`trust-round-plan.md` T1 to T8**: decided 2026-09-15, all agreed, built the same day (above).
 

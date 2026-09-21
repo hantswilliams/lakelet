@@ -141,7 +141,7 @@ def _estimate_json(estimate) -> dict[str, Any]:
     return data
 
 
-def _arrow_stream(result, lock: threading.Lock) -> Iterator[bytes]:
+def _arrow_stream(result) -> Iterator[bytes]:
     class Sink:
         """The file-like surface pyarrow expects of a Python sink; bytes are handed to the
         response as each batch is written."""
@@ -190,15 +190,19 @@ def _arrow_stream(result, lock: threading.Lock) -> Iterator[bytes]:
         yield b"".join(sink.parts)
     finally:
         result.close()
-        lock.release()
 
 
 async def _stream_until_gone(
-    batches: Iterator[bytes], interrupt: Any, request: Request
+    batches: Iterator[bytes], interrupt: Any, request: Request, release: Any
 ) -> AsyncIterator[bytes]:
     """Feed the sync Arrow stream to the response; when the client goes away mid-query
     (the app's Esc closes the fetch), interrupt the engine so the statement stops now
-    rather than running to completion for nobody, and the result closes as stopped early."""
+    rather than running to completion for nobody, and the result closes as stopped early.
+    ``release`` closes the result and frees the engine lock, and is called here rather
+    than from inside the generator: a client gone before the first byte cancels the
+    response before ``next`` ever ran, and a generator that never started runs no
+    ``finally`` — the lock stayed held and every later query waited on it."""
+    abandoned = False
     try:
         while True:
             chunk = await anyio.to_thread.run_sync(next, batches, None, abandon_on_cancel=True)
@@ -207,20 +211,27 @@ async def _stream_until_gone(
             yield chunk
     except (asyncio.CancelledError, GeneratorExit):
         # The abandoned thread may still be inside next(); the interrupt makes DuckDB
-        # return, then the generator can be closed, which closes the result and frees
-        # the lock. Done on a thread so the cancelled response is not held up.
-        threading.Thread(target=_stop, args=(batches, interrupt), daemon=True).start()
+        # return, then the generator can be closed and the lock freed. Done on a thread so
+        # the cancelled response is not held up.
+        abandoned = True
+        threading.Thread(target=_stop, args=(batches, interrupt, release), daemon=True).start()
         raise
+    finally:
+        if not abandoned:
+            release()
 
 
-def _stop(batches: Iterator[bytes], interrupt: Any) -> None:
+def _stop(batches: Iterator[bytes], interrupt: Any, release: Any) -> None:
     interrupt()
-    for _ in range(600):  # up to a minute for DuckDB to notice; it takes milliseconds
-        try:
-            batches.close()
-            return
-        except ValueError:  # generator already executing: the thread has not returned yet
-            time.sleep(0.1)
+    try:
+        for _ in range(600):  # up to a minute for DuckDB to notice; it takes milliseconds
+            try:
+                batches.close()
+                return
+            except ValueError:  # generator already executing: the thread has not returned yet
+                time.sleep(0.1)
+    finally:
+        release()
 
 
 async def _query_watching_disconnect(request: Request, start: Any, interrupt: Any) -> Any:
@@ -518,8 +529,20 @@ def create_router(project: Project, token: str) -> APIRouter:
                 "X-Lakelet-Words": result.estimate.words,
                 "X-Lakelet-Reason": result.estimate.reason,
             }
+        released = threading.Event()
+
+        def release() -> None:
+            """Once: the result recorded as it stands, the engine free for the next query."""
+            if released.is_set():
+                return
+            released.set()
+            try:
+                result.close()
+            finally:
+                lock.release()
+
         return StreamingResponse(
-            _stream_until_gone(_arrow_stream(result, lock), project.engine.interrupt, request),
+            _stream_until_gone(_arrow_stream(result), project.engine.interrupt, request, release),
             media_type=ARROW_STREAM,
             headers=headers,
         )

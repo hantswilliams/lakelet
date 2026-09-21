@@ -48,6 +48,9 @@ export default function App() {
   // detail is the window's (`work`, below).
   const [openModel, setOpenModel] = useState<string>();
   const followModel = (name: string) => { setOpenModel(name); setScreen('models'); };
+  // Q1: a question's answer — the Tables screen with `select * from <name>` run.
+  const [arrive, setArrive] = useState<string>();
+  const showAnswer = (name: string) => { setArrive(`select * from ${name}`); setScreen('tables'); };
   // L2: a detail's Recent strip opens the Changes screen filtered to that name.
   const [changesName, setChangesName] = useState<string>();
   const followChanges = (name: string) => { setChangesName(name); setScreen('changes'); };
@@ -263,10 +266,6 @@ export default function App() {
                 </p>
               </section>
             )}
-            {settingsOpen && api && status !== 'down' && <SettingsPanel api={api} onClose={() => setSettingsOpen(false)} />}
-            {settingsOpen && (!api || status === 'down') && (
-              <section className="settings" data-testid="settings"><header><h2>Settings</h2><button type="button" className="quiet" onClick={() => setSettingsOpen(false)}>Close (Esc)</button></header><p className="muted">The core is not running; settings are read and written through it. Restart it first.</p></section>
-            )}
             {session?.initialised && (
               <section className="notice" data-testid="initialised">
                 <b>Set up {baseName(session.project)} as a lakehouse.</b>
@@ -275,7 +274,7 @@ export default function App() {
             )}
             {session && status !== 'down' && screen === 'models' && (
               <Suspense fallback={<section className="models-screen" data-testid="models-loading" />}>
-                <Models session={session} mode={mode} tables={tables} onChanged={refreshTables} select={openModel} onSelected={() => setOpenModel(undefined)} onOpenTable={followTable} onOpenChanges={followChanges} />
+                <Models session={session} mode={mode} tables={tables} onChanged={refreshTables} select={openModel} onSelected={() => setOpenModel(undefined)} onOpenTable={followTable} onAnswer={showAnswer} onOpenChanges={followChanges} />
               </Suspense>
             )}
             {session && status !== 'down' && screen === 'lineage' && (
@@ -294,9 +293,20 @@ export default function App() {
               </Suspense>
             )}
             {session && status !== 'down' && screen === 'tables' && (
-              <Tables session={session} tables={tables} work={work} movedFrom={health?.moved_from} mode={mode} onDone={() => void refreshTables()} onOpenModel={followModel} onOpenChanges={followChanges} />
+              <Tables session={session} tables={tables} work={work} movedFrom={health?.moved_from} mode={mode} onDone={() => void refreshTables()} onOpenModel={followModel} onOpenChanges={followChanges} arrive={arrive} onArrived={() => setArrive(undefined)} />
             )}
           </main>
+        </div>
+      )}
+      {settingsOpen && project !== null && (
+        // a dialog over the window, like New project…: the workspace owns the height, so a
+        // panel in the column would be cut off at the bottom
+        <div className="modal" onMouseDown={(e) => { if (e.target === e.currentTarget) setSettingsOpen(false); }}>
+          {api && status !== 'down' ? (
+            <SettingsPanel api={api} onClose={() => setSettingsOpen(false)} />
+          ) : (
+            <section className="settings" data-testid="settings"><header><h2>Settings</h2><button type="button" className="quiet" onClick={() => setSettingsOpen(false)}>Close (Esc)</button></header><p className="muted">The core is not running; settings are read and written through it. Restart it first.</p></section>
+          )}
         </div>
       )}
       {newOpen && (

@@ -195,6 +195,32 @@ def test_a_client_that_goes_away_stops_the_statement_and_history_shows_the_run(s
     assert client.post("/api/query", json={"sql": "select 1 as one"}).status_code == 200
 
 
+def test_a_client_gone_before_the_first_byte_frees_the_lock(served) -> None:
+    """The request sent and the socket closed at once (the app's editor mounting twice in
+    development did this): the response is cancelled before the stream's generator ever
+    ran, so its `finally` never ran either, and the engine lock stayed held — every later
+    query waited on it. The lock is released outside the generator now."""
+    import socket
+    from urllib.parse import urlsplit
+
+    p, client, tmp_path = served
+    u = urlsplit(p.catalog_url)
+    body = json.dumps({"sql": "select 1 as one"}).encode()
+    for _ in range(3):
+        s = socket.create_connection((u.hostname, u.port))
+        s.sendall(
+            b"POST /api/query HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+            b"Authorization: Bearer " + p.token.encode() + b"\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Content-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+        )
+        s.close()
+    t0 = time.perf_counter()
+    r = client.post("/api/query", json={"sql": "select 2 as two"}, timeout=10)
+    assert r.status_code == 200 and _rows(r).column("two").to_pylist() == [2]
+    assert time.perf_counter() - t0 < 5
+
+
 def _rows(response: httpx.Response) -> pa.Table:
     assert response.headers["content-type"].startswith("application/vnd.apache.arrow.stream")
     return pa.ipc.open_stream(response.content).read_all()

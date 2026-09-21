@@ -149,6 +149,30 @@ def test_hive_partition_only_in_the_path_is_refused_by_name(project, env, tmp_pa
         project.tables.attach("hive", env.uri(key) + "/")
 
 
+def test_a_geoparquet_column_reads_as_the_binary_the_catalog_says(project, env, tmp_path) -> None:
+    """A prefix of GeoParquet (a `geo` footer entry, as Overture's files carry) is attached
+    with its geometry as `binary`. DuckDB's reader would turn that column into GEOMETRY on
+    a machine that has the spatial extension (`enable_geoparquet_conversion`, on by
+    default), and the Iceberg scan then failed to cast it back — `select * from place`
+    refused on Hants' Mac, 2026-09-21. The engine and dbt's connection turn the conversion
+    off, so the WKB bytes come through; the geometry is one core function away."""
+    key = env.key(f"geo-{tmp_path.name}/places")
+    writer(env).execute(
+        f"COPY (SELECT range AS id, ('POINT(' || range || ' 2)')::GEOMETRY AS geometry "
+        f"FROM range(5)) TO '{env.uri(key)}/part-0.parquet' (FORMAT parquet)"
+    )
+    info = project.tables.attach("places", env.uri(key) + "/")
+    assert dict(info.columns)["geometry"] == "binary"
+    con = project.engine
+    assert (
+        con.execute("SELECT current_setting('enable_geoparquet_conversion')").fetchone()[0] is False
+    )
+    rows = con.execute(
+        "SELECT id, typeof(geometry), st_astext(st_geomfromwkb(geometry)) FROM places ORDER BY id"
+    ).fetchall()
+    assert rows[0] == (0, "BLOB", "POINT (0 2)") and len(rows) == 5
+
+
 def test_discover_lists_candidate_prefixes(project, events, env) -> None:
     bucket_prefix = events.prefix.rsplit("/", 2)[0] + "/"
     found = {d.prefix: d for d in project.tables.discover(bucket_prefix)}

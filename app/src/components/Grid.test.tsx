@@ -6,7 +6,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Column, Row } from '../lib/arrow';
-import { Grid, columnWidths, template } from './Grid';
+import { Grid, cell, columnWidths, template } from './Grid';
 
 afterEach(cleanup);
 
@@ -14,6 +14,14 @@ const columns: Column[] = [{ name: 'customer', type: 'Utf8' }, { name: 'revenue'
 const rows: Row[] = [['c1', '1234.50'], ['a much longer customer name here', '2.00']];
 
 describe('the grid', () => {
+  it('shows binary as its size and first bytes, not as a JSON object of indices', () => {
+    const wkb = new Uint8Array([1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 64]);
+    expect(cell(wkb, 'Binary')).toBe('21 bytes · 0101000000000000…');
+    expect(cell(new Uint8Array([255]), 'Binary')).toBe('1 byte · ff');
+    expect(cell(null, 'Binary')).toBe('∅');
+    expect(cell({ a: 1 }, 'Struct')).toBe('{"a":1}');
+  });
+
   it('sizes a column to the longest of its header and its cells, between a floor and a cap', () => {
     const [name, revenue] = columnWidths(columns, rows);
     expect(name).toBe(Math.ceil('a much longer customer name here'.length * 7.8) + 24);
