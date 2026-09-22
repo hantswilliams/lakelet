@@ -185,6 +185,7 @@ Closed:
 
 - [x] `PUBLIC_WAITLIST_URL`: Formspree, set as a repository variable; the deployed page carries the endpoint (confirmed 2026-09-16).
 - [ ] Domain: when bought, add under Settings → Pages and set `SITE_URL`.
+- [x] Screenshots (2026-09-22): `app/scripts/screenshots.mjs` retakes every capture on the landing page, `/app`, `/docs/app` and the README from the browser harness; the welcome screen and New project dialog still want a Mac capture (log §15).
 - [ ] Docs follow-ups: a CI check that `gen-cli-reference.py` is current; the quickstart transcripts are illustrative until the clean-machine run replaces them; a page on `audit network` and one on history's schema.
 - [x] `/docs/app` (2026-09-11), and the overview's status table names the app.
 - [ ] The medallion page's `[burst.tags.<tag>]` caps and `[schedules.nightly]` are not in the architecture spec; decide whether to adopt.

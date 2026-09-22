@@ -100,10 +100,17 @@ def test_signup_has_a_real_endpoint_or_a_useful_fallback():
 def test_screenshot_and_recovery_documentation_are_present():
     for route in ["index", "app"]:
         page = Page(DIST / f"{route}.html")
-        capture = next(i for i in page.elements("img") if "query.png" in i["src"])
+        capture = next(i for i in page.elements("img") if "screenshots/workspace.png" in i["src"])
         assert "generated" in capture["alt"]
         assert "browser test harness" in text(route)
         assert built_file(capture["src"]).stat().st_size > 10000
+    # the /app gallery and the app guide show every screen, from the same captures, under the base path
+    gallery = [i["src"] for i in Page(DIST / "app.html").elements("img") if "/screenshots/" in i["src"]]
+    assert len(gallery) == 5 and all(src.startswith(f"{BASE}/screenshots/") for src in gallery)
+    guide = [i["src"] for i in Page(DIST / "docs" / "app.html").elements("img") if "/screenshots/" in i["src"]]
+    assert len(guide) == 10 and all(src.startswith(f"{BASE}/screenshots/") for src in guide)
+    for src in set(gallery + guide):
+        assert built_file(src).stat().st_size > 10000, src
     assert "project folder" in text("docs/recovery")
     assert "Not estimated" in text("docs/gauge")
     assert any(a.get("href") == f"{BASE}/docs/recovery" for a in Page(DIST / "docs.html").elements("a"))

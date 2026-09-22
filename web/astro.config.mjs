@@ -4,15 +4,17 @@ import sitemap from '@astrojs/sitemap';
 
 const base = process.env.SITE_BASE || '/lakelet/';
 
-// Markdown pages (the docs) link with root-relative paths such as /docs/cli; on GitHub
+// Markdown pages (the docs) link with root-relative paths such as /docs/cli, and show
+// images from /screenshots; on GitHub
 // Pages the site lives under /lakelet/, so prefix them the way src/lib/url.ts does for
 // .astro pages. Hand-rolled walk rather than a dependency: the tree is small.
 function rehypeBasePath() {
   const prefix = base.replace(/\/$/, '');
   const walk = node => {
-    if (node.type === 'element' && node.tagName === 'a') {
-      const href = node.properties?.href;
-      if (typeof href === 'string' && href.startsWith('/') && !href.startsWith('//')) node.properties.href = prefix + href;
+    if (node.type === 'element' && (node.tagName === 'a' || node.tagName === 'img')) {
+      const key = node.tagName === 'a' ? 'href' : 'src';
+      const value = node.properties?.[key];
+      if (typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')) node.properties[key] = prefix + value;
     }
     node.children?.forEach(walk);
   };

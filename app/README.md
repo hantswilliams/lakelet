@@ -33,3 +33,8 @@ button. Every action shows the `lakelet` line it is, with a copy button
 Tests: `cargo test` in `src-tauri/` (the supervisor, projects and windows against a fake
 sidecar), `npm test` (Vitest, the screens and the command lines), `npm run e2e` (Playwright
 against real `lakelet serve`s; needs `LAKELET_SIDECAR` or `../core/.venv`).
+
+Screenshots for the README, the site and `/docs/app` come from `scripts/screenshots.mjs`:
+the real app in the browser harness against a real core on the generated sample data, at
+2x; the recipe is at the top of the file and `web/public/screenshots/README.md` says what
+each image shows.

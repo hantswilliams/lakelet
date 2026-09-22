@@ -31,7 +31,7 @@ const numeric = (type: string) => /^(Int|Uint|Float|Decimal)/.test(type);
  *  header instead of at the far right. The last column takes what is left. */
 export const SAMPLE = 200;
 const CHAR = 7.8; // 13px monospace
-const PAD = 24;
+const PAD = 28; // 12px padding each side, the 1px border, and a little slack: a ten-character date was one pixel short and showed an ellipsis
 export function columnWidths(columns: Column[], rows: Row[]): number[] {
   return columns.map((c, i) => {
     let longest = c.name.length;

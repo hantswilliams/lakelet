@@ -30,6 +30,9 @@ The dot in the bar is the core's state: amber while it starts, green when `/api/
 
 With a project open the window is the bar, a sidebar, the screen, and a status strip. The bar has the project's name, the core's dot, **Open…**, the **Simple | Technical** and **System | Light | Dark** switches and **Settings**. The sidebar has the five screens — **Tables**, **Models**, **Lineage**, **Changes**, **Gauge** (⌘/Ctrl+1 to 5; Simple mode says **Questions**, **Map** and **Recent**) — and under them the explorer: the drop zone with **Import…**, then every table and view in the catalog with its rows, where its data is and a freshness dot (green when it was written today, amber this week, grey before that; hover for the time). The explorer is there on every screen, so a table is one click away from anywhere; clicking one opens its detail on the Tables screen. Its right edge drags to the width you want (← and → move it too), and the **Collapse** button at the bottom folds it to icons; both are remembered. The strip along the bottom shows the core's version, DuckDB's, this window's memory limit, the local disk figure and how long the core took to be ready.
 
+[![The window: the bar, the sidebar with the five screens and the explorer, the workspace with SQL over the verdict, the chart and the rows, and the status strip](/screenshots/workspace.png)](/screenshots/workspace.png)
+*The window on the generated sample data: a two-column answer gets a chart. Every screenshot on this page is the real app in its browser harness against a real core, unedited.*
+
 ## The Tables screen: the workspace
 
 The Tables screen is one workspace, two panes with a draggable split (the ↑ and ↓ keys move it too; where you leave it is remembered): the SQL box above with the verdict line under it, the results below. The results pane is where a table's detail or a file's preview opens when the explorer starts one, so "click a table, read its detail, run a query against it" happens on one screen without a scroll; **Run** puts the rows back in their place.
@@ -42,11 +45,17 @@ An `s3://bucket/prefix/` of Parquet typed into the same box is attached rather t
 
 Clicking a table in the explorer opens its detail in the results pane, which is `lakelet tables describe <name>` as a panel: the columns with their Iceberg types, where the data is, partitioning, the format version, every snapshot newest first (when, the operation, rows and files added, rows after, which is current and which the retention would expire), and the line saying what `expire` would reclaim. **Sample rows** is `lakelet tables sample`, **Expire snapshots** is `lakelet tables expire` and shows its report (snapshots and files removed, bytes reclaimed); an attached table has **Refresh** instead, because its files are not Lakelet's to delete. A table built here also has **Publish to a bucket…** (`lakelet tables publish`): type an `s3://bucket/prefix`, **Weigh it** counts the files and says how long the copy would take at the measured bandwidth (`--dry-run`), **Publish** moves the table there with every snapshot, and a copy longer than the Yellow cap is refused with **Publish anyway** (`--yes`) beside the refusal; afterwards the explorer says **bucket**, the detail names the location, and a line counts the local files left for `expire`. Row counts everywhere take position deletes off, so a table rebuilt by delete-then-insert (the dbt path) shows the rows it has, not the rows its files hold.
 
+[![A table's detail in the results pane: where it is, partitioning, last written, format, what reads it and what it feeds, the recent changes, and the columns](/screenshots/detail.png)](/screenshots/detail.png)
+*`orders` in the results pane: `lakelet tables describe orders` as a panel, with the models it feeds as links.*
+
 A view (a dbt `view` model built with `lakelet run`, or a view put in the catalog directly) is listed beside the tables and has its own detail: its query, its columns, how many versions it has and when this one was recorded, which dbt model it came from with the `lakelet run <model>` line that rewrites it, and **Sample rows**. It has no snapshots and nothing to expire, because nothing is stored for it; the rows are computed from its query each time it is asked.
 
 ### SQL, the verdict, the rows
 
 Once the project has a table, the SQL box is the top pane, with the tables and columns for completion. ⌘/Ctrl+Enter runs (or the Run button). The verdict comes back before any row, from the response headers, as the gauge line: Green "Runs here", Yellow "Runs here, slowly", Red "Needs more machine", with the sentence (what it scans, whether it fits in memory, how long). Red is a refusal until **Run anyway**, which is `lakelet sql '…' --run-anyway`. Rows stream into the grid as the core produces them, one 1,000-row batch at a time from the first; the first rows are on screen before the query completes, and the grid keeps 100,000 rows before it says so and names `lakelet sql --format parquet` for the rest. Esc stops a running query wherever the focus is; the core stops the statement at once and history records the run as stopped early.
+
+[![A date and a numeric column, charted as a line over the rows](/screenshots/workspace-line.png)](/screenshots/workspace-line.png)
+*A date and a number: the chart is a line. The line beside Run is the same query as `lakelet sql`.*
 
 A result of exactly two columns, one categorical and one numeric, draws a bar chart above the grid in the results pane, in the rows' order; a date or timestamp and a numeric draws a line; anything else draws nothing. The chart comes from the first 5,000 rows and has at most 40 bars.
 
@@ -58,11 +67,17 @@ Dates, timestamps, times and decimals show as dates, timestamps, times and numbe
 
 **System | Light | Dark** at the right of the bar. The palette is the site's, from one file (`web/src/styles/palette.css`) both read: the deep green on light surfaces, the lime on dark, and the same three verdict colours in either. System is the default and follows the machine, changing with it; Light and Dark override it for that window and are remembered. The switch is there before a project is open, so a dark desktop can be matched at the welcome screen.
 
+[![The same workspace in the dark theme](/screenshots/workspace-dark.png)](/screenshots/workspace-dark.png)
+*The dark theme; the verdicts keep their hues.*
+
 The palette is the site's tokens with a dark set over them, so every screen, the SQL editor and the charts move together; the verdict colours keep their hues in both, because Green, Yellow and Red are the gauge's vocabulary and have to stay recognisable.
 
 ## The Models screen
 
 **Models** in the sidebar is the project's dbt DAG through the gauge, screen 7 of the mockups: `lakelet run --plan` as a panel. The list has every model in dependency order with its kind (`view` or `table`), its state (`fresh`, `edited`, `upstream`, `never`; [the dbt page](/docs/dbt) says what each means), the verdict coloured, the estimate and what it scans, and its last run; the line beside the summary is `lakelet run`. Clicking a model shows its state with why and what changed (the diff of its SQL since the last run, folded to the changed lines with a **whole SQL** toggle, or the commits to the table it reads since; a model it blames is a link), the verdict's sentence, **Reads from** and **Feeds** — table-level [lineage](/docs/tables#lineage), each name a link to that detail, on the Tables screen when it is an imported table or a view put by hand — its tests from `schema.yml` (`not_null(id)`, `unique(id)`, a singular test by its name), its description and file, its compiled SQL, and its last `lakelet run` from history (when, how long, or that it failed). **Run all** is `lakelet run`; **Run this** is `lakelet run <model>`; **Run what changed (n)** is `lakelet run --stale`, lit when anything is not fresh. When anything is, a **Review** section above the DAG lists every out-of-date model in the order the run would build them, each with its reason and its diff or commits, to read through first. A Red model makes the run refuse the whole DAG, as the CLI does, until **Run anyway** (`--run-anyway`). After a run the notice says how many models built in how long and which views landed in the catalog, or that every model was up to date and nothing ran; the explorer and the Gauge screen's run list have the result at once. A `view` model is an Iceberg view in the catalog only when built this way; the reason is on [the dbt page](/docs/dbt).
+
+[![The Models screen in Technical mode: the DAG on the left, a model's detail with its state, verdict, lineage, tests, compiled SQL and versions on the right](/screenshots/models.png)](/screenshots/models.png)
+*Technical mode: a model's detail with its versions. In Simple mode the same models are question cards with **See the answer**.*
 
 The table and view details on the Tables screen carry the same **Reads from** and **Feeds** lines after their facts, and a model not built yet is a link back to the Models screen with it selected.
 
@@ -72,17 +87,32 @@ The plan compiles the project with dbt each time the screen opens, so it takes a
 
 **Lineage** in the sidebar (Simple: **Map**) is `lakelet lineage --all` drawn: every table, view and model as a node in layers left to right — what reads nothing at the left, each node one layer after the deepest thing it reads — and every edge as lineage knows it (a `ref()` in blue, a `source()` or a table named in the SQL in grey, a catalog view's SQL dashed; hover says which). A model is coloured by its state: green-edged when fresh, amber when edited or an input changed, dashed grey when never built; the header counts what is out of date. Clicking a node opens its detail — a model on the Models screen with it selected, a table or a view on the Tables screen. The layout is the app's own (a longest-path layering and rows by what each node reads), drawn as SVG in the theme's colours; a project's graph is tens of nodes, so no graph library is carried.
 
+[![The Lineage screen: tables on the left, the models that read them on the right](/screenshots/lineage.png)](/screenshots/lineage.png)
+*Four imported tables and the three models over them, all fresh.*
+
 ## The Changes screen
 
 **Changes** in the sidebar (Simple: **Recent**) is `lakelet changes` as a list: everything that happened to the project, newest first — a table's snapshot ("orders: append +1,200 rows · made out of date: stg"), a model's or question's last run ("by_customer built in 1.2 s, Green"), a version ("save question: Revenue by customer · Ada Lovelace") — each with when, which source it came from, and a link that opens the table's detail or the model on the Models screen. The **Name** box is the CLI's argument: type a table, view, model or question and the list is only what happened to it, and the line beside it is the command. Simple mode says the same in its words ("orders: 1,200 rows added · 1 question needs refreshing: stg", "by_customer refreshed in 1.2 s", "Revenue by customer saved, a new version"). Every table, view and model detail has a **Recent** strip — its own last five entries — with **All changes** opening this screen filtered to it. Nothing is recorded for the screen: it is read from the catalog, history and git, so it is always what the CLI would print.
+
+[![The Changes screen: runs, snapshots and versions, newest first](/screenshots/changes.png)](/screenshots/changes.png)
+*Runs, snapshots and saved versions in one list; each entry opens its detail.*
 
 ## Simple and Technical
 
 The **Simple | Technical** switch at the right of the bar is screen 8: the same project in two vocabularies, remembered per window. Technical is everything above: model, test, view, the verdict by colour, the command line beside every button. Simple renames the Models screen **Questions** and shows the DAG as cards: a `view` model is a question *answered live*, a `table` model is *saved as a table*; each card has when it was last refreshed, whether it is up to date as a sentence ("Up to date.", "Changed since it was last refreshed.", "Out of date: orders changed 2 h ago.", "Never refreshed.") with the same diff or commits under it, the wait as a sentence ("Ready in about 2 s", "Takes a while: about 4 min", "Too big for this machine right now") instead of a colour, its checks in words (`not_null` on `id` is "id is never empty", `unique` is "id is never repeated", `accepted_values` is "one of the allowed values"), **See the answer** and **Refresh**; the top has **Refresh all** and **Refresh what changed**. **See the answer** is the Tables screen with `select * from <question>` in the box and run — the verdict line, the chart when the answer is two columns, every row in the grid, and `lakelet sql '…'` beside it — and the box is yours to edit from there; a question never refreshed says **Refresh, then see the answer** and does both. The Technical model detail has the same button as **Rows**. The command lines stay, because Simple hides vocabulary, not what the app does. The view detail follows the switch too. The mapping between the two is one small table in the app, pinned by a test, so both screens say the same words.
 
+[![The Questions screen in Simple mode: three cards, each with See the answer, Refresh and History](/screenshots/questions.png)](/screenshots/questions.png)
+*Simple mode: a question is asked and answered in one click.*
+
+[![The answer: the workspace with select star from revenue_by_region run, the verdict, the chart and the rows](/screenshots/answer.png)](/screenshots/answer.png)
+*What **See the answer** opens: the rows, with the SQL there to edit into the next question.*
+
 ## The Gauge screen
 
 **Gauge** in the sidebar is the gauge's record, screen 5 of the mockups: this machine's line (RAM, threads, the memory limit, the disk figure, the bandwidth when a bucket has been read), three tiles (runs recorded; the share of completed local runs within 2× of their estimate on time; Green runs that took over three minutes), an estimate-versus-actual scatter on log axes with the diagonal of a perfect estimate and the verdict colouring each point, the run list (when, verdict, where it ran, estimate, actual, bytes scanned; a failed run says so, without its text), and what the gauge has learned on this machine, which is nothing until the correction factors ship. Four buttons are four verbs: `lakelet gauge history` at the top, **Export history** (`lakelet gauge export`: a file in the project, nothing sent; see [the gauge](/docs/gauge)), **Probe the disk again** (`lakelet gauge probe`), and **Reset** (`lakelet gauge reset`, which asks first).
+
+[![The Gauge screen: the machine's line, three figures, the estimate-versus-actual scatter and the run log](/screenshots/gauge.png)](/screenshots/gauge.png)
+*Estimate against actual on this machine, and the runs it learned from.*
 
 ## Settings
 

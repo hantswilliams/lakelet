@@ -24,8 +24,10 @@ describe('the grid', () => {
 
   it('sizes a column to the longest of its header and its cells, between a floor and a cap', () => {
     const [name, revenue] = columnWidths(columns, rows);
-    expect(name).toBe(Math.ceil('a much longer customer name here'.length * 7.8) + 24);
+    expect(name).toBe(Math.ceil('a much longer customer name here'.length * 7.8) + 28);
     expect(revenue).toBe(96); // "1,234.50" and "revenue" are short: the floor
+    // a date is ten characters; its column shows all ten (it was one pixel short once)
+    expect(columnWidths([{ name: 'day', type: 'Date32' }], [['2026-01-04']])[0]).toBeGreaterThanOrEqual(Math.ceil(10 * 7.83) + 24 + 1);
     expect(columnWidths([{ name: 'x', type: 'Utf8' }], [['y'.repeat(500)]])[0]).toBe(480);
     expect(template([100, 96])).toBe('100px minmax(96px, 1fr)');
   });

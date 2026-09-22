@@ -6,6 +6,8 @@ Developer preview, macOS and Linux, from source. Apache 2.0. Site and docs: **ht
 
 ![The window: the sidebar with the table explorer, the SQL box over the results, the verdict and the sentence before the rows, then the chart and the grid](docs/screenshots/query-verdict.png)
 
+*The real app in its browser harness on generated sample data, September 22, 2026; [more screens on the site](https://hantswilliams.github.io/lakelet/app/) and in [the app guide](https://hantswilliams.github.io/lakelet/docs/app/).*
+
 ## What it is
 
 You point Lakelet at a folder. `lakelet init` makes it a lakehouse: an Iceberg catalog in SQLite, a `warehouse/` for the tables, a dbt project for the questions you save, and a git repository so every save is a version. You import CSV, Parquet, JSON or Excel and get Iceberg tables; you attach Parquet already in a bucket without copying it; you write SQL and, before a row comes back, the gauge tells you **Runs here**, **Runs here, slowly**, or **Needs more machine** — with the bytes it will scan and the seconds it expects, from the table statistics, not from running it. Red refuses until you say run anyway. A query you want to keep becomes a dbt model with two checks and a version, in one command or one click. The desktop app is the same core with screens; the CLI can do everything the app can.
