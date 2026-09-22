@@ -51,7 +51,8 @@ const editHref = `${EDIT_BASE}/${id}.md`;
 
 <style is:global>
   /* The markdown body. Kept close to the marketing pages' type: same tokens, same widths. */
-  .body{margin-top:28px;max-width:72ch;font-size:16px}
+  .body{margin-top:28px;font-size:16px}
+  .body>:not(:has(>img,>a>img)){max-width:72ch} /* the prose; a screenshot spans the article */
   .body>*+*{margin-top:14px}
   .body h2{font-size:24px;letter-spacing:-.02em;font-weight:800;margin-top:40px;padding-top:18px;border-top:1px solid var(--line)}
   .body h3{font-size:18px;font-weight:700;margin-top:28px}
